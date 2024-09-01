@@ -10,8 +10,8 @@ export default {
       colors: {
         'dark-mode-text': '#f4a460',
         'dark-mode-bg': '#1f1f1f',
-        'light-mode-text': '#05182a',
-        'light-mode-bg': '#ffffff'
+        'light-mode-text': '#0c2231',
+        'light-mode-bg': '#efe6ee'
       }
     },
   },

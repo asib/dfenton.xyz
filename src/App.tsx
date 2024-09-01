@@ -37,9 +37,9 @@ function App() {
 
 function ContactItem({ Icon, label, children }: { Icon: ({ }: { className: string }) => JSX.Element, label: string, children: React.ReactNode }) {
   return (
-    <div className="flex space-x-2 items-center mb-2">
-      <span aria-label={label}><Icon className={clsx("size-4 fill-light-mode-bg dark:fill-dark-mode-bg",
-        "stroke-light-mode-text dark:stroke-dark-mode-text")} /></span>
+    <div className="flex space-x-2 items-center mb-2 w-fit" title={label}>
+      <Icon className={clsx("size-4 fill-light-mode-bg dark:fill-dark-mode-bg",
+        "stroke-light-mode-text dark:stroke-dark-mode-text")} />
       {children}
     </div>
   )
