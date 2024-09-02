@@ -1,3 +1,9 @@
+# Cloudflare Pages
+
+Requires setting `BUN_VERSION=1.1.26` (or whatever version was used to `bun install` locally) as an environment variable in Pages' UI. This is because Pages uses `bun install --frozen-lockfile` to install dependencies by default, and different bun versions produce different lock files.
+
+Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
