@@ -12,7 +12,8 @@ export default {
         'dark-mode-highlight': '#f0e891',
         'dark-mode-bg': '#1f1f1f',
         'light-mode-text': '#0c2231',
-        'light-mode-bg': '#efe6ee'
+        'light-mode-bg': '#efe6ee',
+        'light-mode-highlight': '#8a4f7d'
       }
     },
   },

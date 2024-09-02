@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import DarkModeToggle from './components/DarkModeToggle'
 import GitHubIcon from './components/GitHubIcon'
 import PhoneIcon from './components/PhoneIcon';
 import AtIcon from './components/AtIcon';
 import GlobeIcon from './components/GlobeIcon';
 import clsx from 'clsx';
+import DocumentCopyIcon from './components/DocumentCopyIcon';
+import DocumentCopyTickIcon from './components/DocumentCopyTickIcon';
 
 function App() {
   const workItems = [
@@ -56,10 +58,10 @@ function App() {
             <ContactItem Icon={GitHubIcon} label="github profile">
               <a href="https://github.com/asib" target="_blank">github.com/asib</a>
             </ContactItem>
-            <ContactItem Icon={PhoneIcon} label="phone number">
+            <ContactItem Icon={PhoneIcon} label="phone number" copyable="+447979494508">
               <a href="tel:+447979494508">+44 7979 494 508</a>
             </ContactItem>
-            <ContactItem Icon={AtIcon} label="email address">
+            <ContactItem Icon={AtIcon} label="email address" copyable="jacob+hiring@dfenton.xyz">
               <a href="mailto:jacob+hiring@dfenton.xyz">jacob+hiring@dfenton.xyz</a>
             </ContactItem>
             <ContactItem Icon={GlobeIcon} label="where I can legally work">
@@ -113,12 +115,47 @@ function WorkItem({ company, location, role, period, children }: { company: stri
   );
 }
 
-function ContactItem({ Icon, label, children }: { Icon: ({ }: { className: string }) => JSX.Element, label: string, children: React.ReactNode }) {
+function ContactItem({ copyable, Icon, label, children }: { copyable?: string, Icon: ({ }: { className: string }) => JSX.Element, label: string, children: React.ReactNode }) {
+  const [copySuccess, setCopySuccess] = useState(false);
+  const copyToClipboardButtonRef = useRef<HTMLButtonElement>(null);
+
+  const handleCopy = (copyable: string) => {
+    navigator.clipboard.writeText(copyable);
+    setCopySuccess(true);
+  };
+
+  useEffect(() => {
+    const handleTransitionEnd = () => {
+      if (copyToClipboardButtonRef.current === null) {
+        return;
+      }
+
+      if (window.getComputedStyle(copyToClipboardButtonRef.current!).opacity === "0") {
+        setCopySuccess(false);
+      }
+    };
+
+    copyToClipboardButtonRef.current?.addEventListener('transitionend', handleTransitionEnd);
+
+    return () => {
+      copyToClipboardButtonRef.current?.removeEventListener('transitionend', handleTransitionEnd);
+    }
+  }, [copyToClipboardButtonRef])
+
   return (
-    <div className="flex space-x-2 items-center mb-2 w-fit" title={label}>
+    <div className="w-fit group flex space-x-2 items-center mb-2" title={label}>
       <Icon className={clsx("size-4 fill-transparent",
         "stroke-light-mode-text dark:stroke-dark-mode-text")} />
       {children}
+
+      {copyable !== undefined &&
+        <button ref={copyToClipboardButtonRef} onClick={() => handleCopy(copyable)}
+          className={clsx("transition opacity-0 group-hover:opacity-100", {
+            "text-light-mode-text dark:text-dark-mode-text": !copySuccess,
+            "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess,
+          })}>
+          {copySuccess ? <DocumentCopyTickIcon /> : <DocumentCopyIcon />}
+        </button>}
     </div>
   )
 }
