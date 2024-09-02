@@ -30,8 +30,11 @@ export default function DarkModeToggle() {
 
     const handleToggle = () => {
         const enabled = isDarkModeEnabled();
-        enabled ? document.documentElement.classList.remove('dark')
-            : document.documentElement.classList.add('dark');
+        if (enabled) {
+            document.documentElement.classList.remove('dark')
+        } else {
+            document.documentElement.classList.add('dark');
+        }
         window.localStorage.setItem('theme', enabled ? 'light' : 'dark');
         window.dispatchEvent(new Event('storage'));
     };
