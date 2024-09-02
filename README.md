@@ -32,6 +32,10 @@ $ magick output.webp -resize 25% resized-output.webp
 
 Then, if image is still too large, pass it through [Squoosh](https://squoosh.app/) to compress (or also use ImageMagick).
 
+# Meta tags
+
+Useful resources for meta tag info: https://stackoverflow.com/questions/19778620/provide-an-image-for-whatsapp-link-sharing
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
