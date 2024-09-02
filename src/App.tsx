@@ -70,12 +70,12 @@ function App() {
           </section>
 
           <details className="group" open>
-            <summary className="text-lg -mb-4 group-open:mb-5">Experience</summary>
+            <summary className="text-lg -mb-4 group-open:mb-5 cursor-pointer">Experience</summary>
             {workItems}
           </details>
 
           <details className="group" open>
-            <summary className="text-lg mt-5 group-open:mb-5">Education</summary>
+            <summary className="text-lg mt-5 group-open:mb-5 cursor-pointer">Education</summary>
 
             <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
               <header className="flex flex-col mb-2">
