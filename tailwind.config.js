@@ -14,6 +14,9 @@ export default {
         'light-mode-text': '#0c2231',
         'light-mode-bg': '#efe6ee',
         'light-mode-highlight': '#8a4f7d'
+      },
+      transitionTimingFunction: {
+      'bounce': 'cubic-bezier(.47, 1.64, .41, .8)',
       }
     },
   },

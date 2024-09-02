@@ -143,7 +143,7 @@ function ContactItem({ copyable, Icon, label, children }: { copyable?: string, I
   }, [copyToClipboardButtonRef])
 
   return (
-    <div className="w-fit group flex space-x-2 items-center mb-2" title={label}>
+    <div className="w-fit group flex space-x-2 items-center mb-2" aria-label={label} title={label}>
       <Icon className={clsx("size-4 fill-transparent",
         "stroke-light-mode-text dark:stroke-dark-mode-text")} />
       {children}
@@ -152,7 +152,7 @@ function ContactItem({ copyable, Icon, label, children }: { copyable?: string, I
         <button ref={copyToClipboardButtonRef} onClick={() => handleCopy(copyable)}
           className={clsx("transition opacity-0 group-hover:opacity-100", {
             "text-light-mode-text dark:text-dark-mode-text": !copySuccess,
-            "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess,
+            "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess
           })}>
           {copySuccess ? <DocumentCopyTickIcon /> : <DocumentCopyIcon />}
         </button>}

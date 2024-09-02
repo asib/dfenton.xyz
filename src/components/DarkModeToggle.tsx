@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import DarkModeIcon from "./DarkModeIcon";
 import LightModeIcon from "./LightModeIcon";
+import clsx from "clsx";
 
 const getTheme = (): string | null => {
     const theme = window.localStorage.getItem('theme');
@@ -36,8 +37,12 @@ export default function DarkModeToggle() {
     };
 
     return (
-        <div className="w-full flex justify-end">
-            <button onClick={handleToggle} title="toggle dark mode" aria-hidden>
+        <div className="w-full flex justify-end ">
+            <button onClick={handleToggle} aria-label="toggle dark mode" title="toggle dark mode" className={clsx(
+                "transition-scale ease-bounce duration-500 hover:scale-150 active:scale-125",
+                "dark:hover:text-dark-mode-highlight hover:text-light-mode-highlight",
+                "dark:active:text-dark-mode-highlight active:text-light-mode-highlight"
+            )}>
                 {darkMode ? <DarkModeIcon /> : <LightModeIcon />}
             </button>
         </div>
