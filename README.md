@@ -24,6 +24,12 @@ $ magick masked-logo.webp -fuzz 10% -format webp -fill "#ffffff" -opaque "#e0e0d
 
 The `-fuzz 10%` means that any colour within 10% of `#e0e0d5` will also be replaced with white.
 
+To resize:
+
+```sh
+$ magick output.webp -resize 25% resized-output.webp
+```
+
 Then, if image is still too large, pass it through [Squoosh](https://squoosh.app/) to compress (or also use ImageMagick).
 
 # React + TypeScript + Vite
