@@ -79,15 +79,17 @@ function App() {
               <>
                 {acc}
 
-                <div key={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] ml-8">
-                  <svg viewBox='0 0 100 100' preserveAspectRatio='none' className="h-full fill-transparent stroke-none">
-                    <path className='stroke-light-mode-text dark:stroke-dark-mode-text stroke-[0.5rem]' d='M0 0 V 100' strokeDasharray="5 25" strokeLinecap='square' />
-                  </svg>
-                </div>
-
                 <WorkItem key={`work-item-${itemIndex.toString()}`} company={item.company} location={item.location} role={item.role} period={item.period}>
                   {item.content.map((content, contentIndex) => <p key={`work-item-content-${itemIndex.toString()}-${contentIndex.toString()}`}>{content}</p>)}
                 </WorkItem>
+
+                {itemIndex !== workItems.length - 1 &&
+                  <div key={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] ml-8">
+                    <svg viewBox='0 0 100 100' preserveAspectRatio='none' className="h-full fill-transparent stroke-none">
+                      <path className='stroke-light-mode-text dark:stroke-dark-mode-text stroke-[0.5rem]' d='M0 0 V 100' strokeDasharray="5 25" strokeLinecap='square' />
+                    </svg>
+                  </div>}
+
               </>,
               null)}
           </details>
