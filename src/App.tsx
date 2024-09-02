@@ -57,7 +57,7 @@ function App() {
               <a href="https://github.com/asib" target="_blank">github.com/asib</a>
             </ContactItem>
             <ContactItem Icon={PhoneIcon} label="phone number">
-              <p>+44 7979 494 508</p>
+              <a href="tel:+447979494508">+44 7979 494 508</a>
             </ContactItem>
             <ContactItem Icon={AtIcon} label="email address">
               <a href="mailto:jacob+hiring@dfenton.xyz">jacob+hiring@dfenton.xyz</a>
