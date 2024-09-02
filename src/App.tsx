@@ -7,6 +7,7 @@ import GlobeIcon from './components/GlobeIcon';
 import clsx from 'clsx';
 import DocumentCopyIcon from './components/DocumentCopyIcon';
 import DocumentCopyTickIcon from './components/DocumentCopyTickIcon';
+import DownloadIcon from './components/DownloadIcon';
 
 interface WorkItemProps {
   company: string,
@@ -59,19 +60,24 @@ function App() {
           <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
 
           <section className="text-sm mb-[2rem]">
-            <ContactItem Icon={GitHubIcon} label="github profile">
+            <ContactItem icon={GitHubIcon} label="github profile">
               <a href="https://github.com/asib" target="_blank" rel="noreferrer">github.com/asib</a>
             </ContactItem>
-            <ContactItem Icon={PhoneIcon} label="phone number" copyable="+447979494508">
+            <ContactItem icon={PhoneIcon} label="phone number" copyable="+447979494508">
               <a href="tel:+447979494508">+44 7979 494 508</a>
             </ContactItem>
-            <ContactItem Icon={AtIcon} label="email address" copyable="jacob+hiring@dfenton.xyz">
+            <ContactItem icon={AtIcon} label="email address" copyable="jacob+hiring@dfenton.xyz">
               <a href="mailto:jacob+hiring@dfenton.xyz">jacob+hiring@dfenton.xyz</a>
             </ContactItem>
-            <ContactItem Icon={GlobeIcon} label="where I can legally work">
+            <ContactItem icon={GlobeIcon} label="where I can legally work">
               <p>UK/Canada</p>
             </ContactItem>
           </section>
+
+          <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'>
+            <p>Download PDF</p>
+            <Icon icon={DownloadIcon} className="size-[1rem]" />
+          </a>
 
           <details className="group" open>
             <summary className="text-lg -mb-4 group-open:mb-5 cursor-pointer">Experience</summary>
@@ -140,7 +146,7 @@ function WorkItem({ company, location, role, period, children }: WorkItemProps) 
   );
 }
 
-function ContactItem({ copyable, Icon, label, children }: { copyable?: string, Icon: ({ className }: { className: string }) => React.JSX.Element, label: string, children: React.ReactNode }) {
+function ContactItem({ copyable, icon, label, children }: { copyable?: string, icon: ({ className }: { className: string }) => React.JSX.Element, label: string, children: React.ReactNode }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const copyToClipboardButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -170,8 +176,7 @@ function ContactItem({ copyable, Icon, label, children }: { copyable?: string, I
 
   return (
     <div className="w-fit group flex space-x-2 items-center mb-2" aria-label={label} title={label}>
-      <Icon className={clsx("size-4 fill-transparent",
-        "stroke-light-mode-text dark:stroke-dark-mode-text")} />
+      <Icon icon={icon} />
       {children}
 
       {copyable !== undefined &&
@@ -184,6 +189,10 @@ function ContactItem({ copyable, Icon, label, children }: { copyable?: string, I
         </button>}
     </div>
   )
+}
+
+function Icon({ icon, className }: { icon: ({ className }: { className: string }) => React.JSX.Element, className?: string }) {
+  return <>{icon({ className: clsx("size-4 fill-transparent stroke-light-mode-text dark:stroke-dark-mode-text", className) })}</>
 }
 
 function Comment({ children }: { children: string }) {
