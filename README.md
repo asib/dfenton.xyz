@@ -4,6 +4,8 @@ Requires setting `BUN_VERSION=1.1.26` (or whatever version was used to `bun inst
 
 Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
 
+Use a `[Skip CI]` prefix to tell Pages not to deploy a given commit.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
