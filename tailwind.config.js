@@ -9,6 +9,7 @@ export default {
     extend: {
       colors: {
         'dark-mode-text': '#f4a460',
+        'dark-mode-highlight': '#f0e891',
         'dark-mode-bg': '#1f1f1f',
         'light-mode-text': '#0c2231',
         'light-mode-bg': '#efe6ee'

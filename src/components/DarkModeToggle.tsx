@@ -4,7 +4,6 @@ import LightModeIcon from "./LightModeIcon";
 
 const getTheme = (): string | null => {
     const theme = window.localStorage.getItem('theme');
-    console.trace(theme);
     return theme;
 }
 
