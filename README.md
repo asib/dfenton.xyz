@@ -6,6 +6,18 @@ Otherwise, Pages is setup with push-to-deploy, so there's really nothing that ne
 
 Use a `[Skip CI]` prefix to tell Pages not to deploy a given commit.
 
+# Creating logo
+
+To convert a square logo to a circular one:
+
+```sh
+$ magick generated-logo.webp -alpha set -background none -fill white \
+    \( +clone -channel A -evaluate set 0 +channel -draw "circle 512,512 512,0" \) \
+    -compose dstin -composite masked-logo.webp
+```
+
+Then pass it through [Squoosh](https://squoosh.app/) to reduce file size.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
