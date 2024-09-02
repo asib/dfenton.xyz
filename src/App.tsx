@@ -67,7 +67,30 @@ function App() {
             </ContactItem>
           </section>
 
-          {workItems}
+          <details className="group" open>
+            <summary className="text-lg -mb-4 group-open:mb-5">Experience</summary>
+            {workItems}
+          </details>
+
+          <details className="group" open>
+            <summary className="text-lg mt-5 group-open:mb-5">Education</summary>
+
+            <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
+              <header className="flex flex-col mb-2">
+                <h1 className="text-xl font-semibold mb-[0.25rem]">University of Cambridge</h1>
+                <h3 className="text-xs mb-1">Fitzwilliam College</h3>
+                <h3 className="text-xs mb-4">October 2015 - July 2018</h3>
+
+                <h2>Computer Science</h2>
+                <h2>Class I, BA (Hons)</h2>
+              </header>
+
+
+              <div className="flex flex-col space-y-2 text-sm">
+                <p>Dissertation: designed and developed a smart card access control system that implements an authentication protocol based on asymmetric key cryptography, significantly reducing the attack surface as compared to a symmetric key auth system. Written in Java Card/Java.</p>
+              </div>
+            </section>
+          </details>
         </main >
       </div >
     </>
