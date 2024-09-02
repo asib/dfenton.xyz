@@ -16,7 +16,15 @@ $ magick generated-logo.webp -alpha set -background none -fill white \
     -compose dstin -composite masked-logo.webp
 ```
 
-Then pass it through [Squoosh](https://squoosh.app/) to reduce file size.
+To make the background white (the background of the generated image I got was cream):
+
+```sh
+$ magick masked-logo.webp -fuzz 10% -format webp -fill "#ffffff" -opaque "#e0e0d5" output.webp
+```
+
+The `-fuzz 10%` means that any colour within 10% of `#e0e0d5` will also be replaced with white.
+
+Then, if image is still too large, pass it through [Squoosh](https://squoosh.app/) to compress (or also use ImageMagick).
 
 # React + TypeScript + Vite
 
