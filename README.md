@@ -6,6 +6,36 @@ Otherwise, Pages is setup with push-to-deploy, so there's really nothing that ne
 
 Use a `[Skip CI]` prefix to tell Pages not to deploy a given commit.
 
+# Creating logo
+
+To convert a square logo to a circular one:
+
+```sh
+$ magick generated-logo.webp -alpha set -background none -fill white \
+    \( +clone -channel A -evaluate set 0 +channel -draw "circle 512,512 512,0" \) \
+    -compose dstin -composite masked-logo.webp
+```
+
+To make the background white (the background of the generated image I got was cream):
+
+```sh
+$ magick masked-logo.webp -fuzz 10% -format webp -fill "#ffffff" -opaque "#e0e0d5" output.webp
+```
+
+The `-fuzz 10%` means that any colour within 10% of `#e0e0d5` will also be replaced with white.
+
+To resize:
+
+```sh
+$ magick output.webp -resize 25% resized-output.webp
+```
+
+Then, if image is still too large, pass it through [Squoosh](https://squoosh.app/) to compress (or also use ImageMagick).
+
+# Meta tags
+
+Useful resources for meta tag info: https://stackoverflow.com/questions/19778620/provide-an-image-for-whatsapp-link-sharing
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
