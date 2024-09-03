@@ -52,24 +52,9 @@ function App() {
     { company: 'Surrey Satellite Technology Ltd', location: 'Guildford, UK', role: 'Intern', period: 'Summer 2013', content: [] },
   ];
 
-  const [isHoveringOverSun, setIsHoveringOverSun] = useState(false);
-
-  useEffect(() => {
-    const allElements = document.getElementsByTagName("*");
-
-    for (let element of allElements) {
-      if (isHoveringOverSun) {
-        element.style.setProperty('filter', 'drop-shadow(-3rem 2rem 1px #f0e89105)')
-      } else {
-        element.style.setProperty('filter', 'none')
-
-      }
-    }
-  }, [isHoveringOverSun])
-
   return (
     <>
-      <div className="fixed top-3 right-4 md:top-4 md:right-6"><DarkModeToggle setIsHoveringOverSun={setIsHoveringOverSun} /></div>
+      <DarkModeToggle />
       <div className="flex flex-col items-center justify-between p-4 pb-[3.5rem] md:w-[70%] lg:w-[70%] sm:mx-auto">
         <main className="w-[80%] mt-4 break-words">
           <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
