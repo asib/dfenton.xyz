@@ -54,7 +54,7 @@ function App() {
 
   return (
     <>
-      <div className="fixed top-3 right-4 md:top-4 md:right-6"><DarkModeToggle /></div>
+      <DarkModeToggle />
       <div className="flex flex-col items-center justify-between p-4 pb-[3.5rem] md:w-[70%] lg:w-[70%] sm:mx-auto">
         <main className="w-[80%] mt-4 break-words">
           <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
