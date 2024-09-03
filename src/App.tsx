@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import DarkModeToggle from './components/DarkModeToggle'
 import GitHubIcon from './components/GitHubIcon'
 import PhoneIcon from './components/PhoneIcon';
@@ -8,6 +8,8 @@ import clsx from 'clsx';
 import DocumentCopyIcon from './components/DocumentCopyIcon';
 import DocumentCopyTickIcon from './components/DocumentCopyTickIcon';
 import DownloadIcon from './components/DownloadIcon';
+import html2canvas from 'html2canvas';
+import { Raster } from 'paper';
 
 interface WorkItemProps {
   company: string,
@@ -52,10 +54,32 @@ function App() {
     { company: 'Surrey Satellite Technology Ltd', location: 'Guildford, UK', role: 'Intern', period: 'Summer 2013', content: [] },
   ];
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (containerRef.current === null || canvasRef.current === null) return;
+
+    await html2canvas(containerRef.current, {
+      canvas: canvasRef.current,
+      backgroundColor: null,
+      foreignObjectRendering: true,
+      width: window.innerWidth,
+      height: containerRef.current.clientHeight,
+      x: -containerRef.current.offsetLeft,
+    });
+
+    canvasRef.current.classList.remove('hidden');
+    containerRef.current.classList.add('hidden');
+
+    const raster = new Raster(canvasRef.current);
+  }, [containerRef, canvasRef]);
+
   return (
     <>
       <DarkModeToggle />
-      <div className="flex flex-col items-center justify-between p-4 pb-[3.5rem] md:w-[70%] lg:w-[70%] sm:mx-auto">
+      <canvas ref={canvasRef} id="pdf-canvas" className="w-full h-full absolute top-0 left-0 hidden"></canvas>
+      <div ref={containerRef} className="flex flex-col items-center justify-between p-4 pb-[3.5rem] md:w-[70%] lg:w-[70%] sm:mx-auto">
         <main className="w-[80%] mt-4 break-words">
           <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
 
@@ -115,10 +139,13 @@ function App() {
             </section>
           </details>
 
-          <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'>
+          {/*eslint-disable-next-line @typescript-eslint/no-misused-promises*/}
+          <button onClick={handleDownloadPdf}
+            className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'
+          >
             <p className="text-xs">Download PDF</p>
             <Icon icon={DownloadIcon} className="size-[0.75rem]" />
-          </a>
+          </button>
 
           <footer className='mt-5'>
             <p className="text-xs mb-3">Copyright {new Date().getFullYear()}, Jacob Fenton. Attributions given in HTML comments.</p>

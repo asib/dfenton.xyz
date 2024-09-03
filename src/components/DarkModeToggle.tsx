@@ -44,10 +44,6 @@ export default function DarkModeToggle() {
             setDarkMode(isDarkModeEnabled());
         };
 
-        document.addEventListener('mouseover', (e) => {
-            console.log(e.target);
-        })
-
         window.addEventListener('storage', handleThemeUpdate)
 
         return () => {
