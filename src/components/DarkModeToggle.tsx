@@ -42,10 +42,18 @@ export default function DarkModeToggle() {
     return (
         <div className="w-full flex justify-end ">
             <button onClick={handleToggle} aria-label="toggle dark mode" title="toggle dark mode" className={clsx(
-                "transition-scale ease-bounce duration-500 hover:scale-150 active:scale-125",
-                "dark:hover:text-dark-mode-highlight hover:text-light-mode-highlight",
-                "dark:active:text-dark-mode-highlight active:text-light-mode-highlight"
+                "transition-all ease-bounce duration-500 hover:scale-150 active:scale-125",
+                "drop-shadow-bg-light-mode-bg dark:drop-shadow-bg-dark-mode-bg",
+                "hover:drop-shadow-[-1rem_1rem_5px] active:drop-shadow-[-1rem_1rem_5px]",
+                "hover:drop-shadow-[0_0_5px] active:drop-shadow-[0_0_5px]",
+                "dark:hover:drop-shadow-[0_0_5px] dark:active:drop-shadow-[0_0_5px]",
             )}>
+                {/* <span className={clsx(
+                    "block w-full h-full rounded-full opacity-[15%] z-0 absolute top-0 left-0 transition ease-bounce",
+                    "dark:bg-dark-mode-highlight bg-light-mode-highlight",
+                    "group-hover:opacity-[15%] group-active:opacity-[15%]",
+                    "group-hover:blur-sm group-active:blur-sm"
+                )}></span> */}
                 {darkMode ? <DarkModeIcon /> : <LightModeIcon />}
             </button>
         </div>
