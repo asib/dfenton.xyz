@@ -74,11 +74,6 @@ function App() {
             </ContactItem>
           </section>
 
-          <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'>
-            <p>Download PDF</p>
-            <Icon icon={DownloadIcon} className="size-[1rem]" />
-          </a>
-
           <details className="group" open>
             <summary className="text-lg -mb-4 group-open:mb-5 cursor-pointer">Experience</summary>
             {workItems.reduce<React.ReactNode>((acc, item, itemIndex) =>
@@ -119,6 +114,11 @@ function App() {
               </div>
             </section>
           </details>
+
+          <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'>
+            <p className="text-xs">Download PDF</p>
+            <Icon icon={DownloadIcon} className="size-[0.75rem]" />
+          </a>
 
           <footer className='mt-5'>
             <p className="text-xs mb-3">Copyright {new Date().getFullYear()}, Jacob Fenton. Attributions given in HTML comments.</p>
