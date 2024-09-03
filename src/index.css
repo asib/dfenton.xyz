@@ -2,8 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-    .small-caps {
-        font-variant: small-caps;
+@layer base {
+    :root {
+        --dark-mode-highlight: #f0e891;
+        --light-mode-highlight: #8a4f7d;
     }
 }

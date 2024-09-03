@@ -8,6 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Also in index.css
         'dark-mode-text': '#f4a460',
         'dark-mode-highlight': '#f0e891',
         'dark-mode-bg': '#1f1f1f',
