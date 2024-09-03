@@ -12,7 +12,7 @@ const isDarkModeEnabled = (): boolean => {
     return getTheme() === 'dark';
 }
 
-export default function DarkModeToggle() {
+export default function DarkModeToggle({ setIsHoveringOverSun }: { setIsHoveringOverSun: (isHovering: boolean) => void }) {
     const [darkMode, setDarkMode] = useState<boolean>(isDarkModeEnabled());
 
 
@@ -40,7 +40,9 @@ export default function DarkModeToggle() {
     };
 
     return (
-        <div className="group w-full flex justify-end ">
+        <div className="group w-full flex justify-end"
+            onMouseEnter={() => { if (darkMode) setIsHoveringOverSun(true) }}
+            onMouseLeave={() => { setIsHoveringOverSun(false) }}>
             {darkMode && <span className={clsx(
                 "block w-[100vw] h-[100vh] opacity-0 z-0 absolute top-[0.75rem] left-[0.75rem]",
                 "rotate-90 origin-top-left pointer-events-none",
