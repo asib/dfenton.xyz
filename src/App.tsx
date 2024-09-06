@@ -136,8 +136,7 @@ function App() {
               className={clsx(
                 "block w-screen h-screen opacity-0",
                 "fixed top-0 left-0 pointer-events-none",
-                "[background:radial-gradient(100%_100%_at_center,white,transparent_90%)]",
-                "dark:[background:radial-gradient(100%_100%_at_center,white,transparent_48%)]",
+                "bg-white",
               )}
               onAnimationEnd={() => {
                 document.getElementById("camera-flash")?.classList.remove("animate-[flash_300ms_ease-in-out]", "dark:animate-[dark-flash_300ms_ease-in-out]");
