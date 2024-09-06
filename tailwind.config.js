@@ -17,10 +17,16 @@ export default {
         'light-mode-highlight': '#8a4f7d'
       },
       transitionTimingFunction: {
-      'bounce': 'cubic-bezier(.47, 1.64, .41, .8)',
+        'bounce': 'cubic-bezier(.47, 1.64, .41, .8)',
       },
       dropShadow: {
         'sun-shadow': '-3rem 2rem 1px rgba(from var(--dark-mode-highlight) r g b / 0.01)'
+      },
+      keyframes: {
+        flash: {
+          '0%, 100%': { opacity: '0' },
+          '50%': { opacity: '0.7' },
+        }
       }
     },
   },

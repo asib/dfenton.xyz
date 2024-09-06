@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import DocumentCopyIcon from './components/DocumentCopyIcon';
 import DocumentCopyTickIcon from './components/DocumentCopyTickIcon';
 import DownloadIcon from './components/DownloadIcon';
+import useSound from 'use-sound';
 
 interface WorkItemProps {
   company: string,
@@ -51,6 +52,8 @@ function App() {
     { company: 'Brevan Howard', location: 'London, UK', role: 'Intern', period: 'August 2014 - September 2014', content: [] },
     { company: 'Surrey Satellite Technology Ltd', location: 'Guildford, UK', role: 'Intern', period: 'Summer 2013', content: [] },
   ];
+
+  const [playCameraFlash] = useSound('/camera-shutter.mp3', { volume: 0.1 });
 
   return (
     <>
@@ -115,10 +118,35 @@ function App() {
             </section>
           </details>
 
-          <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'>
+          {/* <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'> */}
+          <button
+            className={clsx("w-fit my-6 px-4 py-2 flex items-center",
+              "space-x-2 border-dashed border-2 border-light-mode-text",
+              "dark:border-dark-mode-text",
+
+            )}
+            onClick={() => {
+              document.getElementById("camera-flash")?.classList.add("animate-[flash_300ms_ease-in-out]");
+              playCameraFlash();
+            }}
+          >
+            <div
+              id="camera-flash"
+              aria-hidden
+              className={clsx(
+                "block w-screen h-screen opacity-0",
+                "fixed top-0 left-0 pointer-events-none",
+                "[background:radial-gradient(150%_150%_at_center,white,transparent_30%)]",
+              )}
+              onAnimationEnd={() => {
+                document.getElementById("camera-flash")?.classList.remove("animate-[flash_300ms_ease-in-out]");
+                window.open("/resume.pdf", "_blank");
+              }}
+            ></div>
             <p className="text-xs">Download PDF</p>
             <Icon icon={DownloadIcon} className="size-[0.75rem]" />
-          </a>
+          </button>
+          {/* </a> */}
 
           <footer className='mt-5'>
             <p className="text-xs mb-3">Copyright {new Date().getFullYear()}, Jacob Fenton. Attributions given in HTML comments.</p>
