@@ -19,10 +19,6 @@ export default function DarkModeToggle() {
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
-        if (!darkMode) {
-            return;
-        }
-
         const allElements = document.getElementById("root")?.getElementsByTagName("*");
 
         for (const element of allElements ?? []) {
@@ -30,7 +26,7 @@ export default function DarkModeToggle() {
                 continue;
             }
 
-            if (isHoveringOverSun) {
+            if (darkMode && isHoveringOverSun) {
                 element.classList.add('drop-shadow-sun-shadow');
             } else {
                 element.classList.remove('drop-shadow-sun-shadow');
@@ -57,6 +53,7 @@ export default function DarkModeToggle() {
             document.documentElement.classList.remove('dark')
         } else {
             document.documentElement.classList.add('dark');
+            setIsHoveringOverSun(false);
         }
         window.localStorage.setItem('theme', enabled ? 'light' : 'dark');
         window.dispatchEvent(new Event('storage'));

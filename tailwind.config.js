@@ -25,6 +25,10 @@ export default {
       keyframes: {
         flash: {
           '0%, 100%': { opacity: '0' },
+          '50%': { opacity: '1' },
+        },
+        'dark-flash': {
+          '0%, 100%': { opacity: '0' },
           '50%': { opacity: '0.7' },
         }
       }
