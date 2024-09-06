@@ -26,7 +26,6 @@ export default function DarkModeToggle() {
         }
 
         const allElements = document.getElementById("root")?.getElementsByTagName("*");
-
         for (const element of allElements ?? []) {
             if (element === containerRef.current || containerRef.current?.contains(element)) {
                 continue;
@@ -36,7 +35,6 @@ export default function DarkModeToggle() {
                 element.classList.add('drop-shadow-sun-shadow');
             } else {
                 element.classList.remove('drop-shadow-sun-shadow');
-
             }
         }
     }, [darkMode, isHoveringOverSun, reducedMotion])
@@ -73,11 +71,10 @@ export default function DarkModeToggle() {
             <div className="group w-full flex justify-end">
                 {darkMode && <div className={clsx(
                     "w-[100vw] h-[100vh] opacity-0 z-[-1] absolute top-[0.75rem] left-[0.75rem]",
-                    "rotate-90 origin-top-left pointer-events-none",
-                    "dark:[background:radial-gradient(circle_at_0_0,var(--dark-mode-highlight),transparent_50%)]",
-                    "motion-safe:transition motion-safe:ease-bounce motion-safe:duration-500",
-                    "group-hover:opacity-[15%] group-active:opacity-[15%]",
-                    "group-hover:blur-2xl group-active:blur-2xl"
+                    "rotate-90 origin-top-left pointer-events-none overflow-visible blur-2xl",
+                    "[background:radial-gradient(circle_at_0_0,var(--dark-mode-highlight),transparent_50%)]",
+                    "motion-safe:transition-opacity motion-safe:ease-bounce motion-safe:duration-500",
+                    "group-hover:opacity-[15%] group-active:opacity-[15%]"
                 )}></div>}
                 <button onClick={handleToggle} aria-label="toggle dark mode" title="toggle dark mode" className={clsx(
                     "motion-safe:transition-all motion-safe:ease-bounce motion-safe:duration-500",
