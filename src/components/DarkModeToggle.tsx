@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import DarkModeIcon from "./DarkModeIcon";
 import LightModeIcon from "./LightModeIcon";
 import clsx from "clsx";
+import { useReducedMotion } from "@react-spring/web";
 
 const getTheme = (): string | null => {
     const theme = window.localStorage.getItem('theme');
@@ -15,10 +16,15 @@ const isDarkModeEnabled = (): boolean => {
 export default function DarkModeToggle() {
     const [darkMode, setDarkMode] = useState<boolean>(isDarkModeEnabled());
     const [isHoveringOverSun, setIsHoveringOverSun] = useState<boolean>(false);
+    const reducedMotion = useReducedMotion();
 
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
+        if (reducedMotion) {
+            return;
+        }
+
         const allElements = document.getElementById("root")?.getElementsByTagName("*");
 
         for (const element of allElements ?? []) {
@@ -33,7 +39,7 @@ export default function DarkModeToggle() {
 
             }
         }
-    }, [darkMode, isHoveringOverSun])
+    }, [darkMode, isHoveringOverSun, reducedMotion])
 
     useEffect(() => {
         const handleThemeUpdate = () => {
@@ -69,12 +75,13 @@ export default function DarkModeToggle() {
                     "w-[100vw] h-[100vh] opacity-0 z-[-1] absolute top-[0.75rem] left-[0.75rem]",
                     "rotate-90 origin-top-left pointer-events-none",
                     "dark:[background:radial-gradient(circle_at_0_0,var(--dark-mode-highlight),transparent_50%)]",
-                    "transition ease-bounce duration-500",
+                    "motion-safe:transition motion-safe:ease-bounce motion-safe:duration-500",
                     "group-hover:opacity-[15%] group-active:opacity-[15%]",
                     "group-hover:blur-2xl group-active:blur-2xl"
                 )}></div>}
                 <button onClick={handleToggle} aria-label="toggle dark mode" title="toggle dark mode" className={clsx(
-                    "transition-all ease-bounce duration-500 group-hover:scale-150 group-active:scale-125",
+                    "motion-safe:transition-all motion-safe:ease-bounce motion-safe:duration-500",
+                    "group-hover:scale-150 group-active:scale-125",
                     "drop-shadow-bg-light-mode-bg dark:drop-shadow-bg-dark-mode-bg",
                     "group-hover:drop-shadow-[-1rem_1rem_5px] group-active:drop-shadow-[-1rem_1rem_5px]",
                     "dark:group-hover:drop-shadow-[0_0_5px] dark:group-active:drop-shadow-[0_0_5px]",
