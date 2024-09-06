@@ -215,7 +215,7 @@ function ContactItem({ copyable, icon, label, children }: { copyable?: string, i
     return () => {
       copyToClipboardButtonRefCurrent?.removeEventListener('transitionend', handleTransitionEnd);
       if (reducedMotion) {
-        copyToClipboardButtonRefCurrent?.addEventListener('mouseleave', handleTransitionEnd);
+        copyToClipboardButtonRefCurrent?.removeEventListener('mouseleave', handleTransitionEnd);
       }
     }
   }, [copyToClipboardButtonRef, reducedMotion])
