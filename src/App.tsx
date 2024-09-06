@@ -8,6 +8,8 @@ import clsx from 'clsx';
 import DocumentCopyIcon from './components/DocumentCopyIcon';
 import DocumentCopyTickIcon from './components/DocumentCopyTickIcon';
 import DownloadIcon from './components/DownloadIcon';
+import useSound from 'use-sound';
+import { useReducedMotion } from '@react-spring/web';
 
 interface WorkItemProps {
   company: string,
@@ -51,6 +53,11 @@ function App() {
     { company: 'Brevan Howard', location: 'London, UK', role: 'Intern', period: 'August 2014 - September 2014', content: [] },
     { company: 'Surrey Satellite Technology Ltd', location: 'Guildford, UK', role: 'Intern', period: 'Summer 2013', content: [] },
   ];
+
+  const [playCameraFlash] = useSound('/camera-shutter.mp3', { volume: 0.1 });
+  const reducedMotion = useReducedMotion();
+
+  const openResume = () => { window.open('/resume.pdf', '_blank'); };
 
   return (
     <>
@@ -115,7 +122,37 @@ function App() {
             </section>
           </details>
 
-          <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'>
+          <a
+            href="/resume.pdf"
+            className={clsx("w-fit my-6 px-4 py-2 flex items-center",
+              "space-x-2 border-dashed border-2 border-light-mode-text",
+              "dark:border-dark-mode-text",
+
+            )}
+            onClick={(e) => {
+              if (!reducedMotion) {
+                e.preventDefault();
+                document.getElementById("camera-flash")?.classList.add("animate-[flash_300ms_ease-in-out]", "dark:animate-[dark-flash_300ms_ease-in-out]");
+                playCameraFlash();
+              }
+            }}
+          >
+            <div
+              id="camera-flash"
+              aria-hidden
+              className={clsx(
+                "block w-screen h-screen opacity-0",
+                "fixed top-0 left-0 pointer-events-none",
+                "bg-white",
+              )}
+              onAnimationEnd={() => {
+                if (!reducedMotion) {
+                  document.getElementById("camera-flash")?.classList.remove("animate-[flash_300ms_ease-in-out]", "dark:animate-[dark-flash_300ms_ease-in-out]");
+                }
+
+                openResume();
+              }}
+            ></div>
             <p className="text-xs">Download PDF</p>
             <Icon icon={DownloadIcon} className="size-[0.75rem]" />
           </a>
@@ -151,6 +188,7 @@ function WorkItem({ company, location, role, period, children }: WorkItemProps) 
 function ContactItem({ copyable, icon, label, children }: { copyable?: string, icon: ({ className }: { className: string }) => React.JSX.Element, label: string, children: React.ReactNode }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const copyToClipboardButtonRef = useRef<HTMLButtonElement | null>(null);
+  const reducedMotion = useReducedMotion();
 
   const handleCopy = (copyable: string) => {
     navigator.clipboard.writeText(copyable).catch((e: unknown) => { console.error(e); });
@@ -169,12 +207,18 @@ function ContactItem({ copyable, icon, label, children }: { copyable?: string, i
       }
     };
 
-    copyToClipboardButtonRef.current?.addEventListener('transitionend', handleTransitionEnd);
+    copyToClipboardButtonRefCurrent?.addEventListener('transitionend', handleTransitionEnd);
+    if (reducedMotion) {
+      copyToClipboardButtonRefCurrent?.addEventListener('mouseleave', handleTransitionEnd);
+    }
 
     return () => {
       copyToClipboardButtonRefCurrent?.removeEventListener('transitionend', handleTransitionEnd);
+      if (reducedMotion) {
+        copyToClipboardButtonRefCurrent?.removeEventListener('mouseleave', handleTransitionEnd);
+      }
     }
-  }, [copyToClipboardButtonRef])
+  }, [copyToClipboardButtonRef, reducedMotion])
 
   return (
     <div className="w-fit group flex space-x-2 items-center mb-2" aria-label={label} title={label}>
@@ -183,7 +227,7 @@ function ContactItem({ copyable, icon, label, children }: { copyable?: string, i
 
       {copyable !== undefined &&
         <button ref={copyToClipboardButtonRef} onClick={() => { handleCopy(copyable); }}
-          className={clsx("transition opacity-0 group-hover:opacity-100", {
+          className={clsx("motion-safe:transition opacity-0 group-hover:opacity-100", {
             "text-light-mode-text dark:text-dark-mode-text": !copySuccess,
             "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess
           })}>
