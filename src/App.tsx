@@ -9,6 +9,7 @@ import DocumentCopyIcon from './components/DocumentCopyIcon';
 import DocumentCopyTickIcon from './components/DocumentCopyTickIcon';
 import DownloadIcon from './components/DownloadIcon';
 import useSound from 'use-sound';
+import { useReducedMotion } from '@react-spring/web';
 
 interface WorkItemProps {
   company: string,
@@ -54,6 +55,9 @@ function App() {
   ];
 
   const [playCameraFlash] = useSound('/camera-shutter.mp3', { volume: 0.1 });
+  const reducedMotion = useReducedMotion();
+
+  const openResume = () => { window.open('/resume.pdf', '_blank'); };
 
   return (
     <>
@@ -118,16 +122,19 @@ function App() {
             </section>
           </details>
 
-          {/* <a href="/resume.pdf" className='w-fit my-6 px-4 py-2 flex items-center space-x-2 border-dashed border-2 border-light-mode-text dark:border-dark-mode-text'> */}
-          <button
+          <a
+            href="/resume.pdf"
             className={clsx("w-fit my-6 px-4 py-2 flex items-center",
               "space-x-2 border-dashed border-2 border-light-mode-text",
               "dark:border-dark-mode-text",
 
             )}
-            onClick={() => {
-              document.getElementById("camera-flash")?.classList.add("animate-[flash_300ms_ease-in-out]", "dark:animate-[dark-flash_300ms_ease-in-out]");
-              playCameraFlash();
+            onClick={(e) => {
+              if (!reducedMotion) {
+                e.preventDefault();
+                document.getElementById("camera-flash")?.classList.add("animate-[flash_300ms_ease-in-out]", "dark:animate-[dark-flash_300ms_ease-in-out]");
+                playCameraFlash();
+              }
             }}
           >
             <div
@@ -139,14 +146,16 @@ function App() {
                 "bg-white",
               )}
               onAnimationEnd={() => {
-                document.getElementById("camera-flash")?.classList.remove("animate-[flash_300ms_ease-in-out]", "dark:animate-[dark-flash_300ms_ease-in-out]");
-                window.open("/resume.pdf", "_blank");
+                if (!reducedMotion) {
+                  document.getElementById("camera-flash")?.classList.remove("animate-[flash_300ms_ease-in-out]", "dark:animate-[dark-flash_300ms_ease-in-out]");
+                }
+
+                openResume();
               }}
             ></div>
             <p className="text-xs">Download PDF</p>
             <Icon icon={DownloadIcon} className="size-[0.75rem]" />
-          </button>
-          {/* </a> */}
+          </a>
 
           <footer className='mt-5'>
             <p className="text-xs mb-3">Copyright {new Date().getFullYear()}, Jacob Fenton. Attributions given in HTML comments.</p>
