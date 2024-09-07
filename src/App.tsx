@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import DarkModeToggle from './components/DarkModeToggle'
 import GitHubIcon from './components/GitHubIcon'
-import PhoneIcon from './components/PhoneIcon';
 import AtIcon from './components/AtIcon';
 import GlobeIcon from './components/GlobeIcon';
 import clsx from 'clsx';
@@ -69,9 +68,6 @@ function App() {
           <section className="text-sm mb-[2rem]">
             <ContactItem icon={GitHubIcon} label="github profile">
               <a href="https://github.com/asib" target="_blank" rel="noreferrer">github.com/asib</a>
-            </ContactItem>
-            <ContactItem icon={PhoneIcon} label="phone number" copyable="+447979494508">
-              <a href="tel:+447979494508">+44 7979 494 508</a>
             </ContactItem>
             <ContactItem icon={AtIcon} label="email address" copyable="jacob+hiring@dfenton.xyz">
               <a href="mailto:jacob+hiring@dfenton.xyz">jacob+hiring@dfenton.xyz</a>
