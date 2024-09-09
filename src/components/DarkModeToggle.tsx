@@ -64,7 +64,7 @@ export default function DarkModeToggle() {
     };
 
     return (
-        <div ref={containerRef} className="fixed top-3 right-4 md:top-4 md:right-6"
+        <div ref={containerRef} className="fixed top-2 right-3"
             onMouseEnter={() => { setIsHoveringOverSun(true) }}
             onMouseLeave={() => { setIsHoveringOverSun(false) }}
         >
