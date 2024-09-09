@@ -32,9 +32,9 @@ export default function DarkModeToggle() {
             }
 
             if (darkMode && isHoveringOverSun) {
-                element.classList.add('drop-shadow-sun-shadow');
+                element.classList.add('motion-safe:drop-shadow-sun-shadow', 'transform-gpu');
             } else {
-                element.classList.remove('drop-shadow-sun-shadow');
+                element.classList.remove('motion-safe:drop-shadow-sun-shadow', 'transform-gpu');
             }
         }
     }, [darkMode, isHoveringOverSun, reducedMotion])
