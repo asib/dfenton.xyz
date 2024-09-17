@@ -80,8 +80,7 @@ function App() {
           </ContactItem>
         </section>
 
-        <details className="group peer" open>
-          <summary className="text-lg group-open:mb-5 cursor-pointer">Experience</summary>
+        <Accordion className="peer" summary="Experience">
           {workItems.reduce<React.ReactNode>((acc, item, itemIndex) =>
             <>
               {acc}
@@ -99,11 +98,9 @@ function App() {
 
             </>,
             null)}
-        </details>
+        </Accordion>
 
-        <details className="group mt-1 peer-open:mt-5" open>
-          <summary className="text-lg group-open:mb-5 cursor-pointer">Education</summary>
-
+        <Accordion className="mt-1 peer-open:mt-5" summary="Education">
           <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
             <header className="flex flex-col mb-2">
               <h1 className="text-xl font-semibold mb-[0.25rem]">University of Cambridge</h1>
@@ -119,7 +116,7 @@ function App() {
               <p>Dissertation: designed and developed a smart card access control system that implements an authentication protocol based on asymmetric key cryptography, significantly reducing the attack surface as compared to a symmetric key auth system. Written in Java Card/Java.</p>
             </div>
           </section>
-        </details>
+        </Accordion>
 
 
         <a
@@ -166,6 +163,17 @@ function App() {
       </main >
     </>
   )
+}
+
+function Accordion({ children, className, summary }: { children: React.ReactNode, className?: string, summary: string }) {
+  return (
+    <details className={className} open>
+      <summary className="text-lg cursor-pointer">{summary}</summary>
+      <div className="mt-5">
+        {children}
+      </div>
+    </details>
+  );
 }
 
 function WorkItem({ company, location, role, period, children }: WorkItemProps) {
