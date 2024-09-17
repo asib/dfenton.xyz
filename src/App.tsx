@@ -80,8 +80,8 @@ function App() {
           </ContactItem>
         </section>
 
-        <details className="group" open>
-          <summary className="text-lg -mb-4 group-open:mb-5 cursor-pointer">Experience</summary>
+        <details className="group peer" open>
+          <summary className="text-lg group-open:mb-5 cursor-pointer">Experience</summary>
           {workItems.reduce<React.ReactNode>((acc, item, itemIndex) =>
             <>
               {acc}
@@ -101,8 +101,8 @@ function App() {
             null)}
         </details>
 
-        <details className="group" open>
-          <summary className="text-lg mt-5 group-open:mb-5 cursor-pointer">Education</summary>
+        <details className="group mt-1 peer-open:mt-5" open>
+          <summary className="text-lg group-open:mb-5 cursor-pointer">Education</summary>
 
           <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
             <header className="flex flex-col mb-2">
@@ -120,6 +120,7 @@ function App() {
             </div>
           </section>
         </details>
+
 
         <a
           href="/resume.pdf"
