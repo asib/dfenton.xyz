@@ -30,6 +30,50 @@ export default {
         'dark-flash': {
           '0%, 100%': { opacity: '0' },
           '50%': { opacity: '0.7' },
+        },
+        'bounce-y': {
+
+          '0%': {
+            transform: 'translateY(0%)',
+          },
+
+          '4%': {
+            transform: 'translateY(-1.54%)',
+          },
+
+          '8%': {
+            transform: 'translateY(-0.66%)',
+          },
+
+          '18%': {
+            transform: 'translateY(-6.25%)',
+          },
+
+          '26%': {
+            transform: 'translateY(-1.63%)',
+          },
+
+          '46%': {
+            transform: 'translateY(-24.98%)',
+          },
+
+          '64%': {
+            transform: 'translateY(-1.99%)',
+          },
+
+          '76%': {
+            transform: 'translateY(-56.44%)',
+          },
+
+          '88%': {
+            transform: 'translateY(-89.11%)',
+          },
+
+          '100%': {
+            transform: 'translateY(-100%)',
+          },
+
+
         }
       }
     },

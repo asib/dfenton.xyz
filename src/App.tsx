@@ -195,7 +195,6 @@ function WorkItem({ company, location, role, period, children }: WorkItemProps) 
 function ContactItem({ copyable, icon, label, children }: { copyable?: string, icon: ({ className }: { className: string }) => React.JSX.Element, label: string, children: React.ReactNode }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const copyToClipboardButtonRef = useRef<HTMLButtonElement | null>(null);
-  const reducedMotion = useReducedMotion();
 
   const handleCopy = (copyable: string) => {
     navigator.clipboard.writeText(copyable).catch((e: unknown) => { console.error(e); });
@@ -209,35 +208,32 @@ function ContactItem({ copyable, icon, label, children }: { copyable?: string, i
         return;
       }
 
-      if (window.getComputedStyle(copyToClipboardButtonRefCurrent).opacity === "0") {
+      if (window.getComputedStyle(copyToClipboardButtonRefCurrent).display === "none") {
         setCopySuccess(false);
       }
     };
 
     copyToClipboardButtonRefCurrent?.addEventListener('transitionend', handleTransitionEnd);
-    if (reducedMotion) {
-      copyToClipboardButtonRefCurrent?.addEventListener('mouseleave', handleTransitionEnd);
-    }
+    copyToClipboardButtonRefCurrent?.addEventListener('mouseleave', handleTransitionEnd);
 
     return () => {
       copyToClipboardButtonRefCurrent?.removeEventListener('transitionend', handleTransitionEnd);
-      if (reducedMotion) {
-        copyToClipboardButtonRefCurrent?.removeEventListener('mouseleave', handleTransitionEnd);
-      }
+      copyToClipboardButtonRefCurrent?.removeEventListener('mouseleave', handleTransitionEnd);
     }
-  }, [copyToClipboardButtonRef, reducedMotion])
+  }, [copyToClipboardButtonRef])
 
   return (
-    <div className="w-fit group flex space-x-2 items-center mb-2" aria-label={label} title={label}>
+    <div className="w-full group flex space-x-2 items-center mb-2" aria-label={label} title={label}>
       <Icon icon={icon} />
       {children}
 
       {copyable !== undefined &&
         <button ref={copyToClipboardButtonRef} onClick={() => { handleCopy(copyable); }}
-          className={clsx("motion-safe:transition opacity-0 group-hover:opacity-100", {
-            "text-light-mode-text dark:text-dark-mode-text": !copySuccess,
-            "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess
-          })}>
+          className={clsx("motion-safe:animate-[bounce-y_500ms_linear_forwards_reverse] hidden group-hover:inline-block",
+            {
+              "text-light-mode-text dark:text-dark-mode-text": !copySuccess,
+              "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess
+            })}>
           {copySuccess ? <DocumentCopyTickIcon /> : <DocumentCopyIcon />}
         </button>}
     </div>
