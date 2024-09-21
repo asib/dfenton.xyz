@@ -64,7 +64,7 @@ function App() {
   const [playCameraFlash] = useSound('/camera-shutter.mp3', { volume: 0.1 });
   const reducedMotion = useReducedMotion();
 
-  const openResume = () => { window.open('/resume.pdf', '_blank'); };
+  const openResume = () => { window.location.href = '/resume.pdf'; };
 
   return (
     <>
