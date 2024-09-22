@@ -32,7 +32,6 @@ export default {
           '50%': { opacity: '0.7' },
         },
         'bounce-y': {
-
           '0%': {
             transform: 'translateY(0%)',
           },
@@ -71,9 +70,7 @@ export default {
 
           '100%': {
             transform: 'translateY(-100%)',
-          },
-
-
+          }
         }
       }
     },

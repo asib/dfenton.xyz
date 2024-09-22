@@ -11,6 +11,7 @@ import useSound from 'use-sound';
 import { useReducedMotion } from '@react-spring/web';
 
 interface WorkItemProps {
+  id: string,
   company: string,
   location: string,
   role: string,
@@ -18,19 +19,19 @@ interface WorkItemProps {
   children?: React.ReactNode
 }
 
-type workItem = Pick<WorkItemProps, "company" | "location" | "role" | "period"> & { content: string[] };
+type workItem = Pick<WorkItemProps, "id" | "company" | "location" | "role" | "period"> & { content: (string | React.ReactNode)[] };
 
 function App() {
   const workItems: workItem[] = [
     {
-      company: 'Fly.io', location: 'Remote (UK/Canada)', role: 'Full Stack Engineer', period: 'October 2023 - Present', content: [
+      id: "fly-io", company: 'Fly.io', location: 'Remote (UK/Canada)', role: 'Full Stack Engineer', period: 'October 2023 - Present', content: [
         "Joined to work on migrating the billing provider of our usage-based billing system from Stripe to Metronome.",
         "Responsible for the system generating usage events based on data sourced from both Grafana metrics and a Postgres database, storing those events in a time series (TimescaleDB) database, and reliably pushing to Metronome. Wrote a recurring credit granting system for monthly recurring discounts that we needed to reliably and idempotently create.",
         "Towards the end of the migration, focus shifted to billing & account management product work. I was responsible for making decisions about what to put on our roadmap, based on impact. I implemented our pay-as-you-go plan, region-based pricing, reserved pricing, spot pricing for GPUs. I architected and implemented a Macaroon authnZ framework for our Elixir/Phoenix app. I also designed and oversaw the development of our “unified billing” feature (many organisations billed through the same “parent” entity), a tokens management UI (fast and easy revocation/creation of Macaroon tokens with very specific capabilities), and “granular egress” pricing (charging for bandwidth based on whether the destination was inside/outside of our infrastructure).",
       ]
     },
     {
-      company: 'Foodsteps Ltd', location: 'Remote (UK)', role: 'Senior Software Engineer', period: 'March 2020 - October 2023', content: [
+      id: "foodsteps", company: 'Foodsteps Ltd', location: 'Remote (UK)', role: 'Senior Software Engineer', period: 'March 2020 - October 2023', content: [
         "Food sustainability startup. Full-stack web development utilising: Python/Django/Mypy (backend), TypeScript/React (frontend). Sixth employee and first software hire.",
         "Built a self-service platform for assessing the carbon footprint of food items, with the ability to customise all stages of the life-cycle per the client's ingredient sourcing/preparation/packaging/end-mile transport/storage. Wrote an impact calculation engine for performing impact assessments asynchronously with Celery, a GraphQL API to service the React frontend and implemented self-service payments using Stripe. Product managed, in collaboration with other engineers on the team; regularly spoke with prospective/active clients to understand core needs and determine what to put on the roadmap.",
         "Built out all of our infrastructure including: CI pipeline in GitHub Actions, writing repeatable scripts to stand-up a fresh environment in AWS (create log groups, secrets, RDS instance, ECS clusters for our task queue and web server, S3+CloudFront for frontend delivery), and scripts to enable deployment with a single command.",
@@ -38,25 +39,32 @@ function App() {
       ]
     },
     {
-      company: 'The KPH', location: 'Ladbroke Grove, London, UK', role: 'Chef de Partie', period: 'June 2019 - January 2020', content: [
+      id: "kph", company: 'The KPH', location: 'Ladbroke Grove, London, UK', role: 'Chef de Partie', period: 'June 2019 - January 2020', content: [
         "Worked on the cold larder and pastry sections. Solely responsible for making bread for the restaurant."
       ]
     },
     {
-      company: 'Cabvision Network Ltd', location: 'London', role: 'Software Engineer', period: 'October 2014 - October 2015, July 2016 - October 2016, September 2018 - June 2019', content: [
-        "Payment processing firm.Full - stack web & mobile development.Web stack: PHP(Zend) / jQuery.Mobile stack: Payment polling client / websocket server: Golang, Webhook server: Rust, iOS app: Objective - C and Swift, Android app: Java.",
+      id: "cabvision", company: 'Cabvision Network Ltd', location: 'London', role: 'Software Engineer', period: 'October 2014 - October 2015, July 2016 - October 2016, September 2018 - June 2019', content: [
+        "Payment processing firm. Full stack web & mobile development.",
+        "Web stack:",
+        <span key="web-stack" className="ms-4">PHP (Zend) / jQuery</span>,
+        "Mobile stack:",
+        <span key="polling-client" className="ms-4">Payment polling client / websocket server: Golang</span>,
+        <span key="webhook-server" className="ms-4">Webhook server: Rust</span>,
+        <span key="ios-app" className="ms-4">iOS app: Objective-C and Swift</span>,
+        <span key="android-app" className="ms-4">Android app: Java</span>,
         "Created native transaction tracking apps (iOS & Android) featuring real-time transaction push notifications, serving thousands of customers. Transactions were web-scraped from the payment processor's portal by the polling client.",
         "Expanded functionality of these apps to support processing of payments using a Payworks mPOS device. The app communicated with a London black cab's meter via a custom serial interface to automatically begin the payment flow upon completion of a fare.",
       ]
     },
-    { company: 'Brevan Howard', location: 'London, UK', role: 'Intern', period: 'August 2014 - September 2014', content: [] },
-    { company: 'Surrey Satellite Technology Ltd', location: 'Guildford, UK', role: 'Intern', period: 'Summer 2013', content: [] },
+    { id: "brevan-howard", company: 'Brevan Howard', location: 'London, UK', role: 'Intern', period: 'August 2014 - September 2014', content: [] },
+    { id: "surrey-satellite-technology", company: 'Surrey Satellite Technology Ltd', location: 'Guildford, UK', role: 'Intern', period: 'Summer 2013', content: [] },
   ];
 
   const [playCameraFlash] = useSound('/camera-shutter.mp3', { volume: 0.1 });
   const reducedMotion = useReducedMotion();
 
-  const openResume = () => { window.open('/resume.pdf', '_blank'); };
+  const openResume = () => { window.location.href = '/resume.pdf'; };
 
   return (
     <>
@@ -64,7 +72,7 @@ function App() {
       <main className={clsx(
         "grid grid-cols-[1fr_min(65ch,100%)_1fr]",
         "*:col-start-2 *:col-end-3",
-        "mx-12 my-4 break-words"
+        "mx-12 my-4 break-words",
       )}>
         <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
 
@@ -80,17 +88,36 @@ function App() {
           </ContactItem>
         </section>
 
+        <aside className="hidden lg:block !col-start-1 !col-end-2 row-start-3 row-end-4 mt-[3rem] text-xs pr-4">
+          <ul className="max-h-fit sticky top-4">
+            {workItems.map((item, index) => <a
+              key={`work-item-link-${index.toString()}`}
+              href={`#work-item-${item.id}`}
+              className="group"
+            >
+              <li className="py-2 opacity-30 group-hover:opacity-100 transition-opacity duration-200">
+                {index + 1}. {item.company}
+              </li>
+            </a>)}
+          </ul>
+        </aside>
+
         <Accordion className="peer" summary="Experience">
           {workItems.reduce<React.ReactNode>((acc, item, itemIndex) =>
             <>
               {acc}
 
-              <WorkItem key={`work-item-${itemIndex.toString()}`} company={item.company} location={item.location} role={item.role} period={item.period}>
+              <WorkItem key={`work-item-${itemIndex.toString()}`} id={item.id} company={item.company} location={item.location} role={item.role} period={item.period}>
                 {item.content.map((content, contentIndex) => <p key={`work-item-content-${itemIndex.toString()}-${contentIndex.toString()}`}>{content}</p>)}
               </WorkItem>
 
               {itemIndex !== workItems.length - 1 &&
-                <div key={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] ml-8">
+                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] ml-8"
+                  style={{
+                    animation: 'appear 1ms linear both',
+                    animationTimeline: 'view()',
+                    animationRange: 'entry-crossing 20px entry-crossing 200px'
+                  }}>
                   <svg viewBox='0 0 100 100' preserveAspectRatio='none' className="h-full fill-transparent stroke-none">
                     <path className='stroke-light-mode-text dark:stroke-dark-mode-text stroke-[0.5rem]' d='M0 0 V 100' strokeDasharray="5 25" strokeLinecap='square' />
                   </svg>
@@ -176,9 +203,14 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
   );
 }
 
-function WorkItem({ company, location, role, period, children }: WorkItemProps) {
+function WorkItem({ id, company, location, role, period, children }: WorkItemProps) {
   return (
-    <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
+    <section id={`work-item-${id}`} className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4"
+      style={{
+        animation: 'appear 1ms linear both',
+        animationTimeline: 'view()',
+        animationRange: 'entry-crossing 20px entry-crossing 200px'
+      }}>
       <header className="flex flex-col mb-2">
         <h1 className="text-xl font-semibold mb-1">{company}</h1>
         <h2 className="text-base mb-2">{role}</h2>

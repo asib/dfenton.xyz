@@ -34,6 +34,18 @@
     content="I'm a full stack software engineer specialising in billing systems, usage-based pricing, and distributed systems. Currently working on the best public cloud, previously in food sustainability. Semi-professional interest in authNZ and type systems. Based in UK/Canada." />
   <meta name="twitter:image" content="https://dfenton.xyz/logo.png" />
 
+  <style>
+    @keyframes appear {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+  </style>
+
   <script>
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
