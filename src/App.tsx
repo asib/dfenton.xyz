@@ -90,7 +90,15 @@ function App() {
 
         <aside className="hidden lg:block !col-start-1 !col-end-2 row-start-3 row-end-4 mt-[3rem] text-xs pr-4">
           <ul className="max-h-fit sticky top-4">
-            {workItems.map((item, index) => <a key={`work-item-link-${index.toString()}`} href={`#work-item-${item.id}`}><li className="group py-2"><span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">{index + 1}. </span>{item.company}</li></a>)}
+            {workItems.map((item, index) => <a
+              key={`work-item-link-${index.toString()}`}
+              href={`#work-item-${item.id}`}
+              className="group"
+            >
+              <li className="py-2 opacity-30 group-hover:opacity-100 transition-opacity duration-200">
+                {index + 1}. {item.company}
+              </li>
+            </a>)}
           </ul>
         </aside>
 
