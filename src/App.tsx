@@ -46,13 +46,12 @@ function App() {
     {
       id: "cabvision", company: 'Cabvision Network Ltd', location: 'London', role: 'Software Engineer', period: 'October 2014 - October 2015, July 2016 - October 2016, September 2018 - June 2019', content: [
         "Payment processing firm. Full stack web & mobile development.",
-        "Web stack:",
-        <span key="web-stack" className="ms-4">PHP (Zend) / jQuery</span>,
-        "Mobile stack:",
-        <span key="polling-client" className="ms-4">Payment polling client / websocket server: Golang</span>,
-        <span key="webhook-server" className="ms-4">Webhook server: Rust</span>,
-        <span key="ios-app" className="ms-4">iOS app: Objective-C and Swift</span>,
-        <span key="android-app" className="ms-4">Android app: Java</span>,
+        "Web stack: PHP (Zend) / jQuery",
+        <span key="mobile-stack" className="">Mobile stack:</span>,
+        <span key="polling-client" className="ps-4">Payment polling client / websocket server: Golang</span>,
+        <span key="webhook-server" className="ps-4">Webhook server: Rust</span>,
+        <span key="ios-app" className="ps-4">iOS app: Objective-C and Swift</span>,
+        <span key="android-app" className="ps-4">Android app: Java</span>,
         "Created native transaction tracking apps (iOS & Android) featuring real-time transaction push notifications, serving thousands of customers. Transactions were web-scraped from the payment processor's portal by the polling client.",
         "Expanded functionality of these apps to support processing of payments using a Payworks mPOS device. The app communicated with a London black cab's meter via a custom serial interface to automatically begin the payment flow upon completion of a fare.",
       ]
