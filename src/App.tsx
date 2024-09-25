@@ -76,7 +76,7 @@ function App() {
       )}>
         <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
 
-        <section className="text-sm mb-[2rem]">
+        <section className="text-sm mb-[2rem] grid grid-cols-[auto_1fr] gap-y-2">
           <ContactItem icon={GitHubIcon} label="github profile">
             <a href="https://github.com/asib" target="_blank" rel="noreferrer">github.com/asib</a>
           </ContactItem>
@@ -255,19 +255,24 @@ function ContactItem({ copyable, icon, label, children }: { copyable?: string, i
   }, [copyToClipboardButtonRef])
 
   return (
-    <div className="w-full group flex space-x-2 items-center mb-2" aria-label={label} title={label}>
-      <Icon icon={icon} />
-      {children}
+    <div className="w-full group grid grid-cols-subgrid col-span-full gap-x-2 self-start" aria-label={label} title={label}>
+      <Icon icon={icon} className="col-span-1" />
+      <span className="relative col-span-1 flex items-center w-fit">
+        {children}
 
-      {copyable !== undefined &&
-        <button ref={copyToClipboardButtonRef} onClick={() => { handleCopy(copyable); }}
-          className={clsx("motion-safe:animate-[bounce-y_500ms_linear_forwards_reverse] hidden group-hover:inline-block",
-            {
-              "text-light-mode-text dark:text-dark-mode-text": !copySuccess,
-              "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess
-            })}>
-          {copySuccess ? <DocumentCopyTickIcon /> : <DocumentCopyIcon />}
-        </button>}
+        {copyable !== undefined &&
+          <button ref={copyToClipboardButtonRef} onClick={() => { handleCopy(copyable); }}
+            className={clsx(
+              "hidden group-hover:inline-block",
+              "absolute left-[calc(100%+0.5rem)]",
+              "motion-safe:animate-[bounce-y_500ms_linear_forwards_reverse]",
+              {
+                "text-light-mode-text dark:text-dark-mode-text": !copySuccess,
+                "text-light-mode-highlight dark:text-dark-mode-highlight": copySuccess
+              })}>
+            {copySuccess ? <DocumentCopyTickIcon /> : <DocumentCopyIcon />}
+          </button>}
+      </span>
     </div>
   )
 }
