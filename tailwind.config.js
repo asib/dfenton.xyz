@@ -20,7 +20,7 @@ export default {
         'bounce': 'cubic-bezier(.47, 1.64, .41, .8)',
       },
       dropShadow: {
-        'sun-shadow': '-3rem 2rem 1px rgba(from var(--dark-mode-highlight) r g b / 0.01)'
+        'sun-shadow': '-3rem 2rem 1px rgba(from var(--dark-mode-highlight) r g b / 0.03)'
       },
       keyframes: {
         flash: {
