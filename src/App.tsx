@@ -46,13 +46,12 @@ function App() {
     {
       id: "cabvision", company: 'Cabvision Network Ltd', location: 'London', role: 'Software Engineer', period: 'October 2014 - October 2015, July 2016 - October 2016, September 2018 - June 2019', content: [
         "Payment processing firm. Full stack web & mobile development.",
-        "Web stack:",
-        <span key="web-stack" className="ms-4">PHP (Zend) / jQuery</span>,
-        "Mobile stack:",
-        <span key="polling-client" className="ms-4">Payment polling client / websocket server: Golang</span>,
-        <span key="webhook-server" className="ms-4">Webhook server: Rust</span>,
-        <span key="ios-app" className="ms-4">iOS app: Objective-C and Swift</span>,
-        <span key="android-app" className="ms-4">Android app: Java</span>,
+        "Web stack: PHP (Zend) / jQuery",
+        <span key="mobile-stack" className="">Mobile stack:</span>,
+        <span key="polling-client" className="ps-4">Payment polling client / websocket server: Golang</span>,
+        <span key="webhook-server" className="ps-4">Webhook server: Rust</span>,
+        <span key="ios-app" className="ps-4">iOS app: Objective-C and Swift</span>,
+        <span key="android-app" className="ps-4">Android app: Java</span>,
         "Created native transaction tracking apps (iOS & Android) featuring real-time transaction push notifications, serving thousands of customers. Transactions were web-scraped from the payment processor's portal by the polling client.",
         "Expanded functionality of these apps to support processing of payments using a Payworks mPOS device. The app communicated with a London black cab's meter via a custom serial interface to automatically begin the payment flow upon completion of a fare.",
       ]
@@ -91,7 +90,7 @@ function App() {
         <aside className={clsx(
           "!col-start-1 !col-end-2 row-start-3 row-end-4",
           "text-xs pr-4",
-          "motion-safe:transition-all motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
+          "motion-safe:transition-all motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
           "hidden my-0 h-0 lg:block opacity-0",
           "lg:[&:has(+details[open])]:h-fit lg:[&:has(+details[open])]:mt-[3rem] lg:[&:has(+details[open])]:opacity-100",
         )}>
@@ -118,11 +117,11 @@ function App() {
               </WorkItem>
 
               {itemIndex !== workItems.length - 1 &&
-                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] ml-8"
+                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] pl-8"
                   style={{
                     animation: 'appear 1ms linear both',
                     animationTimeline: 'view()',
-                    animationRange: 'entry-crossing 20px entry-crossing 200px'
+                    animationRange: 'entry-crossing 20px entry-crossing min(200px, 20vh)'
                   }}>
                   <svg viewBox='0 0 100 100' preserveAspectRatio='none' className="h-full fill-transparent stroke-none">
                     <path className='stroke-light-mode-text dark:stroke-dark-mode-text stroke-[0.5rem]' d='M0 0 V 100' strokeDasharray="5 25" strokeLinecap='square' />
@@ -134,7 +133,7 @@ function App() {
         </Accordion>
 
         <Accordion summary="Education">
-          <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
+          <section data-type="timeline-item">
             <header className="flex flex-col mb-2">
               <h1 className="text-xl font-semibold mb-[0.25rem]">University of Cambridge</h1>
               <h3 className="text-xs mb-1">Fitzwilliam College</h3>
@@ -203,12 +202,20 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
     <details
       className={clsx(
         "[&:has(+details)+details]:mt-2 [&[open]:has(+details)+details]:mt-5",
+        "max-sm:!col-span-full max-sm:!mx-0",
         className
       )}
       open
     >
-      <summary className="text-lg cursor-pointer">{summary}</summary>
-      <div className="mt-5">
+      <summary className="text-lg cursor-pointer max-w-full max-sm:pl-6">{summary}</summary>
+      <div className={clsx(
+        "mt-5",
+        "[&>[data-type=timeline-item]]:flex [&>[data-type=timeline-item]]:flex-col",
+        "[&>[data-type=timeline-item]]:space-y-2 [&>[data-type=timeline-item]]:border-y",
+        "[&>[data-type=timeline-item]]:sm:border [&>[data-type=timeline-item]]:p-4",
+        "[&>[data-type=timeline-item]]:border-light-mode-text",
+        "[&>[data-type=timeline-item]]:dark:border-dark-mode-text"
+      )}>
         {children}
       </div>
     </details>
@@ -217,11 +224,12 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
 
 function WorkItem({ id, company, location, role, period, children }: WorkItemProps) {
   return (
-    <section id={`work-item-${id}`} className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4"
+    <section id={`work-item-${id}`}
+      data-type="timeline-item"
       style={{
         animation: 'appear 1ms linear both',
         animationTimeline: 'view()',
-        animationRange: 'entry-crossing 20px entry-crossing 200px'
+        animationRange: 'entry-crossing 20px entry-crossing min(200px, 20vh)'
       }}>
       <header className="flex flex-col mb-2">
         <h1 className="text-xl font-semibold mb-1">{company}</h1>
