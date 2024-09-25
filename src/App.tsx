@@ -122,7 +122,7 @@ function App() {
                   style={{
                     animation: 'appear 1ms linear both',
                     animationTimeline: 'view()',
-                    animationRange: 'entry-crossing 20px entry-crossing 200px'
+                    animationRange: 'entry-crossing 20px entry-crossing min(200px, 20vh)'
                   }}>
                   <svg viewBox='0 0 100 100' preserveAspectRatio='none' className="h-full fill-transparent stroke-none">
                     <path className='stroke-light-mode-text dark:stroke-dark-mode-text stroke-[0.5rem]' d='M0 0 V 100' strokeDasharray="5 25" strokeLinecap='square' />
@@ -221,7 +221,7 @@ function WorkItem({ id, company, location, role, period, children }: WorkItemPro
       style={{
         animation: 'appear 1ms linear both',
         animationTimeline: 'view()',
-        animationRange: 'entry-crossing 20px entry-crossing 200px'
+        animationRange: 'entry-crossing 20px entry-crossing min(200px, 20vh)'
       }}>
       <header className="flex flex-col mb-2">
         <h1 className="text-xl font-semibold mb-1">{company}</h1>
