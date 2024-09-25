@@ -118,7 +118,7 @@ function App() {
               </WorkItem>
 
               {itemIndex !== workItems.length - 1 &&
-                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] ml-8"
+                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] pl-8"
                   style={{
                     animation: 'appear 1ms linear both',
                     animationTimeline: 'view()',
@@ -134,7 +134,7 @@ function App() {
         </Accordion>
 
         <Accordion summary="Education">
-          <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
+          <section data-type="timeline-item">
             <header className="flex flex-col mb-2">
               <h1 className="text-xl font-semibold mb-[0.25rem]">University of Cambridge</h1>
               <h3 className="text-xs mb-1">Fitzwilliam College</h3>
@@ -203,12 +203,20 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
     <details
       className={clsx(
         "[&:has(+details)+details]:mt-2 [&[open]:has(+details)+details]:mt-5",
+        "max-sm:!col-span-full max-sm:!mx-0",
         className
       )}
       open
     >
-      <summary className="text-lg cursor-pointer">{summary}</summary>
-      <div className="mt-5">
+      <summary className="text-lg cursor-pointer max-w-full max-sm:pl-6">{summary}</summary>
+      <div className={clsx(
+        "mt-5",
+        "[&>[data-type=timeline-item]]:flex [&>[data-type=timeline-item]]:flex-col",
+        "[&>[data-type=timeline-item]]:space-y-2 [&>[data-type=timeline-item]]:border-y",
+        "[&>[data-type=timeline-item]]:sm:border [&>[data-type=timeline-item]]:p-4",
+        "[&>[data-type=timeline-item]]:border-light-mode-text",
+        "[&>[data-type=timeline-item]]:dark:border-dark-mode-text"
+      )}>
         {children}
       </div>
     </details>
@@ -217,7 +225,8 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
 
 function WorkItem({ id, company, location, role, period, children }: WorkItemProps) {
   return (
-    <section id={`work-item-${id}`} className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4"
+    <section id={`work-item-${id}`}
+      data-type="timeline-item"
       style={{
         animation: 'appear 1ms linear both',
         animationTimeline: 'view()',
