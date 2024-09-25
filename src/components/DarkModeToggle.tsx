@@ -43,7 +43,7 @@ export default function DarkModeToggle() {
     return (
         <div ref={containerRef} className={clsx(
             "group fixed top-2 right-3",
-            "border rounded-full p-2",
+            "border rounded-full p-2 z-10",
             "border-light-mode-text dark:border-dark-mode-text",
             "bg-light-mode-bg dark:bg-dark-mode-bg",
             "md:p-0 md:border-none md:bg-transparent",
@@ -63,6 +63,7 @@ export default function DarkModeToggle() {
                     "group-hover:opacity-[15%] group-active:opacity-[15%]"
                 )}></div>}
                 <button onClick={handleToggle} aria-label="toggle dark mode" title="toggle dark mode" className={clsx(
+                    "relative",
                     "drop-shadow-bg-light-mode-bg dark:drop-shadow-bg-dark-mode-bg",
                     "md:motion-safe:transition-all md:motion-safe:ease-bounce md:motion-safe:duration-500",
                     "md:group-hover:scale-150 md:group-active:scale-125",
@@ -70,6 +71,7 @@ export default function DarkModeToggle() {
                     "md:dark:group-hover:drop-shadow-[0_0_5px] md:dark:group-active:drop-shadow-[0_0_5px]",
                 )}
                 >
+                    <span className="absolute top-1/2 left-1/2 size-12 rounded-full -translate-x-1/2 -translate-y-1/2"></span>
                     {darkMode ? <DarkModeIcon /> : <LightModeIcon />}
                 </button>
             </div>
