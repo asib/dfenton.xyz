@@ -50,7 +50,8 @@ export default function DarkModeToggle() {
             "md:hover:p-0 md:active:p-0",
             "md:hover:top-3 md:active:top-3 md:hover:right-4 md:active:right-4",
             "md:motion-safe:transition-all md:motion-safe:ease-bounce md:motion-safe:duration-500",
-            "md:motion-safe:[&:hover_~_*_*]:drop-shadow-sun-shadow md:motion-safe:[&:hover_~_*_*]:transform-gpu"
+            "md:motion-safe:[&:hover_~_*]:transform-gpu",
+            "md:motion-safe:[&:hover_~_*]:drop-shadow-sun-shadow dark:md:motion-safe:[&:hover_~_*]:drop-shadow-sun-shadow-dark"
         )}
         >
             <div className="w-full flex justify-end">
