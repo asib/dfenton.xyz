@@ -72,7 +72,7 @@ function App() {
       <main className={clsx(
         "grid grid-cols-[1fr_min(65ch,100%)_1fr]",
         "*:col-start-2 *:col-end-3",
-        "mx-12 my-4 break-words",
+        "max-sm:*:mx-6 md:mx-12 my-4 break-words",
       )}>
         <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
 
@@ -88,7 +88,13 @@ function App() {
           </ContactItem>
         </section>
 
-        <aside className="hidden lg:block !col-start-1 !col-end-2 row-start-3 row-end-4 mt-[3rem] text-xs pr-4">
+        <aside className={clsx(
+          "!col-start-1 !col-end-2 row-start-3 row-end-4",
+          "text-xs pr-4",
+          "motion-safe:transition-all motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
+          "hidden my-0 h-0 lg:block opacity-0",
+          "lg:[&:has(+details[open])]:h-fit lg:[&:has(+details[open])]:mt-[3rem] lg:[&:has(+details[open])]:opacity-100",
+        )}>
           <ul className="max-h-fit sticky top-4">
             {workItems.map((item, index) => <a
               key={`work-item-link-${index.toString()}`}
@@ -102,7 +108,7 @@ function App() {
           </ul>
         </aside>
 
-        <Accordion className="peer" summary="Experience">
+        <Accordion summary="Experience">
           {workItems.reduce<React.ReactNode>((acc, item, itemIndex) =>
             <>
               {acc}
@@ -127,7 +133,7 @@ function App() {
             null)}
         </Accordion>
 
-        <Accordion className="mt-1 peer-open:mt-5" summary="Education">
+        <Accordion summary="Education">
           <section className="flex flex-col space-y-2 border border-light-mode-text dark:border-dark-mode-text p-4">
             <header className="flex flex-col mb-2">
               <h1 className="text-xl font-semibold mb-[0.25rem]">University of Cambridge</h1>
@@ -194,7 +200,13 @@ function App() {
 
 function Accordion({ children, className, summary }: { children: React.ReactNode, className?: string, summary: string }) {
   return (
-    <details className={className} open>
+    <details
+      className={clsx(
+        "[&:has(+details)+details]:mt-2 [&[open]:has(+details)+details]:mt-5",
+        className
+      )}
+      open
+    >
       <summary className="text-lg cursor-pointer">{summary}</summary>
       <div className="mt-5">
         {children}
