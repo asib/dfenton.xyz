@@ -90,9 +90,9 @@ function App() {
         <aside className={clsx(
           "!col-start-1 !col-end-2 row-start-3 row-end-4",
           "text-xs pr-4",
-          "motion-safe:transition-all motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
-          "hidden my-0 h-0 lg:block opacity-0",
-          "lg:[&:has(+details[open])]:h-fit lg:[&:has(+details[open])]:mt-[3rem] lg:[&:has(+details[open])]:opacity-100",
+          "motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
+          "hidden lg:block h-0 relative top-[3rem] opacity-0",
+          "lg:[&:has(+details[open])]:h-full lg:[&:has(+details[open])]:opacity-100",
         )}>
           <ul className="max-h-fit sticky top-4">
             {workItems.map((item, index) => <a
