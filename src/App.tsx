@@ -92,7 +92,7 @@ function App() {
           "text-xs pr-4",
           "motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
           "hidden lg:block h-0 relative top-[3rem] opacity-0",
-          "lg:[&:has(+details[open])]:h-full lg:[&:has(+details[open])]:opacity-100",
+          "lg:[&:has(+details[open])]:h-[calc(100%-3rem)] lg:[&:has(+details[open])]:opacity-100",
         )}>
           <ul className="max-h-fit sticky top-4">
             {workItems.map((item, index) => <a
