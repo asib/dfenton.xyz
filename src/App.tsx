@@ -87,25 +87,29 @@ function App() {
           </ContactItem>
         </section>
 
-        <aside className={clsx(
+        <nav className={clsx(
           "!col-start-1 !col-end-2 row-start-3 row-end-4",
           "text-xs pr-4",
           "motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
           "hidden lg:block h-0 relative top-[3rem] opacity-0",
           "lg:[&:has(+details[open])]:h-[calc(100%-3rem)] lg:[&:has(+details[open])]:opacity-100",
-        )}>
+        )}
+          aria-label="Experience navigation"
+        >
           <ul className="max-h-fit sticky top-4">
-            {workItems.map((item, index) => <a
-              key={`work-item-link-${index.toString()}`}
-              href={`#work-item-${item.id}`}
-              className="group"
-            >
-              <li className="py-2 opacity-30 group-hover:opacity-100 transition-opacity duration-200">
-                {index + 1}. {item.company}
-              </li>
-            </a>)}
+            {workItems.map((item, index) => (
+              <a
+                key={`work-item-link-${index.toString()}`}
+                href={`#work-item-${item.id}`}
+                className="group"
+              >
+                <li className="py-2 opacity-30 group-hover:opacity-100 transition-opacity duration-200">
+                  {index + 1}. {item.company}
+                </li>
+              </a>
+            ))}
           </ul>
-        </aside>
+        </nav>
 
         <Accordion summary="Experience">
           {workItems.reduce<React.ReactNode>((acc, item, itemIndex) =>
@@ -117,7 +121,7 @@ function App() {
               </WorkItem>
 
               {itemIndex !== workItems.length - 1 &&
-                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] pl-8"
+                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] pl-8" aria-hidden="true"
                   style={{
                     animation: 'appear 1ms linear both',
                     animationTimeline: 'view()',
