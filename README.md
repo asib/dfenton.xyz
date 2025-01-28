@@ -86,3 +86,8 @@ export default tseslint.config({
   },
 })
 ```
+
+## Block all traffic
+
+Visit [https://dash.cloudflare.com/BIG_ID_STRING/dfenton.xyz/security/waf/custom-rules](https://dash.cloudflare.com/BIG_ID_STRING/dfenton.xyz/security/waf/custom-rules)
+and enable the **Block all traffic** rule.
