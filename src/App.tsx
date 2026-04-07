@@ -30,7 +30,7 @@ type workItem = Pick<WorkItemProps, "id" | "company" | "location" | "role" | "pe
 function App() {
   const workItems: workItem[] = [
     {
-      id: "fly-io", company: 'Fly.io', location: 'Remote (UK/Canada)', positions: [
+      id: "fly-io", company: 'Fly.io', location: 'Remote (UK/USA)', positions: [
         { role: 'Staff Software Engineer', period: 'April 2026 - Present' },
         { role: 'Senior Software Engineer', period: 'May 2025 - April 2026' },
         { role: 'Software Engineer II', period: 'October 2023 - May 2025' },
@@ -89,8 +89,8 @@ function App() {
           <ContactItem icon={GitHubIcon} label="github profile">
             <a href="https://github.com/asib" target="_blank" rel="noreferrer">github.com/asib</a>
           </ContactItem>
-          <ContactItem icon={AtIcon} label="email address" copyable="jacob+hiring@dfenton.xyz">
-            <a href="mailto:jacob+hiring@dfenton.xyz">jacob+hiring@dfenton.xyz</a>
+          <ContactItem icon={AtIcon} label="email address" copyable="shy.bell7601@staplehorse.com">
+            <a href="mailto:shy.bell7601@staplehorse.com">shy.bell7601@staplehorse.com</a>
           </ContactItem>
           <ContactItem icon={GlobeIcon} label="where I can legally work">
             <p>UK/Canada</p>
