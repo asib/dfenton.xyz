@@ -93,7 +93,7 @@ function App() {
             <a href="mailto:shy.bell7601@staplehorse.com">shy.bell7601@staplehorse.com</a>
           </ContactItem>
           <ContactItem icon={GlobeIcon} label="where I can legally work">
-            <p>UK/Canada</p>
+            <p>UK/Canada/USA</p>
           </ContactItem>
         </section>
 
