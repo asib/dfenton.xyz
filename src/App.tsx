@@ -10,21 +10,31 @@ import DownloadIcon from './components/DownloadIcon';
 import useSound from 'use-sound';
 import { useReducedMotion } from '@react-spring/web';
 
+interface Position {
+  role: string,
+  period: string,
+}
+
 interface WorkItemProps {
   id: string,
   company: string,
   location: string,
-  role: string,
-  period: string,
+  role?: string,
+  period?: string,
+  positions?: Position[],
   children?: React.ReactNode
 }
 
-type workItem = Pick<WorkItemProps, "id" | "company" | "location" | "role" | "period"> & { content: (string | React.ReactNode)[] };
+type workItem = Pick<WorkItemProps, "id" | "company" | "location" | "role" | "period" | "positions"> & { content: (string | React.ReactNode)[] };
 
 function App() {
   const workItems: workItem[] = [
     {
-      id: "fly-io", company: 'Fly.io', location: 'Remote (UK/Canada)', role: 'Full Stack Engineer', period: 'October 2023 - Present', content: [
+      id: "fly-io", company: 'Fly.io', location: 'Remote (UK/USA)', positions: [
+        { role: 'Staff Software Engineer', period: 'April 2026 - Present' },
+        { role: 'Senior Software Engineer', period: 'May 2025 - April 2026' },
+        { role: 'Software Engineer II', period: 'October 2023 - May 2025' },
+      ], content: [
         "Joined to work on migrating the billing provider of our usage-based billing system from Stripe to Metronome.",
         "Responsible for the system generating usage events based on data sourced from both Grafana metrics and a Postgres database, storing those events in a time series (TimescaleDB) database, and reliably pushing to Metronome. Wrote a recurring credit granting system for monthly recurring discounts that we needed to reliably and idempotently create.",
         "Towards the end of the migration, focus shifted to billing & account management product work. I was responsible for making decisions about what to put on our roadmap, based on impact. I implemented our pay-as-you-go plan, region-based pricing, reserved pricing, spot pricing for GPUs. I architected and implemented a Macaroon authnZ framework for our Elixir/Phoenix app. I also designed and oversaw the development of our “unified billing” feature (many organisations billed through the same “parent” entity), a tokens management UI (fast and easy revocation/creation of Macaroon tokens with very specific capabilities), and “granular egress” pricing (charging for bandwidth based on whether the destination was inside/outside of our infrastructure).",
@@ -79,11 +89,11 @@ function App() {
           <ContactItem icon={GitHubIcon} label="github profile">
             <a href="https://github.com/asib" target="_blank" rel="noreferrer">github.com/asib</a>
           </ContactItem>
-          <ContactItem icon={AtIcon} label="email address" copyable="jacob+hiring@dfenton.xyz">
-            <a href="mailto:jacob+hiring@dfenton.xyz">jacob+hiring@dfenton.xyz</a>
+          <ContactItem icon={AtIcon} label="email address" copyable="shy.bell7601@staplehorse.com">
+            <a href="mailto:shy.bell7601@staplehorse.com">shy.bell7601@staplehorse.com</a>
           </ContactItem>
           <ContactItem icon={GlobeIcon} label="where I can legally work">
-            <p>UK/Canada</p>
+            <p>UK/Canada/USA</p>
           </ContactItem>
         </section>
 
@@ -116,7 +126,7 @@ function App() {
             <>
               {acc}
 
-              <WorkItem key={`work-item-${itemIndex.toString()}`} id={item.id} company={item.company} location={item.location} role={item.role} period={item.period}>
+              <WorkItem key={`work-item-${itemIndex.toString()}`} id={item.id} company={item.company} location={item.location} role={item.role} period={item.period} positions={item.positions}>
                 {item.content.map((content, contentIndex) => <p key={`work-item-content-${itemIndex.toString()}-${contentIndex.toString()}`}>{content}</p>)}
               </WorkItem>
 
@@ -226,7 +236,7 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
   );
 }
 
-function WorkItem({ id, company, location, role, period, children }: WorkItemProps) {
+function WorkItem({ id, company, location, role, period, positions, children }: WorkItemProps) {
   return (
     <section id={`work-item-${id}`}
       data-type="timeline-item"
@@ -237,9 +247,20 @@ function WorkItem({ id, company, location, role, period, children }: WorkItemPro
       }}>
       <header className="flex flex-col mb-2">
         <h1 className="text-xl font-semibold mb-1">{company}</h1>
-        <h2 className="text-base mb-2">{role}</h2>
+        {positions ? (
+          <ul className="flex flex-col gap-1 mb-2">
+            {positions.map((p, i) => (
+              <li key={`position-${i.toString()}`} className="flex flex-col">
+                <h2 className="text-base">{p.role}</h2>
+                <h3 className="text-xs">{p.period}</h3>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <h2 className="text-base mb-2">{role}</h2>
+        )}
         <h3 className="text-sm mb-1">{location}</h3>
-        <h3 className="text-xs">{period}</h3>
+        {!positions && <h3 className="text-xs">{period}</h3>}
       </header>
 
 
