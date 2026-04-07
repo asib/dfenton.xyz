@@ -20,7 +20,7 @@ interface WorkItemProps {
   company: string,
   location: string,
   role?: string,
-  period?: string,
+  period?: string | string[],
   positions?: Position[],
   children?: React.ReactNode
 }
@@ -54,7 +54,7 @@ function App() {
       ]
     },
     {
-      id: "cabvision", company: 'Cabvision Network Ltd', location: 'London', role: 'Software Engineer', period: 'October 2014 - October 2015, July 2016 - October 2016, September 2018 - June 2019', content: [
+      id: "cabvision", company: 'Cabvision Network Ltd', location: 'London', role: 'Software Engineer', period: ['October 2014 - October 2015', 'July 2016 - October 2016', 'September 2018 - June 2019'], content: [
         "Payment processing firm. Full stack web & mobile development.",
         "Web stack: PHP (Zend) / jQuery",
         <span key="mobile-stack" className="">Mobile stack:</span>,
@@ -151,7 +151,7 @@ function App() {
             <header className="flex flex-col mb-2">
               <h1 className="text-xl font-semibold mb-[0.25rem]">University of Cambridge</h1>
               <h3 className="text-xs mb-1">Fitzwilliam College</h3>
-              <h3 className="text-xs mb-4">October 2015 - July 2018</h3>
+              <h3 className="text-xs font-mono tracking-tight text-[#8c1a35] dark:text-dark-mode-highlight mb-4">October 2015 - July 2018</h3>
 
               <h2>Computer Science</h2>
               <h2>Class I, BA (Hons)</h2>
@@ -252,7 +252,7 @@ function WorkItem({ id, company, location, role, period, positions, children }: 
             {positions.map((p, i) => (
               <li key={`position-${i.toString()}`} className="flex flex-col">
                 <h2 className="text-base">{p.role}</h2>
-                <h3 className="text-xs">{p.period}</h3>
+                <h3 className="text-xs font-mono tracking-tight text-[#8c1a35] dark:text-dark-mode-highlight">{p.period}</h3>
               </li>
             ))}
           </ul>
@@ -260,7 +260,9 @@ function WorkItem({ id, company, location, role, period, positions, children }: 
           <h2 className="text-base mb-2">{role}</h2>
         )}
         <h3 className="text-sm mb-1">{location}</h3>
-        {!positions && <h3 className="text-xs">{period}</h3>}
+        {!positions && (Array.isArray(period)
+          ? <div className="flex flex-col gap-1">{period.map((p, i) => <h3 key={`period-${i.toString()}`} className="text-xs font-mono tracking-tight text-[#8c1a35] dark:text-dark-mode-highlight">{p}</h3>)}</div>
+          : <h3 className="text-xs font-mono tracking-tight text-[#8c1a35] dark:text-dark-mode-highlight">{period}</h3>)}
       </header>
 
 
