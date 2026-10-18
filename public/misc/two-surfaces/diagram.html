@@ -1507,6 +1507,10 @@ h3 { display: none; }
  --card-foreground: var(--foreground) !important;
  --popover-foreground: var(--foreground) !important;
  --primary: light-dark(#8a4f7d, #f0e891) !important;
+ /* Semantic diagram palettes: light / dark; independent of the site accents. */
+ --edge-back: light-dark(#b63e4a, #ff8c99);
+ --edge-bevel: light-dark(#1769b0, #71b7ff);
+ --edge-burr: light-dark(#087f6b, #60d9ba);
  --muted-foreground: color-mix(in srgb, var(--foreground) 65%, transparent) !important;
  --secondary: color-mix(in srgb, var(--foreground) 5%, var(--background)) !important;
  --font-sans: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace !important;
@@ -1813,8 +1817,12 @@ h3 { display: none; }
     #chisel-edge-explorer h3 { padding-right: 96px; margin-bottom: 16px; }
     #chisel-edge-explorer .edge-control-label { display: flex; align-items: center; gap: 8px; }
     #chisel-edge-explorer .edge-swatch { width: 20px; height: 3px; display: inline-block; flex: 0 0 auto; }
-    #chisel-edge-explorer .edge-back-swatch { background: var(--viz-series-2); }
-    #chisel-edge-explorer .edge-bevel-swatch { background: var(--viz-series-1); }
+    #chisel-edge-explorer .edge-back-swatch { background: var(--edge-back); }
+    #chisel-edge-explorer .edge-bevel-swatch { background: var(--edge-bevel); }
+    #chisel-edge-explorer .edge-back-label,
+    #chisel-edge-explorer .edge-figure .edge-back-label { color: var(--edge-back); fill: var(--edge-back); }
+    #chisel-edge-explorer .edge-bevel-label,
+    #chisel-edge-explorer .edge-figure .edge-bevel-label { color: var(--edge-bevel); fill: var(--edge-bevel); }
     #chisel-edge-explorer .edge-figure { display: block; width: 100%; overflow: visible; }
     #chisel-edge-explorer .edge-figure text { fill: var(--foreground); font-family: inherit; font-weight: 400; }
     #chisel-edge-explorer .edge-figure .edge-muted { fill: var(--muted-foreground); }
@@ -1826,7 +1834,7 @@ h3 { display: none; }
   &lt;h3&gt;Two surfaces, one cutting edge&lt;/h3&gt;
   &lt;div class=&quot;viz-controls&quot;&gt;
     &lt;label class=&quot;form-label&quot; for=&quot;edge-back-grit&quot;&gt;
-      &lt;span class=&quot;edge-control-label&quot;&gt;&lt;span class=&quot;edge-swatch edge-back-swatch&quot; aria-hidden=&quot;true&quot;&gt;&lt;/span&gt;Back finish&lt;/span&gt;
+      &lt;span class=&quot;edge-control-label edge-back-label&quot;&gt;&lt;span class=&quot;edge-swatch edge-back-swatch&quot; aria-hidden=&quot;true&quot;&gt;&lt;/span&gt;Back finish&lt;/span&gt;
       &lt;select class=&quot;form-select&quot; id=&quot;edge-back-grit&quot;&gt;
         &lt;option value=&quot;1000&quot;&gt;1,000 grit&lt;/option&gt;
         &lt;option value=&quot;4000&quot;&gt;4,000 grit&lt;/option&gt;
@@ -1834,7 +1842,7 @@ h3 { display: none; }
       &lt;/select&gt;
     &lt;/label&gt;
     &lt;label class=&quot;form-label&quot; for=&quot;edge-bevel-grit&quot;&gt;
-      &lt;span class=&quot;edge-control-label&quot;&gt;&lt;span class=&quot;edge-swatch edge-bevel-swatch&quot; aria-hidden=&quot;true&quot;&gt;&lt;/span&gt;Bevel finish at the edge&lt;/span&gt;
+      &lt;span class=&quot;edge-control-label edge-bevel-label&quot;&gt;&lt;span class=&quot;edge-swatch edge-bevel-swatch&quot; aria-hidden=&quot;true&quot;&gt;&lt;/span&gt;Bevel finish at the edge&lt;/span&gt;
       &lt;select class=&quot;form-select&quot; id=&quot;edge-bevel-grit&quot;&gt;
         &lt;option value=&quot;1000&quot;&gt;1,000 grit&lt;/option&gt;
         &lt;option value=&quot;4000&quot;&gt;4,000 grit&lt;/option&gt;
@@ -1946,8 +1954,8 @@ h3 { display: none; }
       farBevel.push([start + span * u - dx, edgeY + bevelLength - thickness * v]);
     }
     node(&#x27;path&#x27;, {d: path([farBack[0], edge[0], farBevel[0]], true), fill: &#x27;var(--muted)&#x27;, stroke: &#x27;var(--border)&#x27;, &#x27;stroke-width&#x27;: 1});
-    node(&#x27;path&#x27;, {d: path([...farBack, ...edge.slice().reverse()], true), fill: &#x27;var(--viz-series-2)&#x27;, &#x27;fill-opacity&#x27;: 0.09});
-    node(&#x27;path&#x27;, {d: path([...edge, ...farBevel.slice().reverse()], true), fill: &#x27;var(--viz-series-1)&#x27;, &#x27;fill-opacity&#x27;: 0.13});
+    node(&#x27;path&#x27;, {d: path([...farBack, ...edge.slice().reverse()], true), fill: &#x27;var(--edge-back)&#x27;, &#x27;fill-opacity&#x27;: 0.14});
+    node(&#x27;path&#x27;, {d: path([...edge, ...farBevel.slice().reverse()], true), fill: &#x27;var(--edge-bevel)&#x27;, &#x27;fill-opacity&#x27;: 0.14});
 
     // Individual strips are the walls of scratches. Both faces share one intersection.
     for (let i = 0; i &lt; samples; i++) {
@@ -1955,11 +1963,11 @@ h3 { display: none; }
       const v = Math.max(profiles.bevel[i], profiles.bevel[i + 1]);
       if (b &gt; 0.0001) node(&#x27;path&#x27;, {
         d: path([farBack[i], farBack[i + 1], edge[i + 1], edge[i]], true),
-        fill: &#x27;var(--viz-series-2)&#x27;, &#x27;fill-opacity&#x27;: Math.min(0.6, 0.09 + b * 2.5)
+        fill: &#x27;var(--edge-back)&#x27;, &#x27;fill-opacity&#x27;: Math.min(0.6, 0.09 + b * 2.5)
       });
       if (v &gt; 0.0001) node(&#x27;path&#x27;, {
         d: path([edge[i], edge[i + 1], farBevel[i + 1], farBevel[i]], true),
-        fill: &#x27;var(--viz-series-1)&#x27;, &#x27;fill-opacity&#x27;: Math.min(0.6, 0.09 + v * 2.5)
+        fill: &#x27;var(--edge-bevel)&#x27;, &#x27;fill-opacity&#x27;: Math.min(0.6, 0.09 + v * 2.5)
       });
     }
     node(&#x27;path&#x27;, {d: path([farBack[0], farBack[samples], edge[samples], farBevel[samples], farBevel[0], farBack[0]]), fill: &#x27;none&#x27;, stroke: &#x27;var(--border)&#x27;, &#x27;stroke-width&#x27;: 1});
@@ -1967,14 +1975,14 @@ h3 { display: none; }
 
     if (profiles.burr &gt; 0.005) {
       const fringe = edge.map(([x, y], i) =&gt; [x + 3 * profiles.burr, y - profiles.burr * (9 + 3 * Math.sin(i * 0.1))]);
-      node(&#x27;path&#x27;, {d: path([...edge, ...fringe.reverse()], true), fill: &#x27;var(--viz-series-3)&#x27;, &#x27;fill-opacity&#x27;: 0.55});
+      node(&#x27;path&#x27;, {d: path([...edge, ...fringe.reverse()], true), fill: &#x27;var(--edge-burr)&#x27;, &#x27;fill-opacity&#x27;: 0.55});
     }
 
-    node(&#x27;text&#x27;, {x: 20, y: 34}, &#x27;Back&#x27;);
+    node(&#x27;text&#x27;, {x: 20, y: 34, class: &#x27;edge-back-label&#x27;}, &#x27;Back&#x27;);
     node(&#x27;path&#x27;, {d: path([[44, 43], [44, 58], [start + span * 0.23 - dx * 0.65, edgeY - backLength * 0.65]]), class: &#x27;edge-leader&#x27;});
     node(&#x27;text&#x27;, {x: w - 20, y: edgeY - 44, &#x27;text-anchor&#x27;: &#x27;end&#x27;}, &#x27;Cutting edge&#x27;);
     node(&#x27;path&#x27;, {d: path([[w - 34, edgeY - 35], [w - 34, edgeY - 15], edge[Math.round(samples * 0.91)]]), class: &#x27;edge-leader&#x27;});
-    node(&#x27;text&#x27;, {x: 20, y: edgeY + bevelLength + 28}, &#x27;Bevel at the edge&#x27;);
+    node(&#x27;text&#x27;, {x: 20, y: edgeY + bevelLength + 28, class: &#x27;edge-bevel-label&#x27;}, &#x27;Bevel at the edge&#x27;);
     node(&#x27;path&#x27;, {d: path([[135, edgeY + bevelLength + 23], [start + span * 0.42 - dx * 0.65, edgeY + bevelLength * 0.65]]), class: &#x27;edge-leader&#x27;});
 
     node(&#x27;text&#x27;, {x: 20, y: zoomTitleY, &#x27;font-weight&#x27;: 500}, narrow ? &#x27;Edge outline · back view&#x27; : &#x27;Edge outline · viewed from the back&#x27;);
@@ -1984,12 +1992,12 @@ h3 { display: none; }
     for (let i = 0; i &lt; samples; i++) {
       const b = Math.max(profiles.back[i], profiles.back[i + 1]);
       const v = Math.max(profiles.bevel[i], profiles.bevel[i + 1]);
-      const color = b + v &lt; 0.001 ? &#x27;var(--foreground)&#x27; : b &gt;= v ? &#x27;var(--viz-series-2)&#x27; : &#x27;var(--viz-series-1)&#x27;;
+      const color = b + v &lt; 0.001 ? &#x27;var(--foreground)&#x27; : b &gt;= v ? &#x27;var(--edge-back)&#x27; : &#x27;var(--edge-bevel)&#x27;;
       node(&#x27;path&#x27;, {d: path([outline[i], outline[i + 1]]), fill: &#x27;none&#x27;, stroke: color, &#x27;stroke-width&#x27;: 2.2, &#x27;stroke-linecap&#x27;: &#x27;round&#x27;});
     }
     if (profiles.burr &gt; 0.005) {
       const fringe = outline.map(([x, y], i) =&gt; [x, y - profiles.burr * (12 + 4 * Math.sin(i * 0.11) + 2 * Math.sin(i * 0.27))]);
-      node(&#x27;path&#x27;, {d: path([...outline, ...fringe.reverse()], true), fill: &#x27;var(--viz-series-3)&#x27;, &#x27;fill-opacity&#x27;: 0.45});
+      node(&#x27;path&#x27;, {d: path([...outline, ...fringe.reverse()], true), fill: &#x27;var(--edge-burr)&#x27;, &#x27;fill-opacity&#x27;: 0.45});
       node(&#x27;text&#x27;, {x: w - 28, y: bottom - 14, &#x27;text-anchor&#x27;: &#x27;end&#x27;}, &#x27;Thin foil burr&#x27;);
     } else {
       node(&#x27;text&#x27;, {x: w - 28, y: bottom - 14, &#x27;text-anchor&#x27;: &#x27;end&#x27;, class: &#x27;edge-muted text-small&#x27;}, &#x27;Steel&#x27;);
