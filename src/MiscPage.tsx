@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import DarkModeToggle from './components/DarkModeToggle';
 import { miscEntries } from './misc';
+
+const CadViewer = lazy(() => import('./components/cad/CadViewer'));
 
 export default function MiscPage() {
   const [height, setHeight] = useState(720);
@@ -64,7 +66,8 @@ export default function MiscPage() {
             ))}
           </ul>
         )}
-        {entry && <iframe ref={frame} onLoad={syncTheme} src={`${entry.href}diagram.html`} title={entry.title} className="block w-full border-0" style={{ height }} />}
+        {entry?.type === 'cad' && <Suspense fallback={<p>Loading model viewer…</p>}><CadViewer key={entry.href} entry={entry} /></Suspense>}
+        {entry && entry.type !== 'cad' && <iframe ref={frame} onLoad={syncTheme} src={`${entry.href}diagram.html`} title={entry.title} className="block w-full border-0" style={{ height }} />}
         {!entry && !isIndex && <p>There’s no page at this address. <a className="underline" href="/misc/">Browse Misc</a>.</p>}
       </main>
     </>
