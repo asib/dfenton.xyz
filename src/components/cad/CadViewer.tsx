@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type RenderMode, type SectionAxis } from './scene';
+import ParametricControls from './ParametricControls';
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
@@ -14,6 +15,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [axis, setAxis] = useState<SectionAxis>('off');
   const [position, setPosition] = useState(50);
   const [flipped, setFlipped] = useState(false);
+  const [, setRevision] = useState(0);
   const modelUrl = `${entry.href}${entry.model}`;
 
   useEffect(() => {
@@ -66,52 +68,64 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     setFlipped(false);
     viewer?.reset();
   };
+  const onCompiled = (stl: ArrayBuffer) => {
+    if (!viewer) throw new Error('The 3D view is unavailable.');
+    const geometry = new STLLoader().parse(stl);
+    try { viewer.replaceGeometry(geometry); }
+    catch (error) { geometry.dispose(); throw error; }
+    setRevision((revision) => revision + 1);
+  };
 
   return (
     <section className="cad" aria-label="CAD model">
       <p className="cad-description">{entry.description}</p>
-      <div className="cad-stage">
-        <div ref={host} className="cad-canvas" aria-hidden={!!status} />
-        {status && <div className="cad-fallback">
-          <img className={entry.previewDark ? 'cad-preview-light' : ''} src={`${entry.href}${entry.preview}`} alt={entry.title} />
-          {entry.previewDark && <img className="cad-preview-dark" src={`${entry.href}${entry.previewDark}`} alt={entry.title} />}
-          <p role="status">{status}</p>
-        </div>}
-        {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
-      </div>
-      <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.</p>
-      <fieldset className="cad-controls" disabled={!viewer || !!status}>
-        <legend className="sr-only">Model display controls</legend>
-        <label>Display
-          <select value={mode} onChange={(event) => { setMode(event.target.value as RenderMode); }}>
-            <option value="edges">Solid + edges</option>
-            <option value="solid">Solid</option>
-            <option value="wireframe">Wireframe</option>
-          </select>
-        </label>
-        <label>Section
-          <select value={axis} onChange={(event) => { setAxis(event.target.value as SectionAxis); }}>
-            <option value="off">Off</option>
-            <option value="x">X · width</option>
-            <option value="y">Y · reach</option>
-            <option value="z">Z · height</option>
-          </select>
-        </label>
-        <button type="button" onClick={reset}>Reset view</button>
-        {axis !== 'off' && <div className="cad-section-controls">
-          <label className="cad-slider">Cut position <output>{coordinate.toFixed(1)} mm</output>
-            <input type="range" min="0" max="100" step="0.1" value={position}
-              aria-valuetext={`${coordinate.toFixed(1)} millimeters on ${axis.toUpperCase()}`}
-              onChange={(event) => { setPosition(Number(event.target.value)); }} />
-          </label>
-          <label className="cad-checkbox"><input type="checkbox" checked={flipped} onChange={(event) => { setFlipped(event.target.checked); }} />Flip cut</label>
-          {mode !== 'wireframe' && <span className="cad-section-key"><i aria-hidden="true" />Cut surface</span>}
-        </div>}
-      </fieldset>
-      {viewer && <p className="cad-dimensions">Bounds: {viewer.size.x.toFixed(1)} × {viewer.size.y.toFixed(1)} × {viewer.size.z.toFixed(1)} mm (X × Y × Z)</p>}
-      <div className="cad-downloads">
-        <a href={modelUrl} download>Download STL ↓</a>
-        <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>
+      <div className={entry.customizer ? 'cad-workbench' : undefined}>
+        <div className="cad-viewer">
+          <div className="cad-stage">
+            <div ref={host} className="cad-canvas" aria-hidden={!!status} />
+            {status && <div className="cad-fallback">
+              <img className={entry.previewDark ? 'cad-preview-light' : ''} src={`${entry.href}${entry.preview}`} alt={entry.title} />
+              {entry.previewDark && <img className="cad-preview-dark" src={`${entry.href}${entry.previewDark}`} alt={entry.title} />}
+              <p role="status">{status}</p>
+            </div>}
+            {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
+          </div>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.</p>
+          <fieldset className="cad-controls" disabled={!viewer || !!status}>
+            <legend className="sr-only">Model display controls</legend>
+            <label>Display
+              <select value={mode} onChange={(event) => { setMode(event.target.value as RenderMode); }}>
+                <option value="edges">Solid + edges</option>
+                <option value="solid">Solid</option>
+                <option value="wireframe">Wireframe</option>
+              </select>
+            </label>
+            <label>Section
+              <select value={axis} onChange={(event) => { setAxis(event.target.value as SectionAxis); }}>
+                <option value="off">Off</option>
+                <option value="x">X · width</option>
+                <option value="y">Y · reach</option>
+                <option value="z">Z · height</option>
+              </select>
+            </label>
+            <button type="button" onClick={reset}>Reset view</button>
+            {axis !== 'off' && <div className="cad-section-controls">
+              <label className="cad-slider">Cut position <output>{coordinate.toFixed(1)} mm</output>
+                <input type="range" min="0" max="100" step="0.1" value={position}
+                  aria-valuetext={`${coordinate.toFixed(1)} millimeters on ${axis.toUpperCase()}`}
+                  onChange={(event) => { setPosition(Number(event.target.value)); }} />
+              </label>
+              <label className="cad-checkbox"><input type="checkbox" checked={flipped} onChange={(event) => { setFlipped(event.target.checked); }} />Flip cut</label>
+              {mode !== 'wireframe' && <span className="cad-section-key"><i aria-hidden="true" />Cut surface</span>}
+            </div>}
+          </fieldset>
+          {viewer && <p className="cad-dimensions">Bounds: {viewer.size.x.toFixed(1)} × {viewer.size.y.toFixed(1)} × {viewer.size.z.toFixed(1)} mm (X × Y × Z)</p>}
+          {!entry.customizer && <div className="cad-downloads">
+            <a href={modelUrl} download>Download STL ↓</a>
+            <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>
+          </div>}
+        </div>
+        {entry.customizer && <ParametricControls entry={entry} available={!!viewer && !status} onCompiled={onCompiled} />}
       </div>
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}

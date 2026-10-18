@@ -41,7 +41,7 @@ export default function MiscPage() {
   return (
     <>
       <DarkModeToggle />
-      <main className={`mx-auto my-4 px-6 md:px-12 ${entry ? 'max-w-[916px]' : 'max-w-[calc(65ch+6rem)]'}`}>
+      <main className={`mx-auto my-4 px-6 md:px-12 ${entry?.type === 'cad' ? 'max-w-[1180px]' : entry ? 'max-w-[916px]' : 'max-w-[calc(65ch+6rem)]'}`}>
         <nav aria-label="Site navigation" className="text-sm mb-8 pr-12">
           <a className="underline underline-offset-4 decoration-dotted hover:decoration-solid" href={isIndex ? '/' : '/misc/'}>
             ← {isIndex ? 'Jacob Fenton' : 'Misc'}

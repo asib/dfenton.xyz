@@ -1,15 +1,27 @@
 {
   "type": "cad",
   "title": "Parametric magnetic saw guide",
-  "description": "A magnetic guide for dovetail and square cuts. Rotate the model, inspect its edges, and slice through the magnet pockets.",
+  "description": "A magnetic guide for dovetail and square cuts. Customize the slope, magnet pockets, and dimensions, then inspect or download your model.",
   "date": "2026-10-18",
   "preview": "preview.webp",
   "previewDark": "preview-dark.webp",
   "model": "magnetic-saw-guide.stl",
   "source": "magnetic-saw-guide.scad",
-  "notes": "Shown here: a 1:5 dovetail slope, five magnet pockets on each side, a 35 mm base width, and 35 mm reach and rise. The pockets are sized for 7.9375 mm × 1.984375 mm disc magnets, with 0.2 mm diameter clearance and 1 mm extra depth. Download the OpenSCAD source to change the slope, magnet layout, dimensions, or fit; it also supports square guides.",
+  "notes": "The default guide uses a 1:5 dovetail slope and five pockets on each side, sized for 7.9375 mm × 1.984375 mm disc magnets. The model checks that pockets fit with enough surrounding material. Sections and wireframes only change the view; downloads always contain the complete solid.",
   "attribution": {
     "text": "Inspired by WordsFail’s 6:1 Small Dovetail Guide (reference license: CC-BY-NC-SA, as recorded in the original CAD source). This parametric implementation includes no reference mesh or artwork.",
     "url": "https://thangs.com/designer/WordsFail/3d-model/6%3A1%20Small%20Dovetail%20Guide-207817"
+  },
+  "customizer": {
+    "conditions": {
+      "dovetail_ratio": {
+        "parameter": "slope_input",
+        "value": "Ratio"
+      },
+      "angle_from_square": {
+        "parameter": "slope_input",
+        "value": "Angle"
+      }
+    }
   }
 }

@@ -20,7 +20,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
   const sourceMin = bounds.min.clone();
   geometry.translate(-center.x, -center.y, -center.z);
   geometry.computeBoundingSphere();
-  const radius = geometry.boundingSphere?.radius ?? size.length() / 2;
+  let radius = geometry.boundingSphere?.radius ?? size.length() / 2;
   if (!Number.isFinite(radius) || radius <= 0) throw new Error('The model has invalid dimensions.');
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
@@ -56,7 +56,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
   const solidMaterial = new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
   const mesh = new THREE.Mesh(geometry, solidMaterial);
   mesh.renderOrder = 3;
-  const edgeGeometry = new THREE.EdgesGeometry(geometry, 25);
+  let edgeGeometry = new THREE.EdgesGeometry(geometry, 25);
   const edgeMaterial = new THREE.LineBasicMaterial();
   const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
   edges.renderOrder = 4;
@@ -79,7 +79,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
     stencilMesh.renderOrder = 1;
     stencilGroup.add(stencilMesh);
   });
-  const capGeometry = new THREE.PlaneGeometry(radius * 3, radius * 3);
+  let capGeometry = new THREE.PlaneGeometry(radius * 3, radius * 3);
   const capMaterial = new THREE.MeshBasicMaterial({
     side: THREE.DoubleSide,
     stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
@@ -99,7 +99,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
     render();
   };
 
-  const setSettings = ({ mode, axis, position, flipped }: ViewSettings) => {
+  let settings: ViewSettings = { mode: 'edges', axis: 'off', position: 50, flipped: false };
+  const setSettings = (next: ViewSettings) => {
+    settings = next;
+    const { mode, axis, position, flipped } = next;
     const clipping = axis !== 'off';
     const planes = clipping ? [plane] : [];
     solidMaterial.wireframe = mode === 'wireframe';
@@ -129,6 +132,41 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
     controls.target.set(0, 0, 0);
     controls.update();
     render();
+  };
+
+  const replaceGeometry = (next: THREE.BufferGeometry) => {
+    next.computeBoundingBox();
+    const nextBounds = next.boundingBox;
+    if (!nextBounds || nextBounds.isEmpty()) throw new Error('The model has no geometry.');
+    const nextSize = nextBounds.getSize(new THREE.Vector3());
+    const nextMin = nextBounds.min.clone();
+    const nextCenter = nextBounds.getCenter(new THREE.Vector3());
+    next.translate(-nextCenter.x, -nextCenter.y, -nextCenter.z);
+    next.computeBoundingSphere();
+    const nextRadius = next.boundingSphere?.radius ?? 0;
+    if (!Number.isFinite(nextRadius) || nextRadius <= 0) throw new Error('The model has invalid dimensions.');
+    const nextEdges = new THREE.EdgesGeometry(next, 25);
+    const nextCap = new THREE.PlaneGeometry(nextRadius * 3, nextRadius * 3);
+    geometry.dispose();
+    edgeGeometry.dispose();
+    capGeometry.dispose();
+    geometry = next;
+    edgeGeometry = nextEdges;
+    capGeometry = nextCap;
+    mesh.geometry = next;
+    edges.geometry = nextEdges;
+    cap.geometry = nextCap;
+    stencilGroup.children.forEach((child) => { (child as THREE.Mesh).geometry = next; });
+    size.copy(nextSize);
+    sourceMin.copy(nextMin);
+    radius = nextRadius;
+    camera.near = radius / 100;
+    camera.far = radius * 100;
+    camera.updateProjectionMatrix();
+    controls.minDistance = radius * 0.25;
+    controls.maxDistance = radius * 15;
+    // Preserve camera/pan/zoom; section percentage follows the new model bounds.
+    setSettings(settings);
   };
   let previousWidth = 0;
   const resize = () => {
@@ -167,7 +205,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
   resize();
 
   return {
-    size, sourceMin, setSettings, reset,
+    size, sourceMin, setSettings, reset, replaceGeometry,
     dispose() {
       observer.disconnect();
       themeObserver.disconnect();

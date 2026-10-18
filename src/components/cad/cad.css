@@ -46,3 +46,33 @@
 .cad a:hover { text-decoration-style: solid; }
 .cad-notes { line-height: 1.8; }
 .cad-attribution { margin-top: 24px; font-size: 12px; opacity: .7; line-height: 1.8; }
+.cad-workbench { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; align-items: start; margin-bottom: 24px; }
+.cad-workbench .cad-viewer { position: sticky; top: 20px; min-width: 0; }
+.cad-parameters { margin-top: 24px; padding-left: 24px; border-left: 1px solid var(--cad-border); min-width: 0; }
+.cad-parameters h2 { font-size: 16px; font-weight: 600; }
+.cad-parameter-intro { font-size: 12px; line-height: 1.7; opacity: .7; margin: 8px 0 16px; }
+.cad-parameters details { border-top: 1px solid var(--cad-border); }
+.cad-parameters summary { padding: 16px 0; cursor: pointer; font-size: 13px; font-weight: 600; }
+.cad-parameter { margin-bottom: 20px; }
+.cad-parameter > label { display: block; margin-bottom: 6px; font-size: 12px; }
+.cad-parameter p { font-size: 11px; line-height: 1.65; opacity: .7; margin-top: 6px; }
+.cad-parameter[data-inactive] { opacity: .45; }
+.cad-parameters :is(select, input:not([type=range], [type=checkbox]), button) { background: var(--cad-control); color: inherit; border: 1px solid var(--cad-border); border-radius: 4px; min-height: 40px; padding: 8px 10px; font: inherit; font-size: 13px; }
+.cad-parameter :is(select, input:not([type=checkbox])) { width: 100%; min-width: 0; }
+.cad-parameter input[type=range] { display: block; min-height: 28px; accent-color: var(--cad-body); }
+.cad-parameter input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--cad-body); }
+.cad-parameters :is(select, input, button, summary):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.cad-parameter-actions { display: grid; gap: 8px; border-top: 1px solid var(--cad-border); padding-top: 16px; }
+.cad-parameters button { cursor: pointer; }
+.cad-parameters button:disabled { opacity: .5; cursor: default; }
+.cad-parameter-actions button[type=submit] { background: var(--cad-body); color: white; border-color: transparent; }
+.dark .cad-parameter-actions button[type=submit] { color: #1f1f1f; }
+.cad-compile-status { font-size: 12px; line-height: 1.7; margin-top: 12px; overflow-wrap: anywhere; }
+.cad-error { color: var(--cad-section); }
+.cad-parameters .cad-downloads { font-size: 12px; line-height: 1.8; gap: 12px; flex-direction: column; margin: 16px 0; }
+.cad-download-pending { opacity: .7; }
+@media (max-width: 850px) {
+  .cad-workbench { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .cad-workbench .cad-viewer { position: static; }
+  .cad-parameters { border-left: 0; padding-left: 0; }
+}

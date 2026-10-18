@@ -15,12 +15,25 @@ export interface CadEntry extends EntryBase {
   model: string;
   source: string;
   notes?: string;
+  customizer?: {
+    conditions?: Record<string, { parameter: string; value: string | number | boolean }>;
+  };
   attribution?: { text: string; url: string };
 }
 
 type MiscEntry = DiagramEntry | CadEntry;
 
 const previewFilename = /^[a-z0-9][a-z0-9-]*\.(svg|png|webp|jpe?g)$/;
+
+function validCustomizer(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('conditions' in value) || value.conditions === undefined) return true;
+  if (typeof value.conditions !== 'object' || value.conditions === null) return false;
+  return Object.entries(value.conditions).every(([name, condition]: [string, unknown]) =>
+    /^[a-zA-Z_]\w*$/.test(name) && typeof condition === 'object' && condition !== null &&
+    'parameter' in condition && typeof condition.parameter === 'string' &&
+    'value' in condition && ['string', 'number', 'boolean'].includes(typeof condition.value));
+}
 
 const metadata = import.meta.glob<MiscEntry>('../public/misc/*/meta.json', {
   eager: true,
@@ -44,6 +57,7 @@ export const miscEntries = Object.entries(metadata).map(([path, entry]) => {
     typeof entry.model !== 'string' || !/^[a-z0-9][a-z0-9-]*\.stl$/.test(entry.model) ||
     typeof entry.source !== 'string' || !/^[a-z0-9][a-z0-9-]*\.scad$/.test(entry.source) ||
     (entry.notes !== undefined && typeof entry.notes !== 'string') ||
+    (entry.customizer !== undefined && !validCustomizer(entry.customizer)) ||
     (entry.attribution !== undefined && (
       typeof entry.attribution.text !== 'string' ||
       typeof entry.attribution.url !== 'string' || !entry.attribution.url.startsWith('https://')

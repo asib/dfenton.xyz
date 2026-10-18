@@ -40,7 +40,13 @@ CAD entries use the same list, local page URLs, and theme-aware previews. Set `t
   "previewDark": "preview-dark.webp",
   "model": "magnetic-saw-guide.stl",
   "source": "magnetic-saw-guide.scad",
-  "notes": "Describe the exported settings and how to customize the source.",
+  "notes": "Describe the model and its intended use.",
+  "customizer": {
+    "conditions": {
+      "dovetail_ratio": { "parameter": "slope_input", "value": "Ratio" },
+      "angle_from_square": { "parameter": "slope_input", "value": "Angle" }
+    }
+  },
   "attribution": {
     "text": "Retain the original source attribution where applicable.",
     "url": "https://example.com/original-design"
@@ -50,7 +56,7 @@ CAD entries use the same list, local page URLs, and theme-aware previews. Set `t
 
 Keep the STL, original OpenSCAD file, and previews in the entry folder. `model` and `source` must be local lowercase filenames ending in `.stl` and `.scad`. `notes` and `attribution` are optional. Preserve source comments and attribution. There are no third-party runtime requests: Three.js is bundled with the site and model files are served locally.
 
-The viewer assumes STL coordinates are millimeters with Z up, matching OpenSCAD. It provides orbit/pan/zoom, keyboard rotation/zoom, solid/edge/wireframe modes, and one movable X/Y/Z clipping plane with a flip control. Colored stencil caps show cut material while preserving cavities; these require closed, consistently wound meshes. The first entry is a single solid, so part visibility controls are not shown. Viewing and cutting a static export do not regenerate the parametric source.
+The viewer assumes STL coordinates are millimeters with Z up, matching OpenSCAD. It provides orbit/pan/zoom, keyboard rotation/zoom, solid/edge/wireframe modes, and one movable X/Y/Z clipping plane with a flip control. Colored stencil caps show cut material while preserving cavities; these require closed, consistently wound meshes. The first entry is a single solid, so part visibility controls are not shown. View controls do not affect the downloadable solid. Models with `customizer` also expose editable source parameters and regenerate the geometry in the browser.
 
 Re-export the supplied default model using OpenSCAD 2021.01 or later:
 
@@ -60,4 +66,19 @@ openscad --export-format binstl \
   public/misc/magnetic-saw-guide/magnetic-saw-guide.scad
 ```
 
-OpenSCAD is an authoring dependency, not a website build/runtime dependency. Keep the exported STL committed. After geometry changes, regenerate both thumbnails from the viewer's reset camera in solid + edges mode, with sections off. Crop the transparent canvas to the model, using the same framing in both themes. Check all section axes, flip and range endpoints, keyboard/touch controls, fallback images/downloads, mobile layout, theme-state preservation, and the site's hover shadow.
+The OpenSCAD CLI is an optional authoring dependency; the browser uses the runtime below. Keep the exported default STL committed so the initial view and fallback download do not wait for compilation. After geometry changes, regenerate both thumbnails from the viewer's reset camera in solid + edges mode, with sections off. Crop the transparent canvas to the model, using the same framing in both themes. Check all section axes, flip and range endpoints, keyboard/touch controls, fallback images/downloads, mobile layout, theme-state preservation, and the site's hover shadow.
+
+
+### Parametric controls
+
+Set `customizer` to `{}` to enable controls from the source's OpenSCAD Customizer annotations. The engine reads the public literal assignments, groups, help comments, enum options, and numeric ranges/steps, excluding `[Hidden]` fields. The UI supports scalar numbers, strings, and booleans; unsupported fields fail visibly rather than disappearing. Bounded numbers have both sliders and precise numeric entry. Unannotated numbers use unrestricted numeric entry, leaving the source assertions authoritative. All values and dimensions retain their source precision.
+
+Optional `customizer.conditions` maps a dependent field to `{ "parameter": "controlling_field", "value": "enabled_value" }`. Use this only for dependencies established by the source. The saw guide enables the ratio and angle inputs in their respective modes. These conditions live in metadata; parameter defaults, descriptions, and ranges remain in the SCAD file.
+
+`Update model` compiles the exact configured source in a module worker using the pinned `openrscad-engine@0.14.0` WebAssembly engine. It uses the package's raw `web` API because this version's convenience wrapper has a mismatched `render_with_files` signature. The 6.6 MB WASM asset is bundled and served locally; there are no external runtime requests or server-side model jobs. Only CAD pages with a customizer load it, initially to read their schema. The index and diagram pages load neither the engine nor Three.js. Each job has its own worker, a 60-second timeout, and cleanup on completion, navigation, or superseding edits. The engine's MIT notice is distributed at `/licenses/openrscad-engine.txt`; source and upstream documentation: https://github.com/matthova/openrscad.
+
+The compiler rejects errors, warnings, degraded geometry, and empty/2D output. Assertion messages appear beside the controls while the previous valid model stays visible. Pending edits, running jobs, and failures disable configured downloads. A successful result replaces the mesh, edges, and section stencil geometry, disposing the old buffers while preserving camera, pan, zoom, display mode, section percentage/flip, and theme. Section coordinates follow the new bounds. `Reset parameters` restores source defaults and regenerates the model when necessary; `Reset view` remains separate.
+
+The STL download is encoded directly from the successful triangle soup, before viewer centering or clipping. The configured SCAD download is the exact source used for that render, with public literal assignments replaced and model logic/comments/attribution intact. The original source remains unchanged and downloadable. Self-contained sources with scalar literal defaults are supported; include/use libraries and imported assets require explicitly adding their dependencies to the compilation workflow before enabling a customizer.
+
+Run `bun test tests/cad.test.mjs` for schema/precision, source serialization, geometry changes across all four groups and slope modes, source assertion failures, closed-mesh checks, and default bounds/volume equivalence against the original OpenSCAD export. Browser acceptance also covers pending downloads, cancellation/stale jobs, failure recovery, reset, preserved viewing state, both themes, responsive controls, and compilation from a production build. When upgrading the engine, rerun these comparisons against the original export rather than assuming language compatibility.
