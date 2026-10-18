@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Two surfaces, one cutting edge</title>
-<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;max-width:820px;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+<style>:root{color-scheme:light dark;background:light-dark(#efe6ee, #1f1f1f)}html,body{margin:0}body{box-sizing:border-box;padding:0;background:inherit}iframe{display:block;width:100%;max-width:820px;height:100vh;margin:0 auto;border:0}</style>
 
 </head>
 <body>
@@ -1497,6 +1497,21 @@ svg.lucide {
 }
 
 html&gt;body{padding:0}&lt;/style&gt;
+&lt;style&gt;
+h3 { display: none; }
+:root {
+ --background: light-dark(#efe6ee, #1f1f1f) !important;
+ --foreground: light-dark(#0c2231, #f4a460) !important;
+ --card-foreground: var(--foreground) !important;
+ --popover-foreground: var(--foreground) !important;
+ --primary: light-dark(#8a4f7d, #f0e891) !important;
+ --muted-foreground: color-mix(in srgb, var(--foreground) 65%, transparent) !important;
+ --secondary: color-mix(in srgb, var(--foreground) 5%, var(--background)) !important;
+ --font-sans: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace !important;
+ --border: color-mix(in srgb, var(--foreground) 20%, transparent) !important;
+ --input: var(--border) !important;
+}
+&lt;/style&gt;
 &lt;/head&gt;
 &lt;body&gt;
 &lt;script type=&quot;application/json&quot; id=&quot;codex-visualization-widget-state&quot;&gt;__CODEX_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
@@ -1651,8 +1666,9 @@ html&gt;body{padding:0}&lt;/style&gt;
       postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
     });
   };
+  let siteTheme = initialGlobals.theme;
   const syncTheme = () =&gt; {
-    const theme = mediaQuery.matches ? &quot;dark&quot; : &quot;light&quot;;
+    const theme = siteTheme === &quot;dark&quot; || siteTheme === &quot;light&quot; ? siteTheme : (mediaQuery.matches ? &quot;dark&quot; : &quot;light&quot;);
     root.dataset.theme = theme;
     globalThis.openai = {
       ...globalThis.openai,
@@ -1706,7 +1722,10 @@ html&gt;body{padding:0}&lt;/style&gt;
           &quot;message&quot;,
           (event) =&gt; {
             const data = apply(getMessageData, event, []);
-            if (typeof data === &quot;object&quot; &amp;&amp; data?.type === &quot;measure&quot;) {
+            if (typeof data === &quot;object&quot; &amp;&amp; data?.type === &quot;site-theme&quot; &amp;&amp; (data.theme === &quot;light&quot; || data.theme === &quot;dark&quot;)) {
+              siteTheme = data.theme;
+              syncTheme();
+            } else if (typeof data === &quot;object&quot; &amp;&amp; data?.type === &quot;measure&quot;) {
               sendHeight();
             } else if (
               typeof data === &quot;object&quot; &amp;&amp;
@@ -1956,7 +1975,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     node(&#x27;text&#x27;, {x: 20, y: edgeY + bevelLength + 28}, &#x27;Bevel at the edge&#x27;);
     node(&#x27;path&#x27;, {d: path([[135, edgeY + bevelLength + 23], [start + span * 0.42 - dx * 0.65, edgeY + bevelLength * 0.65]]), class: &#x27;edge-leader&#x27;});
 
-    node(&#x27;text&#x27;, {x: 20, y: zoomTitleY, &#x27;font-weight&#x27;: 500}, &#x27;Edge outline · viewed from the back&#x27;);
+    node(&#x27;text&#x27;, {x: 20, y: zoomTitleY, &#x27;font-weight&#x27;: 500}, narrow ? &#x27;Edge outline · back view&#x27; : &#x27;Edge outline · viewed from the back&#x27;);
     const outline = edge.map((_, i) =&gt; [20 + (w - 40) * i / samples, zoomY + (profiles.back[i] + profiles.bevel[i]) * 150]);
     node(&#x27;path&#x27;, {d: path([...outline, [w - 20, bottom], [20, bottom]], true), fill: &#x27;var(--muted)&#x27;});
     node(&#x27;path&#x27;, {d: path([[20, zoomY], [w - 20, zoomY]]), fill: &#x27;none&#x27;, stroke: &#x27;var(--muted-foreground)&#x27;, &#x27;stroke-width&#x27;: 1, &#x27;stroke-dasharray&#x27;: &#x27;3 5&#x27;, &#x27;stroke-opacity&#x27;: 0.55});
@@ -2703,11 +2722,23 @@ html&gt;body{padding:0}&lt;/style&gt;
     storage = null;
   }
   const initialGlobals = {
+    theme: localStorage.getItem('theme') === 'dark' ? 'dark' : 'light',
     widgetState: state,
     statePersistence: storage == null ? "none" : "local",
   };
 
   const channel = new MessageChannel();
+  const applySiteTheme = (theme) => {
+    document.documentElement.style.colorScheme = theme;
+    channel.port1.postMessage({ type: 'site-theme', theme });
+  };
+  applySiteTheme(initialGlobals.theme);
+  window.addEventListener('message', (event) => {
+    if (event.source !== window.parent || event.origin !== window.location.origin) return;
+    if (event.data?.type === 'site-theme' && ['light', 'dark'].includes(event.data.theme)) {
+      applySiteTheme(event.data.theme);
+    }
+  });
   channel.port1.addEventListener("message", (event) => {
     const data = event.data;
     if (typeof data !== "object" || data == null) {
@@ -2743,6 +2774,9 @@ html&gt;body{padding:0}&lt;/style&gt;
         height <= 10_000
       ) {
         frame.style.height = Math.ceil(height) + "px";
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: 'diagram-height', height }, window.location.origin);
+        }
       }
       return;
     }

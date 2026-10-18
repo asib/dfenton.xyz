@@ -14,4 +14,4 @@ The Misc page at `/misc/` discovers metadata at build time and lists entries new
 
 Each diagram.html is a standalone document. Keep local assets in its folder and use relative paths. The shared React page provides the title, navigation, and theme toggle. Preserve the sandbox when importing a Codex visualization export. Check mobile layout, light/dark appearance, and controls in an ordinary browser; exports may depend on external CDNs.
 
-The homepage links to `/misc/`. Entry URLs render through the shared React shell using the Cloudflare Pages SPA fallback.
+The homepage links to `/misc/`. Entry URLs render through the same React shell (Cloudflare Pages SPA fallback), which embeds `diagram.html`. The visualization accepts a `site-theme` message from its same-origin parent and forwards it into the sandbox without resetting interaction state. Its colors and typography use the homepage palette in both themes.
