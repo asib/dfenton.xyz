@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Two surfaces, one cutting edge</title>
-<style>:root{color-scheme:light dark;background:light-dark(#efe6ee, #1f1f1f)}html,body{margin:0}body{box-sizing:border-box;padding:0;background:inherit}iframe{display:block;width:100%;max-width:820px;height:100vh;margin:0 auto;border:0}</style>
+<style>:root{color-scheme:light dark;background:light-dark(#efe6ee, #1f1f1f)}html[data-embedded="true"]{background:transparent}html,body{margin:0}body{box-sizing:border-box;padding:0;background:inherit}iframe{display:block;width:100%;max-width:820px;height:100vh;margin:0 auto;border:0}</style>
 
 </head>
 <body>
@@ -1500,6 +1500,8 @@ html&gt;body{padding:0}&lt;/style&gt;
 &lt;style&gt;
 h3 { display: none; }
 :root {
+ /* Keep the sandbox transparent so page-level shadows follow the drawing. */
+ background-color: transparent !important;
  --background: light-dark(#efe6ee, #1f1f1f) !important;
  --foreground: light-dark(#0c2231, #f4a460) !important;
  --card-foreground: var(--foreground) !important;
@@ -2726,6 +2728,9 @@ h3 { display: none; }
     widgetState: state,
     statePersistence: storage == null ? "none" : "local",
   };
+
+  // The host page supplies the background; retain it when opened standalone.
+  document.documentElement.dataset.embedded = String(window.parent !== window);
 
   const channel = new MessageChannel();
   const applySiteTheme = (theme) => {

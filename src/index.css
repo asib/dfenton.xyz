@@ -4,7 +4,12 @@
 
 @layer base {
     :root {
+        color-scheme: light;
         --dark-mode-highlight: #f0e891;
         --light-mode-highlight: #8a4f7d;
+    }
+
+    :root.dark {
+        color-scheme: dark;
     }
 }
