@@ -50,8 +50,16 @@ export default function MiscPage() {
           <ul className="space-y-8 text-sm">
             {miscEntries.map((item) => (
               <li key={item.href}>
-                <a href={item.href} className="text-lg underline underline-offset-4 decoration-dotted hover:decoration-solid">{item.title}</a>
-                <p className="mt-2 opacity-70">{item.description}</p>
+                <a href={item.href} className="group flex flex-col min-[480px]:flex-row gap-4 min-[480px]:gap-5 items-start rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+                  <span className="flex shrink-0 items-center justify-center w-44 h-28 p-3 border border-light-mode-text/20 dark:border-dark-mode-text/20 group-hover:border-light-mode-text/50 dark:group-hover:border-dark-mode-text/50 transition-colors" aria-hidden="true">
+                    <img src={`${item.href}${item.preview}`} alt="" width="176" height="112" loading="lazy" className={`w-full h-full object-contain ${item.previewDark ? 'dark:hidden' : ''}`} />
+                    {item.previewDark && <img src={`${item.href}${item.previewDark}`} alt="" width="176" height="112" loading="lazy" className="hidden dark:block w-full h-full object-contain" />}
+                  </span>
+                  <span>
+                    <span className="block text-lg underline underline-offset-4 decoration-dotted group-hover:decoration-solid">{item.title}</span>
+                    <span className="block mt-2 opacity-70">{item.description}</span>
+                  </span>
+                </a>
               </li>
             ))}
           </ul>

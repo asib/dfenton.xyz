@@ -1,5 +1,7 @@
 {
   "title": "Two surfaces, one cutting edge",
   "description": "An interactive exploration of how two surfaces meet to form a cutting edge.",
-  "date": "2026-10-18"
+  "date": "2026-10-18",
+  "preview": "preview.webp",
+  "previewDark": "preview-dark.webp"
 }
