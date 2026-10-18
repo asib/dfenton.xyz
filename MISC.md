@@ -1,6 +1,6 @@
 # Misc entries
 
-Add `public/misc/<slug>/diagram.html` a preview image, and `meta.json`. The folder name is the URL slug (lowercase letters, digits, and hyphens), and the page is served at `/misc/<slug>/`.
+Add `public/misc/<slug>/diagram.html`, a preview image, and `meta.json`. The folder name is the URL slug (lowercase letters, digits, and hyphens), and the page is served at `/misc/<slug>/`.
 
 ```json
 {
