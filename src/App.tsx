@@ -1,3 +1,4 @@
+import { miscEntries } from './misc';
 import React, { useEffect, useRef, useState } from 'react';
 import DarkModeToggle from './components/DarkModeToggle'
 import GitHubIcon from './components/GitHubIcon'
@@ -164,6 +165,21 @@ function App() {
           </section>
         </Accordion>
 
+
+        <div id="misc" className="scroll-mt-4">
+          <Accordion summary="Misc">
+            <ul className="space-y-6 text-sm">
+              {miscEntries.map((entry) => (
+                <li key={entry.href}>
+                  <a href={entry.href} className="underline underline-offset-4 decoration-dotted hover:decoration-solid">
+                    {entry.title}
+                  </a>
+                  <p className="mt-2 opacity-70">{entry.description}</p>
+                </li>
+              ))}
+            </ul>
+          </Accordion>
+        </div>
 
         <a
           href="/resume.pdf"
