@@ -1,0 +1,11 @@
+{
+  "type": "cad",
+  "title": "Planer crank drill adapter",
+  "description": "A drill adapter for a planer crank, with a 12 mm female hex socket. Rotate the model or section it to inspect the socket and internal geometry.",
+  "date": "2026-10-18",
+  "preview": "preview.webp",
+  "previewDark": "preview-dark.webp",
+  "model": "planer-crank-drill-adapter.stl",
+  "sourceUrl": "https://cad.onshape.com/documents/c0efc421298e491a543a4f19/w/2dfb0b41be2ad2a3d4c43756/e/bd66a2f560ed31bfa2b66286?renderMode=0&uiState=6ad5619e7101e3501ccdb32f",
+  "notes": "The STL contains the 12 mm female hex configuration. The parametric design is available in Onshape through the CAD source link. Sections and wireframe only change the view; the download contains the complete part."
+}
