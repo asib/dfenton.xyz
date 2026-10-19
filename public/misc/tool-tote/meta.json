@@ -6,7 +6,7 @@
   "preview": "preview.webp",
   "model": "tool-tote.stl",
   "source": "tool-tote.scad",
-  "notes": "All dimensional parameters are in inches; the displayed bounds and STL exports are in millimetres. Defaults use an 18 \u00d7 9 inch body, 6 inch sides, 10\u00be inch risers, and a 20 inch laminated handle. Handle tips are cut away underneath beyond each riser; the undimensioned cutaway defaults to an adjustable 1\u00bd inches deep. The bottom grooves stop within the end panels. End-panel setback is an adjustable \u00be inch assumption. Optional screw bores are off until their placement is confirmed. Use individual-part views for fabrication exports; the assembled model contains touching wooden components.",
+  "notes": "All dimensional parameters are in inches; the displayed bounds and STL exports are in millimetres. Defaults use an 18 \u00d7 9 inch body, 6 inch sides, 10\u00be inch risers, and a 20 inch laminated handle. Each handle underside notch continues through the end and rests on the riser-notch floor. Notch depth defaults to \u00bd inch; the handle top remains above the risers. The bottom grooves stop within the end panels. End-panel setback is an adjustable \u00be inch assumption. Optional screw bores are off until their placement is confirmed. Use individual-part views for fabrication exports; the assembled model contains touching wooden components.",
   "customizer": {
     "units": "inches",
     "conditions": {
