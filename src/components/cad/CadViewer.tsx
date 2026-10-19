@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls from './ParametricControls';
+import { coloredGeometry, parseDisplayMesh } from './displayMesh';
+import type { CompiledModel } from './compiler.worker';
+import CutListTable from './CutListTable';
+import type { CutListOutput } from './cutList';
+import { useFullscreen } from './useFullscreen';
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
 
 export default function CadViewer({ entry }: { entry: CadEntry & { href: string } }) {
   const host = useRef<HTMLDivElement>(null);
+  const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
+  const [legendOpen, setLegendOpen] = useState(true);
+  const [parametersOpen, setParametersOpen] = useState(true);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [status, setStatus] = useState('Loading model…');
   const [mode, setMode] = useState<RenderMode>('edges');
@@ -16,7 +24,22 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [position, setPosition] = useState(50);
   const [flipped, setFlipped] = useState(false);
   const [, setRevision] = useState(0);
+  const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const modelUrl = `${entry.href}${entry.model}`;
+  const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
+  const palette = entry.customizer?.parts;
+  const hasParameters = !!(entry.customizer && entry.source);
+  const hasLegend = !!palette?.length;
+  const hasPanels = hasLegend || hasParameters;
+  const viewCutList = () => {
+    void leave().then(() => {
+      requestAnimationFrame(() => {
+        const heading = document.getElementById('cut-list-title');
+        heading?.scrollIntoView({ block: 'start' });
+        if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+      });
+    });
+  };
 
   useEffect(() => {
     const element = host.current;
@@ -26,11 +49,14 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     const lost = () => { setStatus('The 3D view was interrupted. Reload the page to restore it, or download the model below.'); };
     const load = async () => {
       try {
-        const response = await fetch(modelUrl, { signal: controller.signal });
+        // Start with saved colored triangles when provided, so cold loads don't
+        // show a monochrome STL while the parametric engine initializes.
+        const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
         if (!response.ok) throw new Error('Model request failed.');
-        const data = await response.arrayBuffer();
-        if (controller.signal.aborted) return;
-        const geometry = new STLLoader().parse(data);
+        const geometry = displayUrl
+          ? coloredGeometry(parseDisplayMesh(await response.json()), palette)
+          : new STLLoader().parse(await response.arrayBuffer());
+        if (controller.signal.aborted) { geometry.dispose(); return; }
         try {
           active = createScene(element, geometry);
         } catch (error) {
@@ -52,7 +78,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [modelUrl]);
+  }, [modelUrl, displayUrl, palette]);
 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });
@@ -68,18 +94,29 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     setFlipped(false);
     viewer?.reset();
   };
-  const onCompiled = (stl: ArrayBuffer) => {
+  const onCompiled = useCallback((model: CompiledModel) => {
     if (!viewer) throw new Error('The 3D view is unavailable.');
-    const geometry = new STLLoader().parse(stl);
+    const geometry = model.display ? coloredGeometry(model.display, entry.customizer?.parts) : new STLLoader().parse(model.stl);
     try { viewer.replaceGeometry(geometry); }
     catch (error) { geometry.dispose(); throw error; }
     setRevision((revision) => revision + 1);
-  };
+  }, [viewer, entry.customizer?.parts]);
 
   return (
     <section className="cad" aria-label="CAD model">
       <p className="cad-description">{entry.description}</p>
-      <div className={entry.customizer ? 'cad-workbench' : undefined}>
+      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined}
+        role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? `${entry.title} fullscreen viewer` : undefined}>
+        <div className="cad-workspace-toolbar">
+          <span className="cad-workspace-title">{entry.title}</span>
+          <button ref={toggleButton} type="button" aria-pressed={fullscreen} onClick={() => { if (fullscreen) void leave(); else void enter(); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d={fullscreen ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5'} />
+            </svg>
+            {fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          </button>
+        </div>
+        <div className="cad-workbench" data-has-panels={hasPanels || undefined}>
         <div className="cad-viewer">
           <div className="cad-stage">
             <div ref={host} className="cad-canvas" aria-hidden={!!status} />
@@ -103,9 +140,9 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             <label>Section
               <select value={axis} onChange={(event) => { setAxis(event.target.value as SectionAxis); }}>
                 <option value="off">Off</option>
-                <option value="x">X · width</option>
-                <option value="y">Y · reach</option>
-                <option value="z">Z · height</option>
+                <option value="x">X axis</option>
+                <option value="y">Y axis</option>
+                <option value="z">Z axis</option>
               </select>
             </label>
             <button type="button" onClick={reset}>Reset view</button>
@@ -126,8 +163,23 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
           </div>}
         </div>
-        {entry.customizer && entry.source && <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} />}
+        <div className="cad-sidebar" hidden={!hasPanels}>
+          {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
+            <summary>Part legend</summary>
+            <ul className="cad-part-key" aria-label="Part colors">
+              {palette.map((part) => <li key={part.id}>
+                <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />{part.label}
+              </li>)}
+            </ul>
+          </details>}
+          {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
+            <summary>Model parameters</summary>
+            <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onViewCutList={fullscreen ? viewCutList : undefined} />
+          </details>}
+        </div>
+        </div>
       </div>
+      {entry.customizer?.cutList && <CutListTable output={cutList} palette={entry.customizer.parts} />}
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}
     </section>

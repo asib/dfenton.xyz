@@ -1,10 +1,12 @@
 import init, { parameters, render } from 'openrscad-engine/web';
 import wasmUrl from 'openrscad-engine/openrscad_bg.wasm?url';
 import { binaryStl } from './stl';
+import { displayMesh, type DisplayMesh } from './displayMesh';
 
 export interface CompileRequest { kind: 'parameters' | 'compile'; source: string }
+export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh }
 export type CompileResponse = { kind: 'ready' } | { kind: 'parameters'; json: string } |
-  { kind: 'model'; stl: ArrayBuffer } | { kind: 'error'; message: string };
+  CompiledModel | { kind: 'error'; message: string };
 
 // Use the published raw API: 0.14.0's convenience wrapper has a mismatched
 // render_with_files signature. A fresh worker bounds each job's WASM memory.
@@ -23,7 +25,8 @@ self.onmessage = async ({ data }: MessageEvent<CompileRequest>) => {
       if (result.warnings) throw new Error(result.warnings);
       if (result.is_2d) throw new Error('This viewer requires a solid 3D model.');
       const stl = binaryStl(result.positions, result.normals);
-      self.postMessage({ kind: 'model', stl } satisfies CompileResponse, { transfer: [stl] });
+      const display = displayMesh(result.preview_positions, result.preview_normals, result.groups);
+      self.postMessage({ kind: 'model', stl, output: result.echo, display } satisfies CompileResponse, { transfer: [stl] });
     } finally {
       result.free();
     }

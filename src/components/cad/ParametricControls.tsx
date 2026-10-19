@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CadEntry } from '../../misc';
 import { compileJob } from './compiler';
+import type { CompiledModel } from './compiler.worker';
+import type { CutListOutput } from './cutList';
 import { configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
-interface Result { values: Values; stl: string; source: string }
+interface Result { values: Values; stl: string; source: string; output: string }
 
-export default function ParametricControls({ entry, available, onCompiled }: {
-  entry: Entry; available: boolean; onCompiled: (stl: ArrayBuffer) => void;
+export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList }: {
+  entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
+  onOutput: (output: CutListOutput) => void;
+  onViewCutList?: () => void;
 }) {
   const [source, setSource] = useState<Source | null>(null);
   const [draft, setDraft] = useState<Values>({});
@@ -16,11 +20,15 @@ export default function ParametricControls({ entry, available, onCompiled }: {
   const [phase, setPhase] = useState('Loading parameters…');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [initialModel, setInitialModel] = useState<CompiledModel | null>(null);
   const job = useRef<AbortController | null>(null);
   const draftValues = useRef<Values>({});
   const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;
   const modelUrl = `${entry.href}${entry.model}`;
+  const outputLabel = entry.customizer?.outputLabel;
+  const hasParts = !!entry.customizer?.parts?.length;
+  const hasCutList = !!entry.customizer?.cutList;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -36,11 +44,21 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         const values = defaults(parameters);
         // Verify that configured downloads can preserve these literal assignments.
         configuredSource(text, parameters, values);
+        // Entries with textual output also compute their default cut list in the
+        // worker. The committed fallback mesh stays visible while this runs.
+        let output = '';
+        if (outputLabel || hasParts || hasCutList) {
+          const compiled = await compileJob({ kind: 'compile', source: text }, controller.signal);
+          controller.signal.throwIfAborted();
+          if (compiled.kind !== 'model') return;
+          output = compiled.output;
+          setInitialModel(compiled);
+        }
         setSource({ text, parameters });
         draftValues.current = values;
         edited.current = false;
         setDraft(values);
-        setResult({ values, stl: modelUrl, source: sourceUrl });
+        setResult({ values, stl: modelUrl, source: sourceUrl, output });
         setPhase('');
       } catch (failure) {
         if (controller.signal.aborted) return;
@@ -50,7 +68,14 @@ export default function ParametricControls({ entry, available, onCompiled }: {
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); };
-  }, [sourceUrl, modelUrl, retry]);
+  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, retry]);
+
+  useEffect(() => {
+    if (!available || !initialModel) return;
+    try { onCompiled(initialModel); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'The colored model could not load.'); }
+    setInitialModel(null);
+  }, [available, initialModel, onCompiled]);
 
   useEffect(() => () => {
     if (result?.stl.startsWith('blob:')) URL.revokeObjectURL(result.stl);
@@ -59,6 +84,9 @@ export default function ParametricControls({ entry, available, onCompiled }: {
 
   const pending = !!result && JSON.stringify(draft) !== JSON.stringify(result.values);
   const canDownload = !!result && !pending && !phase && !error;
+  useEffect(() => {
+    onOutput({ text: result?.output ?? '', stale: !canDownload });
+  }, [result?.output, canDownload, onOutput]);
   const edit = (name: string, value: string | number | boolean) => {
     job.current?.abort();
     setPhase('');
@@ -89,10 +117,11 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         if (!controller.signal.aborted) setPhase('Updating model…');
       });
       if (controller.signal.aborted || compiled.kind !== 'model') return;
-      onCompiled(compiled.stl);
+      onCompiled(compiled);
       setResult({ values: { ...values },
         stl: URL.createObjectURL(new Blob([compiled.stl], { type: 'model/stl' })),
         source: URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
+        output: compiled.output,
       });
       setPhase('');
     } catch (failure) {
@@ -126,8 +155,8 @@ export default function ParametricControls({ entry, available, onCompiled }: {
   const groups = [...new Set(source?.parameters.map((parameter) => parameter.group))];
 
   return <aside className="cad-parameters" aria-label="Model parameters">
-    <h2>Customize the guide</h2>
-    <p className="cad-parameter-intro">Dimensions in mm. Changes update the model when you leave a field.</p>
+    <h2 className="sr-only">Model parameters</h2>
+    <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model when you leave a field.</p>
     {source && <form
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
       onBlur={(event) => {
@@ -184,6 +213,13 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         <p>{phase ? `${phase}${source ? ' The previous valid model is still shown.' : ''}` :
           pending ? 'Finish editing a field to update the model. The previous valid model is still shown.' : source ? 'Model is up to date.' : ''}</p>}
     </div>
+    {outputLabel && result?.output && <details className="cad-model-output">
+      <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
+      <pre>{result.output.replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
+    </details>}
+    {hasCutList && result?.output && <p className="cad-compile-status"><a href="#cut-list-title" onClick={(event) => {
+      if (onViewCutList) { event.preventDefault(); onViewCutList(); }
+    }}>View cut list ↓</a></p>}
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">
       {canDownload ? <>

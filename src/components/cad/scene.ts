@@ -93,7 +93,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
 
   const setTheme = () => {
     const style = getComputedStyle(host);
-    solidMaterial.color.set(style.getPropertyValue('--cad-body').trim());
+    const colored = geometry.hasAttribute('colorLight');
+    solidMaterial.vertexColors = colored;
+    if (colored) geometry.setAttribute('color', geometry.getAttribute(document.documentElement.classList.contains('dark') ? 'colorDark' : 'colorLight'));
+    solidMaterial.color.set(colored ? '#ffffff' : style.getPropertyValue('--cad-body').trim());
+    solidMaterial.needsUpdate = true;
     edgeMaterial.color.set(style.getPropertyValue('--cad-edge').trim());
     capMaterial.color.set(style.getPropertyValue('--cad-section').trim());
     render();
@@ -166,6 +170,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
     controls.minDistance = radius * 0.25;
     controls.maxDistance = radius * 15;
     // Preserve camera/pan/zoom; section percentage follows the new model bounds.
+    setTheme();
     setSettings(settings);
   };
   let previousWidth = 0;
