@@ -327,4 +327,27 @@ if (Show_cut_list) {
     echo("Body end setback and riser dado depth", [End_setback, Riser_dado_depth]);
 }
 
-scale([inch, inch, inch]) selected_part();
+// Drawing dimensions refer to actual model coordinates, in millimetres.
+// Each view defines right/up/toward-camera axes, then dimension witnesses:
+// [label, point A, point B, horizontal|vertical, outside side (-1|1), tier].
+// The private drawing pass always renders the assembled tote, independent of Part.
+function drawing_point(p) = inch * p;
+if (!is_undef($misc_drawing) && $misc_drawing) {
+    echo("DRAWING_V1", ["inches", [
+        ["front", "Front", [[1,0,0], [0,0,1], [0,-1,0]], [
+            ["Handle", drawing_point([-Handle_length/2,0,handle_top_z]), drawing_point([Handle_length/2,0,handle_top_z]), "horizontal", 1, 1],
+            ["Body", drawing_point([-Body_length/2,0,0]), drawing_point([Body_length/2,0,0]), "horizontal", -1, 1],
+            ["Overall", drawing_point([Handle_length/2,0,0]), drawing_point([Handle_length/2,0,handle_top_z]), "vertical", 1, 1],
+            ["Sides", drawing_point([-Body_length/2,0,0]), drawing_point([-Body_length/2,0,Side_height]), "vertical", -1, 1]
+        ]],
+        ["top", "Top", [[1,0,0], [0,1,0], [0,0,1]], [
+            ["Body", drawing_point([Body_length/2,-Body_width/2,0]), drawing_point([Body_length/2,Body_width/2,0]), "vertical", 1, 1]
+        ]],
+        ["right", "Right end", [[0,1,0], [0,0,1], [1,0,0]], [
+            ["Body", drawing_point([0,-Body_width/2,0]), drawing_point([0,Body_width/2,0]), "horizontal", -1, 1],
+            ["Handle", drawing_point([0,-Handle_width/2,handle_top_z]), drawing_point([0,Handle_width/2,handle_top_z]), "horizontal", 1, 1],
+            ["Risers", drawing_point([riser_outer_x,Riser_width/2,0]), drawing_point([riser_outer_x,Riser_width/2,Riser_length]), "vertical", 1, 1]
+        ]]
+    ]]);
+    scale([inch, inch, inch]) assembly();
+} else scale([inch, inch, inch]) selected_part();

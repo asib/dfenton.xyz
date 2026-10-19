@@ -85,7 +85,8 @@
         "darkColor": "#e3d27c"
       }
     ],
-    "cutList": true
+    "cutList": true,
+    "drawings": true
   },
   "previewDark": "preview-dark.webp",
   "displayModel": "tool-tote-display.json"

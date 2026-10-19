@@ -2,9 +2,11 @@ import init, { parameters, render } from 'openrscad-engine/web';
 import wasmUrl from 'openrscad-engine/openrscad_bg.wasm?url';
 import { binaryStl } from './stl';
 import { displayMesh, type DisplayMesh } from './displayMesh';
+import { compileDrawings } from './drawingCompiler';
+import type { DrawingSheet } from './drawings';
 
-export interface CompileRequest { kind: 'parameters' | 'compile'; source: string }
-export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh }
+export interface CompileRequest { kind: 'parameters' | 'compile'; source: string; drawings?: boolean }
+export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh; drawings?: DrawingSheet }
 export type CompileResponse = { kind: 'ready' } | { kind: 'parameters'; json: string } |
   CompiledModel | { kind: 'error'; message: string };
 
@@ -26,7 +28,8 @@ self.onmessage = async ({ data }: MessageEvent<CompileRequest>) => {
       if (result.is_2d) throw new Error('This viewer requires a solid 3D model.');
       const stl = binaryStl(result.positions, result.normals);
       const display = displayMesh(result.preview_positions, result.preview_normals, result.groups);
-      self.postMessage({ kind: 'model', stl, output: result.echo, display } satisfies CompileResponse, { transfer: [stl] });
+      const drawings = data.drawings ? compileDrawings(data.source, render) : undefined;
+      self.postMessage({ kind: 'model', stl, output: result.echo, display, drawings } satisfies CompileResponse, { transfer: [stl] });
     } finally {
       result.free();
     }

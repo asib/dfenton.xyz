@@ -48,6 +48,27 @@
 .cad a:hover { text-decoration-style: solid; }
 .cad-notes { line-height: 1.8; }
 .cad-attribution { margin-top: 24px; font-size: 12px; opacity: .7; line-height: 1.8; }
+.cad-drawing-jump { margin: 12px 0; font-size: 12px; }
+.cad-drawings { --drawing-paper: #fbf8fb; --drawing-ink: #233641; --drawing-dim: #4e626f; border-top: 1px solid var(--cad-border); margin: 32px 0; padding-top: 20px; }
+.dark .cad-drawings { --drawing-paper: #25282b; --drawing-ink: #edf0f2; --drawing-dim: #c1ced7; }
+.cad-drawings-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+.cad-drawings h2 { font-size: 20px; font-weight: 600; scroll-margin-top: 24px; }
+.cad-drawings-heading label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.cad-drawings select { background: var(--cad-control); color: inherit; border: 1px solid var(--cad-border); border-radius: 3px; padding: 8px; min-height: 36px; }
+.cad-drawing-help, .cad-drawing-status { font-size: 12px; line-height: 1.8; margin: 12px 0; }
+.cad-drawing-help { max-width: 85ch; opacity: .8; }
+.cad-drawing-scroll { width: 100%; overflow: auto; border: 1px solid var(--cad-border); background: var(--drawing-paper); max-height: 85vh; }
+.cad-drawings :is(select, .cad-drawing-scroll):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.cad-drawing-sheet { display: block; width: 100%; color: var(--drawing-ink); font-family: Arial, sans-serif; }
+.cad-drawing-sheet text { fill: currentColor; }
+.cad-drawing-edges { fill: none; stroke: var(--drawing-ink); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.cad-drawing-dimension { color: var(--drawing-dim); }
+.cad-drawing-dimension line { stroke: currentColor; stroke-width: .7; }
+.cad-drawing-dimension .cad-drawing-tick { stroke-width: 1.4; }
+.cad-drawing-dimension text { font-size: 13px; paint-order: stroke; stroke: var(--drawing-paper); stroke-width: 5; stroke-linejoin: round; }
+.cad-drawing-sheet-title { font-size: 16px; font-weight: 600; letter-spacing: 1px; }
+.cad-drawing-sheet-meta { font-size: 11px; letter-spacing: .7px; }
+.cad-drawing-view-title { font-size: 12px; font-weight: 600; letter-spacing: 1.5px; }
 .cad-workspace { min-width: 0; margin: 20px 0 24px; }
 .cad-workspace-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 0; }
 .cad-workspace-title { display: none; margin-right: auto; font-weight: 600; }
