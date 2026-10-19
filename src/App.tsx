@@ -84,6 +84,7 @@ function App() {
         "max-sm:*:mx-6 md:mx-12 my-4 break-words",
       )}>
         <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
+        <nav aria-label="Site navigation" className="text-sm mb-4"><a href="/misc/" className="underline underline-offset-4 decoration-dotted hover:decoration-solid">Misc →</a></nav>
 
         <section className="text-sm mb-[2rem] grid grid-cols-[auto_1fr] gap-y-2">
           <ContactItem icon={GitHubIcon} label="github profile">
@@ -98,7 +99,7 @@ function App() {
         </section>
 
         <nav className={clsx(
-          "!col-start-1 !col-end-2 row-start-3 row-end-4",
+          "!col-start-1 !col-end-2 row-start-4 row-end-5",
           "text-xs pr-4",
           "motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
           "hidden lg:block h-0 relative top-[3rem] opacity-0",
@@ -163,6 +164,8 @@ function App() {
             </div>
           </section>
         </Accordion>
+
+
 
 
         <a
