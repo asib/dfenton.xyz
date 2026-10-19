@@ -3,7 +3,6 @@ import type { PartColor } from '../../misc';
 import { csvCell, groupCutList, inches, parseCutList, stockEstimate, type CutListOutput } from './cutList';
 
 interface Stock { material?: string; thickness?: string; price?: string }
-interface Supply { id: number; name: string; quantity: string; price: string }
 const number = (text: string) => text.trim() === '' ? NaN : Number(text);
 const money = (value: number | null) => value === null ? '—' : `$${value.toFixed(2)}`;
 const decimal = (value: number | undefined) => value === undefined ? '—' : value.toFixed(3);
@@ -17,7 +16,6 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
   const [widthExtra, setWidthExtra] = useState('0.5');
   const [lengthExtra, setLengthExtra] = useState('1');
   const [waste, setWaste] = useState('20');
-  const [supplies, setSupplies] = useState<Supply[]>([{ id: 1, name: '', quantity: '1', price: '' }]);
   if (parsed.error) return <p className="cad-error" role="alert">{parsed.error}</p>;
   if (!parsed.parts.length) return null;
 
@@ -32,31 +30,21 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
       number(widthExtra), number(lengthExtra), number(waste),
       !entry.price?.trim() ? null : number(entry.price)) };
   });
-  const supplyRows = supplies.map((supply) => {
-    const active = !!supply.name.trim() || !!supply.price.trim();
-    const quantity = number(supply.quantity), price = number(supply.price);
-    const valid = !active || (!!supply.name.trim() && Number.isFinite(quantity) && quantity > 0 &&
-      (!supply.price.trim() || (Number.isFinite(price) && price >= 0)));
-    return { ...supply, active, valid, total: active && valid && supply.price.trim() ? quantity * price : null };
-  });
-  const valid = rows.every((row) => row.estimate) && supplyRows.every((row) => row.valid);
+  const valid = rows.every((row) => row.estimate);
   const boardFeet = rows.reduce((sum, row) => sum + (row.estimate?.boardFeet ?? 0), 0);
   const extraFeet = rows.reduce((sum, row) => sum + (row.estimate?.extra ?? 0), 0);
-  const priced = rows.filter((row) => row.estimate?.totalCost !== null && row.estimate?.totalCost !== undefined).length + supplyRows.filter((row) => row.total !== null).length;
-  const unpriced = rows.length + supplyRows.filter((row) => row.active).length - priced;
-  const total = rows.reduce((sum, row) => sum + (row.estimate?.totalCost ?? 0), 0) + supplyRows.reduce((sum, row) => sum + (row.total ?? 0), 0);
+  const priced = rows.filter((row) => row.estimate?.totalCost !== null && row.estimate?.totalCost !== undefined).length;
+  const unpriced = rows.length - priced;
+  const total = rows.reduce((sum, row) => sum + (row.estimate?.totalCost ?? 0), 0);
   const editStock = (ids: string[], patch: Stock) => {
     setStock((previous) => ({ ...previous, ...Object.fromEntries(ids.map((id) => [id, { ...previous[id], ...patch }])) }));
   };
-  const editSupply = (id: number, patch: Partial<Supply>) => { setSupplies((previous) => previous.map((row) => row.id === id ? { ...row, ...patch } : row)); };
   const download = () => {
     const csv: (string | number)[][] = [
       ['Tool tote cut list — dimensions in inches'],
       ['Part name', 'Kind of material', 'Qty', 'Finish thickness', 'Finish width', 'Finish length', 'Rough thickness', 'Rough width', 'Rough length', 'Board feet', `Extra (${waste}%) bd ft`, 'Unit cost ($/bd ft)', 'Total cost ($)'],
       ...rows.map(({ part, entry, estimate }) => [part.name, entry.material ?? part.material, part.quantity, part.thickness, part.width, part.length,
         estimate?.thickness ?? '', estimate?.width ?? '', estimate?.length ?? '', estimate?.boardFeet ?? '', estimate?.extra ?? '', entry.price ?? '', estimate?.totalCost ?? '']),
-      [], ['Supplies', 'Qty', 'Unit cost ($)', 'Total cost ($)'],
-      ...supplyRows.filter((row) => row.active).map((row) => [row.name, row.quantity, row.price, row.total ?? '']),
       [], ['Total stock (bd ft, including extra)', boardFeet + extraFeet],
       [unpriced ? 'Priced subtotal ($)' : 'Total cost ($)', priced ? total : ''],
       ['Unpriced items', unpriced],
@@ -106,22 +94,9 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
       </table>
     </div>
     <p className="cad-worksheet-help">Board feet = quantity × rough thickness × rough width × rough length ÷ 144. Extra stock is added once; total cost includes it. Prices are optional.</p>
-    <div className="cad-table-scroll" tabIndex={0} role="region" aria-label="Supplies table">
-      <table className="cad-supplies-table">
-        <caption>Supplies</caption>
-        <thead><tr><th scope="col">Qty</th><th scope="col">Supply</th><th scope="col">Unit cost · $</th><th scope="col">Total cost</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-        <tbody>{supplyRows.map((row, index) => <tr key={row.id}>
-          <td><input type="number" min="0.001" step="any" aria-label={`Supply ${String(index + 1)} quantity`} value={row.quantity} onChange={(event) => { editSupply(row.id, { quantity: event.target.value }); }} /></td>
-          <td><input aria-label={`Supply ${String(index + 1)} name`} placeholder="Glue, screws, finish…" value={row.name} onChange={(event) => { editSupply(row.id, { name: event.target.value }); }} /></td>
-          <td><input type="number" min="0" step="any" placeholder="—" aria-label={`Supply ${String(index + 1)} unit cost`} value={row.price} onChange={(event) => { editSupply(row.id, { price: event.target.value }); }} /></td>
-          <td>{money(row.total)}</td><td><button type="button" aria-label={`Remove supply ${String(index + 1)}`} onClick={() => { setSupplies((previous) => previous.filter((supply) => supply.id !== row.id)); }}>×</button></td>
-        </tr>)}</tbody>
-      </table>
-    </div>
     <div className="cad-cut-list-footer">
-      <button type="button" onClick={() => { setSupplies((previous) => [...previous, { id: Math.max(0, ...previous.map((row) => row.id)) + 1, name: '', quantity: '1', price: '' }]); }}>+ Add supply</button>
       <p><strong>{unpriced ? 'Priced subtotal' : 'Total cost'}: {valid && priced ? money(total) : '—'}</strong>{unpriced > 0 && <span> · {unpriced} unpriced {unpriced === 1 ? 'item' : 'items'}</span>}</p>
     </div>
-    {!valid && <p className="cad-error" role="alert">Check the worksheet values: rough thickness must cover the finished blank, allowances and prices cannot be negative, and supplies need a name and positive quantity. Totals and CSV export are unavailable until corrected.</p>}
+    {!valid && <p className="cad-error" role="alert">Check the worksheet values: rough thickness must cover the finished blank, and allowances and prices cannot be negative. Totals and CSV export are unavailable until corrected.</p>}
   </section>;
 }

@@ -112,10 +112,5 @@
 .cad-cut-table .cad-material-input { width: 140px; }
 .cad-cut-table tfoot th { text-align: right; }
 .cad-cut-table tfoot td { font-weight: 600; }
-.cad-supplies-table { min-width: 550px; }
-.cad-supplies-table caption { font-size: 14px; font-weight: 600; text-align: left; margin: 0 0 12px; }
-.cad-supplies-table input { width: 100%; min-width: 65px; }
-.cad-supplies-table th:nth-child(2) { width: 55%; }
-.cad-supplies-table td:last-child { width: 40px; text-align: center; }
-.cad-cut-list-footer { font-size: 12px; }
+.cad-cut-list-footer { justify-content: flex-end; font-size: 12px; }
 .cad-cut-list-footer span { opacity: .7; }

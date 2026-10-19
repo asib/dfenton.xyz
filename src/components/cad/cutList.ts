@@ -61,7 +61,7 @@ export function stockEstimate(part: CutPart, thickness: number, widthExtra: numb
   return { thickness, width, length, boardFeet, extra, totalCost: unitCost === null ? null : (boardFeet + extra) * unitCost };
 }
 
-// Quote user-entered material/supply names and neutralize spreadsheet formulas.
+// Quote user-entered material names and neutralize spreadsheet formulas.
 export function csvCell(value: string | number): string {
   const text = String(value);
   return `"${(/^[\s]*[=+@-]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`;
