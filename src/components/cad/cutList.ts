@@ -71,14 +71,27 @@ export function milledThickness(part: CutPart, preparation?: StockPreparation | 
     : part.thickness;
 }
 
-export function roughDimensions(part: CutPart, thickness: number, widthExtra: number, lengthExtra: number, preparation?: StockPreparation | null) {
+// Common rough-lumber buying sizes, in inches; do not round to unavailable 7/4, 9/4, etc.
+export const stockThicknesses = [1, 1.25, 1.5, 2, 2.5, 3, 4];
+export const stockLabel = (thickness: number) => `${String(thickness * 4)}/4`;
+
+export function standardThickness(required: number): number | null {
+  if (!Number.isFinite(required) || required <= 0) return null;
+  return stockThicknesses.find((thickness) => thickness >= required) ?? null;
+}
+
+export function roughDimensions(part: CutPart, thickness: number, widthExtra: number, lengthExtra: number, preparation?: StockPreparation | null, thicknessExtra = 0.25) {
   if (preparation && !Object.values(preparation).every((value) => Number.isFinite(value) && value > 0)) return null;
   if (part.resawGroup && (!preparation || part.quantity !== 2)) return null;
   const milled = milledThickness(part, preparation);
-  if (![thickness, widthExtra, lengthExtra].every(Number.isFinite) ||
-      thickness < milled || widthExtra < 0 || lengthExtra < 0) return null;
+  if (![thickness, widthExtra, lengthExtra, thicknessExtra].every(Number.isFinite) ||
+      !stockThicknesses.includes(thickness) || thickness < milled + thicknessExtra || thicknessExtra < 0 || widthExtra < 0 || lengthExtra < 0) return null;
   return { quantity: part.resawGroup ? 1 : part.quantity, thickness, width: part.width + widthExtra,
     length: Math.max(part.length + lengthExtra, preparation?.millingMinLength ?? 0, preparation?.sawMinLength ?? 0) };
+}
+
+export function boardFeet(rough: { quantity: number; thickness: number; width: number; length: number }): number {
+  return rough.quantity * rough.thickness * rough.width * rough.length / 144;
 }
 
 // Quote cell text and neutralize spreadsheet formulas.
