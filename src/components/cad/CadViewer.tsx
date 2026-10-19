@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls from './ParametricControls';
+import { coloredGeometry } from './displayMesh';
+import type { CompiledModel } from './compiler.worker';
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
@@ -68,13 +70,13 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     setFlipped(false);
     viewer?.reset();
   };
-  const onCompiled = (stl: ArrayBuffer) => {
+  const onCompiled = useCallback((model: CompiledModel) => {
     if (!viewer) throw new Error('The 3D view is unavailable.');
-    const geometry = new STLLoader().parse(stl);
+    const geometry = model.display ? coloredGeometry(model.display, entry.customizer?.parts) : new STLLoader().parse(model.stl);
     try { viewer.replaceGeometry(geometry); }
     catch (error) { geometry.dispose(); throw error; }
     setRevision((revision) => revision + 1);
-  };
+  }, [viewer, entry.customizer?.parts]);
 
   return (
     <section className="cad" aria-label="CAD model">
@@ -120,6 +122,11 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
           </fieldset>
           {viewer && <p className="cad-dimensions">Bounds: {viewer.size.x.toFixed(1)} × {viewer.size.y.toFixed(1)} × {viewer.size.z.toFixed(1)} mm (X × Y × Z)</p>}
+          {entry.customizer?.parts && <ul className="cad-part-key" aria-label="Part colors">
+            {entry.customizer.parts.map((part) => <li key={part.id}>
+              <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />{part.label}
+            </li>)}
+          </ul>}
           {!entry.customizer && <div className="cad-downloads">
             <a href={modelUrl} download>Download STL ↓</a>
             {entry.source && <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>}

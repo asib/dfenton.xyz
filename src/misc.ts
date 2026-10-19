@@ -10,6 +10,8 @@ interface DiagramEntry extends EntryBase {
   type?: 'diagram';
 }
 
+export interface PartColor { id: string; label: string; color: string; darkColor: string }
+
 export interface CadEntry extends EntryBase {
   type: 'cad';
   model: string;
@@ -19,6 +21,7 @@ export interface CadEntry extends EntryBase {
   customizer?: {
     units?: 'mm' | 'inches';
     outputLabel?: string;
+    parts?: PartColor[];
     conditions?: Record<string, { parameter: string; value: string | number | boolean }>;
   };
   attribution?: { text: string; url: string };
@@ -33,6 +36,13 @@ function validCustomizer(value: unknown): boolean {
   if ('units' in value && value.units !== undefined && value.units !== 'mm' && value.units !== 'inches') return false;
   if ('outputLabel' in value && value.outputLabel !== undefined &&
       (typeof value.outputLabel !== 'string' || !value.outputLabel.trim())) return false;
+  if ('parts' in value && value.parts !== undefined &&
+      (!Array.isArray(value.parts) || !value.parts.every((part: unknown) =>
+        typeof part === 'object' && part !== null &&
+        'id' in part && typeof part.id === 'string' && /^[a-z0-9-]+$/.test(part.id) &&
+        'label' in part && typeof part.label === 'string' && !!part.label.trim() &&
+        'color' in part && typeof part.color === 'string' && /^#[0-9a-f]{6}$/i.test(part.color) &&
+        'darkColor' in part && typeof part.darkColor === 'string' && /^#[0-9a-f]{6}$/i.test(part.darkColor)))) return false;
   if (!('conditions' in value) || value.conditions === undefined) return true;
   if (typeof value.conditions !== 'object' || value.conditions === null) return false;
   return Object.entries(value.conditions).every(([name, condition]: [string, unknown]) =>

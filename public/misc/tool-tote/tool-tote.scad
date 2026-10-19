@@ -81,6 +81,18 @@ Screw_bore_diameter = 0.15625;
 Screw_height_fraction = 0.5; // [0.2:0.1:0.8]
 
 /* [Hidden] */
+// One color per physical piece; IDs match the viewer legend.
+side_a_color = [44/255, 120/255, 181/255];
+side_b_color = [57/255, 152/255, 165/255];
+end_a_color = [184/255, 121/255, 36/255];
+end_b_color = [182/255, 72/255, 59/255];
+riser_a_color = [119/255, 98/255, 175/255];
+riser_b_color = [180/255, 84/255, 139/255];
+handle_a_color = [214/255, 108/255, 50/255];
+handle_b_color = [86/255, 125/255, 50/255];
+bottom_a_color = [122/255, 134/255, 154/255];
+bottom_b_color = [188/255, 169/255, 73/255];
+
 inch = 25.4;
 eps = 0.001;
 $fn = 40;
@@ -225,15 +237,15 @@ module bottom_half(index) {
 
 module assembly(e=0) {
     for (s = [-1, 1]) {
-        color([0.58, 0.35, 0.19]) translate([0, s*e, 0])
+        color(s == -1 ? side_a_color : side_b_color) translate([0, s*e, 0])
             if (s == 1) side_board(); else mirror([0, 1, 0]) side_board();
-        color([0.73, 0.50, 0.29]) translate([s*e, 0, 0]) at_end(s) end_board();
-        color([0.42, 0.24, 0.14]) translate([s*2*e, 0, e/2]) at_end(s) riser_board();
+        color(s == -1 ? end_a_color : end_b_color) translate([s*e, 0, 0]) at_end(s) end_board();
+        color(s == -1 ? riser_a_color : riser_b_color) translate([s*2*e, 0, e/2]) at_end(s) riser_board();
     }
     for (i = [0, 1]) {
-        color(i == 0 ? [0.49, 0.28, 0.15] : [0.60, 0.37, 0.20])
+        color(i == 0 ? handle_a_color : handle_b_color)
             translate([0, (i == 0 ? -1 : 1)*e/5, 2*e]) handle_laminate(i);
-        color(i == 0 ? [0.82, 0.65, 0.42] : [0.87, 0.71, 0.48])
+        color(i == 0 ? bottom_a_color : bottom_b_color)
             translate([0, (i == 0 ? -1 : 1)*e/4, -e]) bottom_half(i);
     }
 }
@@ -241,19 +253,19 @@ module assembly(e=0) {
 module selected_part() {
     if (Part == "assembly") assembly();
     else if (Part == "exploded") assembly(Explode);
-    else if (Part == "side") translate([Body_length/2, -inner_w/2, 0]) side_board();
-    else if (Part == "end") translate([-end_inner_x, end_w/2, 0]) end_board();
-    else if (Part == "riser") translate([-riser_inner_x, Riser_width/2, 0]) riser_board();
-    else if (Part == "handle") translate([Handle_length/2, Handle_width/2, -handle_bottom_z]) handle_board();
-    else if (Part == "handle_laminate_1")
+    else if (Part == "side") color(side_b_color) translate([Body_length/2, -inner_w/2, 0]) side_board();
+    else if (Part == "end") color(end_b_color) translate([-end_inner_x, end_w/2, 0]) end_board();
+    else if (Part == "riser") color(riser_b_color) translate([-riser_inner_x, Riser_width/2, 0]) riser_board();
+    else if (Part == "handle") translate([Handle_length/2, Handle_width/2, -handle_bottom_z]) for(i=[0,1]) color(i == 0 ? handle_a_color : handle_b_color) handle_laminate(i);
+    else if (Part == "handle_laminate_1") color(handle_a_color)
         translate([Handle_length/2, Handle_width/2, -handle_bottom_z]) handle_laminate(0);
-    else if (Part == "handle_laminate_2")
+    else if (Part == "handle_laminate_2") color(handle_b_color)
         translate([Handle_length/2, -lamination_y, -handle_bottom_z]) handle_laminate(1);
     else if (Part == "bottom")
         translate([bottom_l/2, bottom_w/2, -Bottom_groove_height])
-            for(i=[0,1]) bottom_half(i);
+            for(i=[0,1]) color(i == 0 ? bottom_a_color : bottom_b_color) bottom_half(i);
     else if (Part == "bottom_half_1" || Part == "bottom_half_2")
-        cube([bottom_l, bottom_w/2, Bottom_thickness]);
+        color(Part == "bottom_half_1" ? bottom_a_color : bottom_b_color) cube([bottom_l, bottom_w/2, Bottom_thickness]);
     else if (Part == "joint_detail") intersection() {
         assembly();
         box_at([riser_inner_x-1, -Riser_width/2-0.5, Side_height+0.25],

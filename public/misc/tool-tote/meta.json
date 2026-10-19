@@ -6,10 +6,10 @@
   "preview": "preview.webp",
   "model": "tool-tote.stl",
   "source": "tool-tote.scad",
-  "notes": "All dimensional parameters are in inches; the displayed bounds and STL exports are in millimetres. Defaults use an 18 × 9 inch body, 6 inch sides, 10¾ inch risers, and a 20 inch laminated handle. The bottom grooves stop within the end panels. End-panel setback is an adjustable ¾ inch assumption. Optional screw bores are off until their placement is confirmed. Use individual-part views for fabrication exports; the assembled model contains touching wooden components.",
+  "notes": "All dimensional parameters are in inches; the displayed bounds and STL exports are in millimetres. Defaults use an 18 \u00d7 9 inch body, 6 inch sides, 10\u00be inch risers, and a 20 inch laminated handle. The bottom grooves stop within the end panels. End-panel setback is an adjustable \u00be inch assumption. Optional screw bores are off until their placement is confirmed. Use individual-part views for fabrication exports; the assembled model contains touching wooden components.",
   "customizer": {
     "units": "inches",
-    "outputLabel": "Cut list · inches",
+    "outputLabel": "Cut list \u00b7 inches",
     "conditions": {
       "Explode": {
         "parameter": "Part",
@@ -23,7 +23,69 @@
         "parameter": "Cheek_screw_bores",
         "value": true
       }
-    }
+    },
+    "parts": [
+      {
+        "id": "side-a",
+        "label": "Side A \u00b7 \u2212Y",
+        "color": "#2c78b5",
+        "darkColor": "#65b0e5"
+      },
+      {
+        "id": "side-b",
+        "label": "Side B \u00b7 +Y",
+        "color": "#3998a5",
+        "darkColor": "#65cbd0"
+      },
+      {
+        "id": "end-a",
+        "label": "End A \u00b7 \u2212X",
+        "color": "#b87924",
+        "darkColor": "#e7b44f"
+      },
+      {
+        "id": "end-b",
+        "label": "End B \u00b7 +X",
+        "color": "#b6483b",
+        "darkColor": "#ef8a7a"
+      },
+      {
+        "id": "riser-a",
+        "label": "Riser A \u00b7 \u2212X",
+        "color": "#7762af",
+        "darkColor": "#b09ade"
+      },
+      {
+        "id": "riser-b",
+        "label": "Riser B \u00b7 +X",
+        "color": "#b4548b",
+        "darkColor": "#e78fbd"
+      },
+      {
+        "id": "handle-a",
+        "label": "Handle lamination A",
+        "color": "#d66c32",
+        "darkColor": "#f6a46d"
+      },
+      {
+        "id": "handle-b",
+        "label": "Handle lamination B",
+        "color": "#567d32",
+        "darkColor": "#a0c670"
+      },
+      {
+        "id": "bottom-a",
+        "label": "Bottom half A",
+        "color": "#7a869a",
+        "darkColor": "#a5b4d0"
+      },
+      {
+        "id": "bottom-b",
+        "label": "Bottom half B",
+        "color": "#bca949",
+        "darkColor": "#e3d27c"
+      }
+    ]
   },
   "previewDark": "preview-dark.webp"
 }

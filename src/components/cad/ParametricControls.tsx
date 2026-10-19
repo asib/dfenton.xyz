@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CadEntry } from '../../misc';
 import { compileJob } from './compiler';
+import type { CompiledModel } from './compiler.worker';
 import { configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
@@ -8,7 +9,7 @@ interface Source { text: string; parameters: Parameter[] }
 interface Result { values: Values; stl: string; source: string; output: string }
 
 export default function ParametricControls({ entry, available, onCompiled }: {
-  entry: Entry; available: boolean; onCompiled: (stl: ArrayBuffer) => void;
+  entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
 }) {
   const [source, setSource] = useState<Source | null>(null);
   const [draft, setDraft] = useState<Values>({});
@@ -16,12 +17,14 @@ export default function ParametricControls({ entry, available, onCompiled }: {
   const [phase, setPhase] = useState('Loading parameters…');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [initialModel, setInitialModel] = useState<CompiledModel | null>(null);
   const job = useRef<AbortController | null>(null);
   const draftValues = useRef<Values>({});
   const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;
   const modelUrl = `${entry.href}${entry.model}`;
   const outputLabel = entry.customizer?.outputLabel;
+  const hasParts = !!entry.customizer?.parts?.length;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,11 +43,12 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         // Entries with textual output also compute their default cut list in the
         // worker. The committed fallback mesh stays visible while this runs.
         let output = '';
-        if (outputLabel) {
+        if (outputLabel || hasParts) {
           const compiled = await compileJob({ kind: 'compile', source: text }, controller.signal);
           controller.signal.throwIfAborted();
           if (compiled.kind !== 'model') return;
           output = compiled.output;
+          setInitialModel(compiled);
         }
         setSource({ text, parameters });
         draftValues.current = values;
@@ -60,7 +64,14 @@ export default function ParametricControls({ entry, available, onCompiled }: {
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); };
-  }, [sourceUrl, modelUrl, outputLabel, retry]);
+  }, [sourceUrl, modelUrl, outputLabel, hasParts, retry]);
+
+  useEffect(() => {
+    if (!available || !initialModel) return;
+    try { onCompiled(initialModel); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'The colored model could not load.'); }
+    setInitialModel(null);
+  }, [available, initialModel, onCompiled]);
 
   useEffect(() => () => {
     if (result?.stl.startsWith('blob:')) URL.revokeObjectURL(result.stl);
@@ -99,7 +110,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         if (!controller.signal.aborted) setPhase('Updating model…');
       });
       if (controller.signal.aborted || compiled.kind !== 'model') return;
-      onCompiled(compiled.stl);
+      onCompiled(compiled);
       setResult({ values: { ...values },
         stl: URL.createObjectURL(new Blob([compiled.stl], { type: 'model/stl' })),
         source: URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
