@@ -17,6 +17,8 @@ export default function ParametricControls({ entry, available, onCompiled }: {
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const job = useRef<AbortController | null>(null);
+  const draftValues = useRef<Values>({});
+  const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;
   const modelUrl = `${entry.href}${entry.model}`;
 
@@ -35,6 +37,8 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         // Verify that configured downloads can preserve these literal assignments.
         configuredSource(text, parameters, values);
         setSource({ text, parameters });
+        draftValues.current = values;
+        edited.current = false;
         setDraft(values);
         setResult({ values, stl: modelUrl, source: sourceUrl });
         setPhase('');
@@ -59,17 +63,18 @@ export default function ParametricControls({ entry, available, onCompiled }: {
     job.current?.abort();
     setPhase('');
     setError('');
-    setDraft((previous) => {
-      const next = { ...previous, [name]: value };
-      for (const parameter of source?.parameters ?? []) {
-        const condition = entry.customizer?.conditions?.[parameter.name];
-        // An empty field must not prevent switching to a mode that ignores it.
-        if (condition && next[condition.parameter] !== condition.value && typeof next[parameter.name] !== parameter.type) {
-          next[parameter.name] = parameter.value;
-        }
+    const next = { ...draftValues.current, [name]: value };
+    for (const parameter of source?.parameters ?? []) {
+      const condition = entry.customizer?.conditions?.[parameter.name];
+      // An empty field must not prevent switching to a mode that ignores it.
+      if (condition && next[condition.parameter] !== condition.value && typeof next[parameter.name] !== parameter.type) {
+        next[parameter.name] = parameter.value;
       }
-      return next;
-    });
+    }
+    // Blur can follow an input event before React renders the new draft.
+    draftValues.current = next;
+    edited.current = true;
+    setDraft(next);
   };
   const apply = async (values: Values) => {
     if (!source) return;
@@ -96,10 +101,23 @@ export default function ParametricControls({ entry, available, onCompiled }: {
       setError(failure instanceof Error ? failure.message : 'The model could not be generated.');
     }
   };
+  const commit = (form: HTMLFormElement) => {
+    if (!available) return;
+    edited.current = false;
+    if (!form.checkValidity()) {
+      const invalid = form.querySelector<HTMLInputElement | HTMLSelectElement>('input:invalid, select:invalid');
+      setError(invalid ? `${parameterLabel(invalid.name)}: ${invalid.validationMessage}` : 'Enter valid parameter values.');
+      return;
+    }
+    const values = draftValues.current;
+    if (JSON.stringify(values) !== JSON.stringify(result?.values)) void apply(values);
+  };
   const reset = () => {
     if (!source) return;
     job.current?.abort();
     const values = defaults(source.parameters);
+    draftValues.current = values;
+    edited.current = false;
     setDraft(values);
     setError('');
     setPhase('');
@@ -109,8 +127,17 @@ export default function ParametricControls({ entry, available, onCompiled }: {
 
   return <aside className="cad-parameters" aria-label="Model parameters">
     <h2>Customize the guide</h2>
-    <p className="cad-parameter-intro">Dimensions in mm. Change the settings, then update the model.</p>
-    {source && <form onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }} onSubmit={(event) => { event.preventDefault(); void apply(draft); }}>
+    <p className="cad-parameter-intro">Dimensions in mm. Changes update the model when you leave a field.</p>
+    {source && <form
+      onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
+      onBlur={(event) => {
+        if (!edited.current || !(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement)) return;
+        // A pressed action button commits or resets itself. Merely tabbing to it
+        // still counts as leaving the edited field and must update automatically.
+        if (event.currentTarget.querySelector('button:active')) return;
+        commit(event.currentTarget);
+      }}
+      onSubmit={(event) => { event.preventDefault(); commit(event.currentTarget); }}>
       <fieldset disabled={!available}>
         <legend className="sr-only">Model parameters</legend>
         {groups.map((group, index) => <details key={group} open={index === 0}>
@@ -148,14 +175,14 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         </details>)}
       </fieldset>
       <div className="cad-parameter-actions">
-        <button type="submit" disabled={!available || !!phase}>Update model</button>
+        <button type="submit" disabled={!available || !!phase || (!pending && !error)}>Update now</button>
         <button type="button" onClick={reset} disabled={!available}>Reset parameters</button>
       </div>
     </form>}
     <div className="cad-compile-status" aria-live="polite" aria-atomic="true">
       {error ? <p className="cad-error">{error.replace(/^evaluation error:\s*/i, '')} {source ? 'The previous valid model is still shown.' : ''}</p> :
         <p>{phase ? `${phase}${source ? ' The previous valid model is still shown.' : ''}` :
-          pending ? 'Unapplied changes. The previous valid model is still shown.' : source ? 'Model is up to date.' : ''}</p>}
+          pending ? 'Finish editing a field to update the model. The previous valid model is still shown.' : source ? 'Model is up to date.' : ''}</p>}
     </div>
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">
