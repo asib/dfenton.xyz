@@ -120,18 +120,33 @@ describe('dimensioned part sheets', () => {
     expect(partDimensions(sheet,'handle-b')['Lamination thickness']).toBeCloseTo(.675,6);
     expect(sheet.parts.filter(p=>p.id==='bottom').map(p=>p.quantity)).toEqual([2]);
   });
-  test('fully locates optional bores and preserves the holes in part sections', () => {
-    const sheet=drawing({Cheek_screw_bores:true}),handle=partDimensions(sheet,'handle-a'),riser=partDimensions(sheet,'riser');
-    expect(handle['Bore diameter']).toBeCloseTo(.15625,6);
-    expect(handle['Axis from tip']).toBeCloseTo(1.625,6);
-    expect(handle['Axis above roof']).toBeCloseTo(.875,6);
-    expect(riser['Axis from top']).toBeCloseTo(.875,6);
+  test('locates longitudinal pilot bores below the slot and stops them inside the handle end grain', () => {
+    const sheet=drawing({End_grain_screw_bores:true}),handle=partDimensions(sheet,'handle-a'),riser=partDimensions(sheet,'riser');
+    expect(handle['Full bore diameter']).toBeCloseTo(.15625,6);
+    expect(handle.Embedment).toBeCloseTo(1,6);
+    expect(handle['Axis above bottom']).toBeCloseTo(.375,6);
+    expect(handle['Axis from outside face']).toBeCloseTo(.5625,6);
+    expect(riser['Axis below slot']).toBeCloseTo(.375,6);
     expect(riser['Bore diameter']).toBeCloseTo(.15625,6);
-    for (const [part,view] of [['handle-a','bores'],['riser','cheek']]) {
-      const loops=partView(sheet,part,view).profiles[0];
-      expect(contains(loops,8.375*25.4,9.875*25.4)).toBe(false);
-      expect(contains(loops,8.375*25.4,10.25*25.4)).toBe(true);
-    }
+    const pilot=partView(sheet,'handle-a','bores').profiles[0];
+    expect(contains(pilot,7.5*25.4,-.02*25.4)).toBe(false);
+    expect(contains(pilot,6.95*25.4,-.02*25.4)).toBe(true);
+    expect(contains(pilot,7.5*25.4,-.2*25.4)).toBe(true);
+    const entry=partView(sheet,'riser','bores').profiles[0];
+    expect(contains(entry,0,8.625*25.4)).toBe(false);
+    expect(contains(entry,.2*25.4,8.625*25.4)).toBe(true);
+  });
+  test('updates pilot embedment and draws relief only in laminations the screw actually intersects', () => {
+    const sheet=drawing({End_grain_screw_bores:true,Handle_lamination_fraction:.4,Screw_embedment:.75,Screw_height_fraction:.6});
+    expect(partView(sheet,'handle-a','bores')).toBeUndefined();
+    const handle=partDimensions(sheet,'handle-b');
+    expect(handle.Embedment).toBeCloseTo(.75,6);
+    expect(handle['Axis above bottom']).toBeCloseTo(.45,6);
+    const pilot=partView(sheet,'handle-b','bores').profiles[0];
+    expect(contains(pilot,7.5*25.4,0)).toBe(false);
+    expect(contains(pilot,7.2*25.4,0)).toBe(true);
+    expect(()=>drawing({End_grain_screw_bores:true,Screw_embedment:8})).toThrow('stop before the handle midpoint');
+    expect(()=>drawing({End_grain_screw_bores:true,Screw_bore_diameter:.8})).toThrow('inside the notch shoulder');
   });
   test('dimensions a flush end dado by its clipped cut width and omits the zero inset', () => {
     const dimensions=partDimensions(drawing({End_setback:0,Joint_fit:.04}),'side');
@@ -159,11 +174,11 @@ describe('tote drawing contract', () => {
     expect(sheet.views.map(v=>v.id)).toEqual(['front','top','right','joint-longitudinal','joint-transverse']);
     const view = sheet.views[0];
     expect(view.bounds[2]-view.bounds[0]).toBeCloseTo(20*25.4,4);
-    expect(view.bounds[3]).toBeCloseTo(11.5*25.4,4);
+    expect(view.bounds[3]).toBeCloseTo(11.25*25.4,4);
     expect(covers(view.lines,0,0.5*25.4)).toBe(false);
     expect(covers(view.lines,8.3*25.4,9*25.4)).toBe(false);
     expect(covers(view.lines,9.5*25.4,9*25.4)).toBe(true);
-    view.dimensions.forEach((d,i)=>expect(dimensionValue(d,view,sheet.units)).toBeCloseTo([20,18,11.5,6][i],8));
+    view.dimensions.forEach((d,i)=>expect(dimensionValue(d,view,sheet.units)).toBeCloseTo([20,18,11.25,6][i],8));
   });
   test('uses source coordinates after fractional parameter changes', () => {
     const sheet = drawing({Handle_length:21.25,Body_length:18.5,Body_width:10.25,Side_height:6.25,Handle_notch_depth:0.375,Handle_lamination_fraction:0.4});
@@ -247,15 +262,15 @@ describe('handle/riser sections', () => {
     expect(contains(section.profiles[1],-.3*25.4,10*25.4)).toBe(true);
     expect(contains(section.profiles[2],.3*25.4,10*25.4)).toBe(true);
   });
-  test('keeps bore voids and section islands open when optional bores are enabled',()=>{
-    const sheet=drawing({Cheek_screw_bores:true});
+  test('shows the longitudinal screw entry below the slot floor in the transverse joint section',()=>{
+    const sheet=drawing({End_grain_screw_bores:true});
     const side=sheet.views.find(v=>v.id==='joint-longitudinal');
     const end=sheet.views.find(v=>v.id==='joint-transverse');
-    expect(side.profiles[1]).toHaveLength(2);
-    expect(side.profiles.some(p=>contains(p,8.375*25.4,9.875*25.4))).toBe(false);
-    expect(end.profiles.some(p=>contains(p,0.2*25.4,9.875*25.4))).toBe(false);
-    expect(end.profiles.some(p=>contains(p,1*25.4,9.875*25.4))).toBe(false);
-    expect(end.profiles.some(p=>contains(p,1*25.4,10.5*25.4))).toBe(true);
+    expect(end.profiles[0]).toHaveLength(2);
+    expect(end.profiles.some(p=>contains(p,0,8.625*25.4))).toBe(false);
+    expect(end.profiles.some(p=>contains(p,.2*25.4,8.625*25.4))).toBe(true);
+    // A-A cuts away from the centered screw axis, leaving the riser solid.
+    expect(side.profiles.some(p=>contains(p,8.375*25.4,8.625*25.4))).toBe(true);
   });
   test('omits a zero-length projection dimension when the handle and riser tops are flush',()=>{
     const sheet=drawing({Handle_notch_depth:1.25});
