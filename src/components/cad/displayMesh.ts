@@ -4,6 +4,19 @@ import type { PartColor } from '../../misc';
 interface Group { start: number; count: number; color: number[]; mode: string }
 export interface DisplayMesh { positions: Float32Array; normals: Float32Array; groups: Group[] }
 
+export function parseDisplayMesh(data: unknown): DisplayMesh {
+  const numbers = (value: unknown): value is number[] => Array.isArray(value) &&
+    value.every((number: unknown) => typeof number === 'number' && Number.isFinite(number));
+  if (typeof data !== 'object' || data === null || !('version' in data) || data.version !== 1 ||
+      !('positions' in data) || !numbers(data.positions) ||
+      !('normals' in data) || !numbers(data.normals) || !('groups' in data)) {
+    throw new Error('Invalid saved colored geometry.');
+  }
+  const mesh = displayMesh(new Float32Array(data.positions), new Float32Array(data.normals), JSON.stringify(data.groups));
+  if (!mesh) throw new Error('The saved colored model has no geometry.');
+  return mesh;
+}
+
 // The engine's preview ranges count vertices, not floats or triangles. Keep
 // these separate from the boolean-unioned mesh used for STL downloads.
 export function displayMesh(positions: Float32Array, normals: Float32Array, json: string): DisplayMesh | undefined {

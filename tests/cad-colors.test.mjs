@@ -1,11 +1,31 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { render, parameters } from 'openrscad-engine/node';
-import { displayMesh, coloredGeometry } from '../src/components/cad/displayMesh';
+import { displayMesh, coloredGeometry, parseDisplayMesh } from '../src/components/cad/displayMesh';
 import { configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
 const source = readFileSync(new URL('../public/misc/tool-tote/tool-tote.scad', import.meta.url), 'utf8');
 const palette = JSON.parse(readFileSync(new URL('../public/misc/tool-tote/meta.json', import.meta.url), 'utf8')).customizer.parts;
 const schema = parseParameters(parameters(source));
+
+test('saved colored initial model matches freshly compiled default geometry and all ten piece colors', () => {
+  const metadata = JSON.parse(readFileSync(new URL('../public/misc/tool-tote/meta.json', import.meta.url), 'utf8'));
+  const saved = parseDisplayMesh(JSON.parse(readFileSync(new URL(`../public/misc/tool-tote/${metadata.displayModel}`, import.meta.url), 'utf8')));
+  const result = render(source);
+  try {
+    expect(saved.positions).toEqual(result.preview_positions);
+    expect(saved.normals).toEqual(result.preview_normals);
+    expect(saved.groups).toEqual(JSON.parse(result.groups));
+    expect(saved.groups).toHaveLength(10);
+  } finally { result.free(); }
+});
+
+test('saved display rejects missing, empty and invalid geometry instead of falling back to blue', () => {
+  for (const data of [null, {}, {version:2}, {version:1,positions:[],normals:[],groups:[]},
+    {version:1,positions:['1'],normals:[0],groups:[]},
+    {version:1,positions:[Infinity],normals:[0],groups:[]}]) {
+    expect(() => parseDisplayMesh(data)).toThrow();
+  }
+});
 
 test.each([['assembly',10], ['exploded',10], ['handle',2], ['bottom',2], ['joint_detail',3], ['handle_laminate_2',1]])('preserves separate piece colors in %s', (Part, count) => {
   const result = render(configuredSource(source, schema, {...defaults(schema),Part}));

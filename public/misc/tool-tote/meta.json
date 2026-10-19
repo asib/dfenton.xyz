@@ -87,5 +87,6 @@
     ],
     "cutList": true
   },
-  "previewDark": "preview-dark.webp"
+  "previewDark": "preview-dark.webp",
+  "displayModel": "tool-tote-display.json"
 }

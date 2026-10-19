@@ -15,6 +15,7 @@ export interface PartColor { id: string; label: string; color: string; darkColor
 export interface CadEntry extends EntryBase {
   type: 'cad';
   model: string;
+  displayModel?: string;
   source?: string;
   sourceUrl?: string;
   notes?: string;
@@ -74,6 +75,7 @@ export const miscEntries = Object.entries(metadata).map(([path, entry]) => {
   }
   if (entry.type === 'cad' && (
     typeof entry.model !== 'string' || !/^[a-z0-9][a-z0-9-]*\.stl$/.test(entry.model) ||
+    (entry.displayModel !== undefined && (typeof entry.displayModel !== 'string' || !/^[a-z0-9][a-z0-9-]*\.json$/.test(entry.displayModel))) ||
     (entry.source !== undefined && (typeof entry.source !== 'string' || !/^[a-z0-9][a-z0-9-]*\.scad$/.test(entry.source))) ||
     (entry.sourceUrl !== undefined && (typeof entry.sourceUrl !== 'string' || !entry.sourceUrl.startsWith('https://'))) ||
     (entry.notes !== undefined && typeof entry.notes !== 'string') ||

@@ -3,7 +3,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls from './ParametricControls';
-import { coloredGeometry } from './displayMesh';
+import { coloredGeometry, parseDisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
 import type { CutListOutput } from './cutList';
@@ -22,6 +22,8 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const modelUrl = `${entry.href}${entry.model}`;
+  const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
+  const palette = entry.customizer?.parts;
 
   useEffect(() => {
     const element = host.current;
@@ -31,11 +33,14 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     const lost = () => { setStatus('The 3D view was interrupted. Reload the page to restore it, or download the model below.'); };
     const load = async () => {
       try {
-        const response = await fetch(modelUrl, { signal: controller.signal });
+        // Start with saved colored triangles when provided, so cold loads don't
+        // show a monochrome STL while the parametric engine initializes.
+        const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
         if (!response.ok) throw new Error('Model request failed.');
-        const data = await response.arrayBuffer();
-        if (controller.signal.aborted) return;
-        const geometry = new STLLoader().parse(data);
+        const geometry = displayUrl
+          ? coloredGeometry(parseDisplayMesh(await response.json()), palette)
+          : new STLLoader().parse(await response.arrayBuffer());
+        if (controller.signal.aborted) { geometry.dispose(); return; }
         try {
           active = createScene(element, geometry);
         } catch (error) {
@@ -57,7 +62,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [modelUrl]);
+  }, [modelUrl, displayUrl, palette]);
 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });
