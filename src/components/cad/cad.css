@@ -54,6 +54,14 @@
 .cad-drawings-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
 .cad-drawings h2 { font-size: 20px; font-weight: 600; scroll-margin-top: 24px; }
 .cad-drawings-heading label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.cad-drawing-actions { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 12px 20px; }
+.cad-drawing-export { max-width: 36ch; }
+.cad-drawing-export button { display: flex; align-items: center; gap: 8px; padding: 8px 12px; min-height: 36px; background: var(--cad-control); color: inherit; border: 1px solid var(--cad-border); border-radius: 3px; font: inherit; font-size: 12px; cursor: pointer; }
+.cad-drawing-export button:disabled { opacity: .5; cursor: not-allowed; }
+.cad-drawing-export button:enabled:hover { border-color: currentColor; }
+.cad-drawing-export button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.cad-pdf-status { display: block; font-size: 11px; line-height: 1.6; }
+.cad-pdf-status:not(:empty) { margin-top: 6px; }
 .cad-drawings select { background: var(--cad-control); color: inherit; border: 1px solid var(--cad-border); border-radius: 3px; padding: 8px; min-height: 36px; }
 .cad-drawing-help, .cad-drawing-status { font-size: 12px; line-height: 1.8; margin: 12px 0; }
 .cad-drawing-help { max-width: 85ch; opacity: .8; }
