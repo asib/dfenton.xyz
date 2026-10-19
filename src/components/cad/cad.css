@@ -82,7 +82,7 @@
 .cad-part-swatch { display: inline-block; flex-shrink: 0; width: 12px; height: 12px; border: 1px solid rgb(0 0 0 / 20%); background: var(--part-color); }
 .dark .cad-part-swatch { background: var(--part-dark-color); }
 .cad-cut-list { margin: 40px 0; padding-top: 24px; border-top: 1px solid var(--cad-border); min-width: 0; }
-.cad-cut-list-heading, .cad-cut-list-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0; }
+.cad-cut-list-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0; }
 .cad-cut-list h2 { font-size: 20px; font-weight: 600; }
 .cad-cut-list h2 span { font-size: 14px; font-weight: 400; opacity: .7; }
 .cad-worksheet-help { font-size: 12px; line-height: 1.8; margin: 12px 0; max-width: 100ch; opacity: .8; }
@@ -101,16 +101,10 @@
 .cad-cut-list :is(th, td) { border: 1px solid var(--cad-border); padding: 8px 6px; vertical-align: middle; }
 .cad-cut-list thead th { background: #213c4a; color: #fff; border-color: #91a8b5; text-align: center; font-weight: 500; line-height: 1.7; }
 .dark .cad-cut-list thead th { background: #334651; border-color: #a2b9c6; color: #e9f2f7; }
-.cad-cut-list thead small { font: inherit; opacity: .8; }
-.cad-cut-table { min-width: 1080px; }
+.cad-cut-table { min-width: 720px; }
 .cad-cut-table tbody th { min-width: 155px; font-weight: 500; }
 .cad-blank-swatches { display: inline-flex; gap: 3px; margin-right: 8px; vertical-align: middle; }
 .cad-cut-table td { text-align: right; white-space: nowrap; }
 .cad-cut-table .cad-size-cell { background: rgb(34 60 74 / 5%); }
 .dark .cad-cut-table .cad-size-cell { background: rgb(255 255 255 / 4%); }
 .cad-cut-table input { width: 70px; font-size: 11px; padding: 6px; }
-.cad-cut-table .cad-material-input { width: 140px; }
-.cad-cut-table tfoot th { text-align: right; }
-.cad-cut-table tfoot td { font-weight: 600; }
-.cad-cut-list-footer { justify-content: flex-end; font-size: 12px; }
-.cad-cut-list-footer span { opacity: .7; }

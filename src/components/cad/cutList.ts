@@ -26,7 +26,7 @@ export function parseCutList(output: string): CutPart[] {
 }
 
 // Group matching blanks while retaining the IDs of every colored physical part.
-// Different stock thicknesses/prices can also keep otherwise identical blanks apart.
+// Different rough thicknesses can also keep otherwise identical blanks apart.
 export function groupCutList(parts: CutPart[], stockKey: (part: CutPart) => unknown = () => null): CutBlank[] {
   const groups = new Map<string, CutBlank>();
   for (const part of parts) {
@@ -51,17 +51,13 @@ export function inches(value: number): string {
   return `${whole ? `${String(whole)} ` : ''}${String(numerator)}/${String(denominator)}`;
 }
 
-export function stockEstimate(part: CutPart, thickness: number, widthExtra: number, lengthExtra: number, wastePercent: number, unitCost: number | null) {
-  if (![thickness, widthExtra, lengthExtra, wastePercent].every(Number.isFinite) ||
-      thickness < part.thickness || widthExtra < 0 || lengthExtra < 0 || wastePercent < 0 ||
-      (unitCost !== null && (!Number.isFinite(unitCost) || unitCost < 0))) return null;
-  const width = part.width + widthExtra, length = part.length + lengthExtra;
-  const boardFeet = part.quantity * thickness * width * length / 144;
-  const extra = boardFeet * wastePercent / 100;
-  return { thickness, width, length, boardFeet, extra, totalCost: unitCost === null ? null : (boardFeet + extra) * unitCost };
+export function roughDimensions(part: CutPart, thickness: number, widthExtra: number, lengthExtra: number) {
+  if (![thickness, widthExtra, lengthExtra].every(Number.isFinite) ||
+      thickness < part.thickness || widthExtra < 0 || lengthExtra < 0) return null;
+  return { thickness, width: part.width + widthExtra, length: part.length + lengthExtra };
 }
 
-// Quote user-entered material names and neutralize spreadsheet formulas.
+// Quote cell text and neutralize spreadsheet formulas.
 export function csvCell(value: string | number): string {
   const text = String(value);
   return `"${(/^[\s]*[=+@-]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`;

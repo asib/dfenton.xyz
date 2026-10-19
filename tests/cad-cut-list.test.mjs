@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { render, parameters } from 'openrscad-engine/node';
-import { parseCutList, groupCutList, stockEstimate, inches, csvCell } from '../src/components/cad/cutList';
+import { parseCutList, groupCutList, roughDimensions, inches, csvCell } from '../src/components/cad/cutList';
 import { configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
 const source = readFileSync(new URL('../public/misc/tool-tote/tool-tote.scad', import.meta.url), 'utf8');
 const schema = parseParameters(parameters(source));
@@ -31,18 +31,14 @@ test('cut-list dimensions follow SCAD joinery and lamination edits', () => {
   expect(parts.find(p=>p.id==='bottom-b')).toMatchObject({width:4.4375,length:15.25});
 });
 
-test('calculates rough stock, extra and cost once, and distinguishes missing prices from zero', () => {
+test('adds machining allowances per blank and rejects undersized rough stock', () => {
   const side = list()[0];
-  const estimate = stockEstimate(side,1,.5,1,20,12);
-  expect(estimate).toMatchObject({thickness:1,width:6.5,length:19});
-  expect(estimate.boardFeet).toBeCloseTo(123.5/144,10);
-  expect(estimate.extra).toBeCloseTo(123.5/144*.2,10);
-  expect(estimate.totalCost).toBeCloseTo(12.35,10);
-  expect(stockEstimate({...side,quantity:2},1,.5,1,20,12).totalCost).toBeCloseTo(24.7,10);
-  expect(stockEstimate(side,1,.5,1,20,null).totalCost).toBeNull();
-  expect(stockEstimate(side,1,.5,1,20,0).totalCost).toBe(0);
-  for (const args of [[.5,.5,1,20,12],[1,-1,1,20,12],[1,.5,NaN,20,12],[1,.5,1,20,-1]]) {
-    expect(stockEstimate(side,...args)).toBeNull();
+  const rough = roughDimensions(side,1,.5,1);
+  expect(rough).toEqual({thickness:1,width:6.5,length:19});
+  expect(roughDimensions({...side,quantity:2},1,.5,1)).toEqual(rough);
+  expect(roughDimensions(side,.75,0,0)).toEqual({thickness:.75,width:6,length:18});
+  for (const args of [[.5,.5,1],[1,-1,1],[1,.5,NaN],[1,.5,-1]]) {
+    expect(roughDimensions(side,...args)).toBeNull();
   }
 });
 
@@ -72,9 +68,7 @@ test('groups identical blanks by kind, material and dimensions, but splits unequ
   expect(split.filter(p=>p.blank==='Handle lamination').map(p=>[p.name,p.quantity,p.thickness])).toEqual([
     ['Handle lamination A',1,.675],['Handle lamination B',1,.45],
   ]);
-  // Stock choices stay with their physical parts and keep unlike purchases apart.
-  expect(groupCutList(parts, p=>p.id==='handle-a' ? 10 : 20)).toHaveLength(6);
-  const individualFeet = parts.reduce((sum,p)=>sum+stockEstimate(p,p.thickness,.5,1,20,null).boardFeet,0);
-  const groupedFeet = blanks.reduce((sum,p)=>sum+stockEstimate(p,p.thickness,.5,1,20,null).boardFeet,0);
-  expect(groupedFeet).toBeCloseTo(individualFeet,10);
+  // Rough-thickness choices stay with the pieces when laminations regroup.
+  expect(groupCutList(parts, p=>p.id==='handle-a' ? .75 : 1)).toHaveLength(6);
+  expect(blanks.reduce((sum,p)=>sum+p.quantity,0)).toBe(10);
 });
