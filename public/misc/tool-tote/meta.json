@@ -1,0 +1,29 @@
+{
+  "type": "cad",
+  "title": "Tool tote",
+  "description": "A solid-wood tool tote with housed risers, a laminated bridle-jointed handle, and a bookmatched bottom in stopped grooves. Adjust the dimensions and joinery, or switch to an exploded or individual-part view.",
+  "date": "2026-10-19",
+  "preview": "preview.webp",
+  "model": "tool-tote.stl",
+  "source": "tool-tote.scad",
+  "notes": "All dimensional parameters are in inches; the displayed bounds and STL exports are in millimetres. Defaults use an 18 × 9 inch body, 6 inch sides, 10¾ inch risers, and a 20 inch laminated handle. The bottom grooves stop within the end panels. End-panel setback is an adjustable ¾ inch assumption. Optional screw bores are off until their placement is confirmed. Use individual-part views for fabrication exports; the assembled model contains touching wooden components.",
+  "customizer": {
+    "units": "inches",
+    "outputLabel": "Cut list · inches",
+    "conditions": {
+      "Explode": {
+        "parameter": "Part",
+        "value": "exploded"
+      },
+      "Screw_bore_diameter": {
+        "parameter": "Cheek_screw_bores",
+        "value": true
+      },
+      "Screw_height_fraction": {
+        "parameter": "Cheek_screw_bores",
+        "value": true
+      }
+    }
+  },
+  "previewDark": "preview-dark.webp"
+}

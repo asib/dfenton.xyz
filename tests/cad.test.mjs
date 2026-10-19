@@ -107,3 +107,47 @@ describe('saw guide customization', () => {
     expect(() => binaryStl(new Float32Array([NaN]),new Float32Array([0]))).toThrow();
   });
 });
+
+describe('tool tote customization', () => {
+  const toteSource = readFileSync(new URL('../public/misc/tool-tote/tool-tote.scad', import.meta.url), 'utf8');
+  const toteSchema = parseParameters(parameters(toteSource));
+  const toteDefaults = defaults(toteSchema);
+  function tote(changes = {}) {
+    const result = render(configuredSource(toteSource, toteSchema, { ...toteDefaults, ...changes }));
+    try {
+      return { ok: result.ok, error: result.error, degraded: result.geom_errors, warnings: result.warnings,
+        stats: result.ok ? meshStats(binaryStl(result.positions, result.normals)) : null };
+    } finally { result.free(); }
+  }
+  test('keeps inch defaults and matches the committed initial mesh in millimetres', () => {
+    expect(toteSchema).toHaveLength(30);
+    expect(toteDefaults).toMatchObject({ Riser_length: 10.75, Handle_width: 1.125, Handle_notch_depth: 0.5, Riser_dado_depth: 0.25 });
+    expect(configuredSource(toteSource, toteSchema, toteDefaults)).toBe(toteSource);
+    const actual = tote();
+    expect(actual.ok).toBe(true);
+    expect(actual.degraded).toBe('');
+    expect(actual.warnings).toBe('');
+    const file = readFileSync(new URL('../public/misc/tool-tote/tool-tote.stl', import.meta.url));
+    const expected = meshStats(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength));
+    expect(actual.stats.volume).toBeCloseTo(expected.volume, 4);
+    for (const [axis, size] of [508, 228.6, 292.1].entries()) {
+      expect(actual.stats.max[axis] - actual.stats.min[axis]).toBeCloseTo(size, 3);
+    }
+  });
+  test('regenerates inch dimensions, exploded geometry and individual parts', () => {
+    const wider = tote({ Body_width: 10 });
+    expect(wider.stats.max[1] - wider.stats.min[1]).toBeCloseTo(254, 3);
+    const exploded = tote({ Part: 'exploded', Explode: 2 });
+    expect(exploded.ok).toBe(true);
+    expect(exploded.stats.max[0] - exploded.stats.min[0]).toBeGreaterThan(508);
+    const bottom = tote({ Part: 'bottom' });
+    expect(bottom.stats.closed).toBe(true);
+    expect(bottom.stats.max[1]).toBeCloseTo(7.875 * 25.4, 3);
+    expect(tote({ Part: 'side' }).stats.closed).toBe(true);
+  });
+  test('preserves the source joinery assertions', () => {
+    const invalid = tote({ Riser_length: 8 });
+    expect(invalid.ok).toBe(false);
+    expect(invalid.error).toContain('Handle must clear sides');
+  });
+});
