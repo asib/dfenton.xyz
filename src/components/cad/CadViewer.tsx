@@ -7,12 +7,16 @@ import { coloredGeometry, parseDisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
 import type { CutListOutput } from './cutList';
+import { useFullscreen } from './useFullscreen';
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
 
 export default function CadViewer({ entry }: { entry: CadEntry & { href: string } }) {
   const host = useRef<HTMLDivElement>(null);
+  const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
+  const [legendOpen, setLegendOpen] = useState(true);
+  const [parametersOpen, setParametersOpen] = useState(true);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [status, setStatus] = useState('Loading model…');
   const [mode, setMode] = useState<RenderMode>('edges');
@@ -24,6 +28,23 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
   const palette = entry.customizer?.parts;
+  const hasParameters = !!(entry.customizer && entry.source);
+  const hasLegend = !!palette?.length;
+  const panelsOpen = (hasLegend && legendOpen) || (hasParameters && parametersOpen);
+  useEffect(() => {
+    if (!panelsOpen && workspace.current?.querySelector('.cad-sidebar')?.contains(document.activeElement)) {
+      workspace.current.querySelector<HTMLButtonElement>('.cad-workspace-toolbar button[aria-controls]')?.focus();
+    }
+  }, [panelsOpen, workspace]);
+  const viewCutList = () => {
+    void leave().then(() => {
+      requestAnimationFrame(() => {
+        const heading = document.getElementById('cut-list-title');
+        heading?.scrollIntoView({ block: 'start' });
+        if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+      });
+    });
+  };
 
   useEffect(() => {
     const element = host.current;
@@ -89,7 +110,15 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   return (
     <section className="cad" aria-label="CAD model">
       <p className="cad-description">{entry.description}</p>
-      <div className={entry.customizer ? 'cad-workbench' : undefined}>
+      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined}
+        role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? `${entry.title} fullscreen viewer` : undefined}>
+        <div className="cad-workspace-toolbar">
+          <span className="cad-workspace-title">{entry.title}</span>
+          {hasLegend && <button type="button" aria-expanded={legendOpen} aria-controls="cad-legend" onClick={() => { setLegendOpen((open) => !open); }}>Part legend</button>}
+          {hasParameters && <button type="button" aria-expanded={parametersOpen} aria-controls="cad-parameter-panel" onClick={() => { setParametersOpen((open) => !open); }}>Model parameters</button>}
+          <button ref={toggleButton} type="button" aria-pressed={fullscreen} onClick={() => { if (fullscreen) void leave(); else void enter(); }}>{fullscreen ? 'Exit fullscreen' : 'Fullscreen'}</button>
+        </div>
+        <div className="cad-workbench" data-panels-open={panelsOpen || undefined}>
         <div className="cad-viewer">
           <div className="cad-stage">
             <div ref={host} className="cad-canvas" aria-hidden={!!status} />
@@ -130,18 +159,27 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
           </fieldset>
           {viewer && <p className="cad-dimensions">Bounds: {viewer.size.x.toFixed(1)} × {viewer.size.y.toFixed(1)} × {viewer.size.z.toFixed(1)} mm (X × Y × Z)</p>}
-          {entry.customizer?.parts && <ul className="cad-part-key" aria-label="Part colors">
-            {entry.customizer.parts.map((part) => <li key={part.id}>
-              <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />{part.label}
-            </li>)}
-          </ul>}
           {!entry.customizer && <div className="cad-downloads">
             <a href={modelUrl} download>Download STL ↓</a>
             {entry.source && <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>}
             {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
           </div>}
         </div>
-        {entry.customizer && entry.source && <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} />}
+        <div className="cad-sidebar" hidden={!panelsOpen}>
+          {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
+            <summary>Part legend</summary>
+            <ul className="cad-part-key" aria-label="Part colors">
+              {palette.map((part) => <li key={part.id}>
+                <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />{part.label}
+              </li>)}
+            </ul>
+          </details>}
+          {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
+            <summary>Model parameters</summary>
+            <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onViewCutList={fullscreen ? viewCutList : undefined} />
+          </details>}
+        </div>
+        </div>
       </div>
       {entry.customizer?.cutList && <CutListTable output={cutList} palette={entry.customizer.parts} />}
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}

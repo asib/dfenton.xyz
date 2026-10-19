@@ -9,9 +9,10 @@ type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
 interface Result { values: Values; stl: string; source: string; output: string }
 
-export default function ParametricControls({ entry, available, onCompiled, onOutput }: {
+export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList }: {
   entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
   onOutput: (output: CutListOutput) => void;
+  onViewCutList?: () => void;
 }) {
   const [source, setSource] = useState<Source | null>(null);
   const [draft, setDraft] = useState<Values>({});
@@ -154,7 +155,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const groups = [...new Set(source?.parameters.map((parameter) => parameter.group))];
 
   return <aside className="cad-parameters" aria-label="Model parameters">
-    <h2>Model parameters</h2>
+    <h2 className="sr-only">Model parameters</h2>
     <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model when you leave a field.</p>
     {source && <form
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
@@ -216,7 +217,9 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
       <pre>{result.output.replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
     </details>}
-    {hasCutList && result?.output && <p className="cad-compile-status"><a href="#cut-list-title">View cut list ↓</a></p>}
+    {hasCutList && result?.output && <p className="cad-compile-status"><a href="#cut-list-title" onClick={(event) => {
+      if (onViewCutList) { event.preventDefault(); onViewCutList(); }
+    }}>View cut list ↓</a></p>}
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">
       {canDownload ? <>
