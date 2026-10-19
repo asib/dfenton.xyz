@@ -1,6 +1,16 @@
 # Cloudflare Pages
 
-Requires setting `BUN_VERSION=1.1.26` (or whatever version was used to `bun install` locally) as an environment variable in Pages' UI. This is because Pages uses `bun install --frozen-lockfile` to install dependencies by default, and different bun versions produce different lock files.
+Pages is configured with `BUN_VERSION=1.1.26`. Use **Bun 1.1.26** when changing dependencies or writing `bun.lockb`; newer Bun releases can write a binary lockfile that Pages cannot read. `package.json` records the expected version in `packageManager`, but Pages selects its Bun version from the `BUN_VERSION` environment variable in the dashboard.
+
+Before pushing dependency changes, verify with that Bun version in a clean checkout:
+
+```sh
+bun --version # must print 1.1.26
+bun install --frozen-lockfile
+bun run build
+```
+
+Upgrade the local Bun version and Pages' `BUN_VERSION` together when intentionally changing the toolchain. Keep frozen installs enabled so deployments use the committed dependency versions.
 
 Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
 
