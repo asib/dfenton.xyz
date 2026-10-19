@@ -78,8 +78,11 @@ export function useFullscreen() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); void leave(); return; }
       if (event.key !== 'Tab') return;
+      const closedPanels = [...element.querySelectorAll('details:not([open])')];
       const focusable = [...element.querySelectorAll<HTMLElement>('a[href], button, input, select, summary, [tabindex="0"]')]
-        .filter((item) => !item.matches(':disabled') && item.getClientRects().length > 0);
+        .filter((item) => !item.matches(':disabled') && item.getClientRects().length > 0
+          // Closed details can retain layout rectangles for hidden descendants.
+          && closedPanels.every((panel) => !panel.contains(item) || panel.querySelector(':scope > summary')?.contains(item)));
       if (!focusable.length) return;
       const first = focusable[0], last = focusable[focusable.length - 1];
       if (!element.contains(document.activeElement) || (event.shiftKey && document.activeElement === first)) {

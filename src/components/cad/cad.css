@@ -51,12 +51,12 @@
 .cad-workspace { min-width: 0; margin: 20px 0 24px; }
 .cad-workspace-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 0; }
 .cad-workspace-title { display: none; margin-right: auto; font-weight: 600; }
-.cad-workspace-toolbar button { color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 4px; padding: 8px 12px; min-height: 40px; cursor: pointer; font: inherit; font-size: 12px; }
-.cad-workspace-toolbar button[aria-expanded=true] { border-color: var(--cad-body); }
+.cad-workspace-toolbar button { display: inline-flex; align-items: center; gap: 8px; color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 4px; padding: 8px 12px; min-height: 40px; cursor: pointer; font: inherit; font-size: 12px; }
+.cad-workspace-toolbar button svg { flex-shrink: 0; }
 .cad-workspace-toolbar button:hover { border-color: currentColor; }
 .cad-workspace :is(.cad-workspace-toolbar button, .cad-panel > summary):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .cad-workbench { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
-.cad-workbench[data-panels-open] { grid-template-columns: minmax(0, 1fr) 320px; }
+.cad-workbench[data-has-panels] { grid-template-columns: minmax(0, 1fr) 320px; }
 .cad-workbench .cad-viewer { position: sticky; top: 20px; min-width: 0; }
 .cad-sidebar { min-width: 0; margin-top: 20px; border-left: 1px solid var(--cad-border); padding-left: 20px; }
 .cad-sidebar[hidden] { display: none; }
@@ -87,7 +87,7 @@
 .cad-download-pending { opacity: .7; }
 .cad-model-output pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 11px; line-height: 1.8; margin-bottom: 16px; }
 @media (max-width: 850px) {
-  .cad-workbench[data-panels-open] { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .cad-workbench[data-has-panels] { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .cad-workbench .cad-viewer { position: static; }
   .cad-sidebar { border-left: 0; padding-left: 0; }
 }
@@ -140,7 +140,7 @@ html[data-cad-fullscreen] main { transform: none !important; filter: none !impor
 .cad-workspace[data-fullscreen] .cad-workspace-title { display: block; }
 .cad-workspace[data-fullscreen] .cad-workspace-toolbar { flex: 0 0 auto; padding: 0 0 12px; }
 .cad-workspace[data-fullscreen] .cad-workbench { flex: 1; min-height: 0; align-items: stretch; }
-.cad-workspace[data-fullscreen] .cad-workbench[data-panels-open] { grid-template-columns: minmax(0, 1fr) 320px; }
+.cad-workspace[data-fullscreen] .cad-workbench[data-has-panels] { grid-template-columns: minmax(0, 1fr) 320px; }
 .cad-workspace[data-fullscreen] .cad-viewer { position: relative; top: auto; display: flex; flex-direction: column; min-height: 0; }
 .cad-workspace[data-fullscreen] .cad-stage { flex: 1; min-height: 100px; margin: 0 0 8px; }
 .cad-workspace[data-fullscreen] .cad-canvas { position: absolute; inset: 0; height: 100%; }
@@ -154,7 +154,7 @@ html[data-cad-fullscreen] main { transform: none !important; filter: none !impor
   .cad-workspace[data-fullscreen] .cad-workspace-title { display: none; }
   .cad-workspace[data-fullscreen] .cad-workspace-toolbar { gap: 6px; justify-content: flex-start; padding-bottom: 8px; }
   .cad-workspace[data-fullscreen] .cad-workspace-toolbar button { padding: 6px 8px; font-size: 11px; }
-  .cad-workspace[data-fullscreen] .cad-workbench[data-panels-open] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
+  .cad-workspace[data-fullscreen] .cad-workbench[data-has-panels] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
   .cad-workspace[data-fullscreen] .cad-sidebar { max-height: 40dvh; border-left: 0; border-top: 1px solid var(--cad-border); padding: 8px 4px 0; }
   .cad-workspace[data-fullscreen] .cad-controls { gap: 8px; padding: 6px 0; margin: 6px 0; }
   .cad-workspace[data-fullscreen] .cad-controls :is(select, button) { min-height: 36px; padding: 6px 8px; font-size: 12px; }

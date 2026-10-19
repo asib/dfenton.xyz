@@ -30,12 +30,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const palette = entry.customizer?.parts;
   const hasParameters = !!(entry.customizer && entry.source);
   const hasLegend = !!palette?.length;
-  const panelsOpen = (hasLegend && legendOpen) || (hasParameters && parametersOpen);
-  useEffect(() => {
-    if (!panelsOpen && workspace.current?.querySelector('.cad-sidebar')?.contains(document.activeElement)) {
-      workspace.current.querySelector<HTMLButtonElement>('.cad-workspace-toolbar button[aria-controls]')?.focus();
-    }
-  }, [panelsOpen, workspace]);
+  const hasPanels = hasLegend || hasParameters;
   const viewCutList = () => {
     void leave().then(() => {
       requestAnimationFrame(() => {
@@ -114,11 +109,14 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? `${entry.title} fullscreen viewer` : undefined}>
         <div className="cad-workspace-toolbar">
           <span className="cad-workspace-title">{entry.title}</span>
-          {hasLegend && <button type="button" aria-expanded={legendOpen} aria-controls="cad-legend" onClick={() => { setLegendOpen((open) => !open); }}>Part legend</button>}
-          {hasParameters && <button type="button" aria-expanded={parametersOpen} aria-controls="cad-parameter-panel" onClick={() => { setParametersOpen((open) => !open); }}>Model parameters</button>}
-          <button ref={toggleButton} type="button" aria-pressed={fullscreen} onClick={() => { if (fullscreen) void leave(); else void enter(); }}>{fullscreen ? 'Exit fullscreen' : 'Fullscreen'}</button>
+          <button ref={toggleButton} type="button" aria-pressed={fullscreen} onClick={() => { if (fullscreen) void leave(); else void enter(); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d={fullscreen ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5'} />
+            </svg>
+            {fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          </button>
         </div>
-        <div className="cad-workbench" data-panels-open={panelsOpen || undefined}>
+        <div className="cad-workbench" data-has-panels={hasPanels || undefined}>
         <div className="cad-viewer">
           <div className="cad-stage">
             <div ref={host} className="cad-canvas" aria-hidden={!!status} />
@@ -165,7 +163,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
           </div>}
         </div>
-        <div className="cad-sidebar" hidden={!panelsOpen}>
+        <div className="cad-sidebar" hidden={!hasPanels}>
           {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
             <summary>Part legend</summary>
             <ul className="cad-part-key" aria-label="Part colors">
