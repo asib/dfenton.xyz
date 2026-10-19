@@ -6,6 +6,8 @@ export interface CutPart {
 export interface CutBlank extends CutPart { ids: string[] }
 export interface CutListOutput { text: string; stale: boolean }
 export interface StockPreparation { millingMinLength: number; sawMinLength: number; resawKerf: number; resawCleanup: number }
+export type StockLayoutMode = 'auto' | 'separate' | 'together';
+export interface StockLayout { mode: StockLayoutMode; crosscutKerf: number }
 
 export function parseStockPreparation(output: string): StockPreparation | null {
   const lines = output.split('\n').filter((line) => /^ECHO:\s*"CUTLIST_STOCK_V1",/.test(line));
@@ -80,14 +82,32 @@ export function standardThickness(required: number): number | null {
   return stockThicknesses.find((thickness) => thickness >= required) ?? null;
 }
 
-export function roughDimensions(part: CutPart, thickness: number, widthExtra: number, lengthExtra: number, preparation?: StockPreparation | null, thicknessExtra = 0.25) {
+export function roughDimensions(part: CutPart, thickness: number, widthExtra: number, lengthExtra: number, preparation?: StockPreparation | null, thicknessExtra = 0.25, layout: StockLayout = { mode: 'auto', crosscutKerf: 0.125 }) {
   if (preparation && !Object.values(preparation).every((value) => Number.isFinite(value) && value > 0)) return null;
   if (part.resawGroup && (!preparation || part.quantity !== 2)) return null;
+  if (!Number.isInteger(part.quantity) || part.quantity < 1 ||
+      !['auto', 'separate', 'together'].includes(layout.mode) || !Number.isFinite(layout.crosscutKerf) || layout.crosscutKerf < 0) return null;
   const milled = milledThickness(part, preparation);
   if (![thickness, widthExtra, lengthExtra, thicknessExtra].every(Number.isFinite) ||
       !stockThicknesses.includes(thickness) || thickness < milled + thicknessExtra || thicknessExtra < 0 || widthExtra < 0 || lengthExtra < 0) return null;
-  return { quantity: part.resawGroup ? 1 : part.quantity, thickness, width: part.width + widthExtra,
-    length: Math.max(part.length + lengthExtra, preparation?.millingMinLength ?? 0, preparation?.sawMinLength ?? 0) };
+  const blankLength = part.length + lengthExtra;
+  const minimumLength = Math.max(preparation?.millingMinLength ?? 0, preparation?.sawMinLength ?? 0);
+  const separateLength = Math.max(blankLength, minimumLength);
+  const sharedLength = Math.max(part.quantity * blankLength + (part.quantity - 1) * layout.crosscutKerf, minimumLength);
+  // Compare separate blanks with one parent for this matching group, not a full board-layout optimization.
+  // Machine minimums apply before subdivision; the retained allowance still applies to each blank.
+  const crosscut = !part.resawGroup && part.quantity > 1 &&
+    (layout.mode === 'together' || (layout.mode === 'auto' && sharedLength < part.quantity * separateLength));
+  return { quantity: part.resawGroup || crosscut ? 1 : part.quantity, thickness, width: part.width + widthExtra,
+    length: crosscut ? sharedLength : separateLength, blankLength,
+    piecesPerBoard: part.resawGroup ? 2 : crosscut ? part.quantity : 1,
+    method: part.resawGroup ? 'resaw' as const : crosscut ? 'crosscut' as const : 'separate' as const };
+}
+
+export function stockPlan(rough: NonNullable<ReturnType<typeof roughDimensions>>): string {
+  if (rough.method === 'resaw') return 'Resaw 1 parent → 2 bookmatched halves';
+  if (rough.method === 'crosscut') return `S3S, then crosscut 1 parent → ${String(rough.piecesPerBoard)} × ${inches(rough.blankLength)}″ blanks`;
+  return '1 blank per parent board';
 }
 
 export function boardFeet(rough: { quantity: number; thickness: number; width: number; length: number }): number {

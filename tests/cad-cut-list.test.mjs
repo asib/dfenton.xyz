@@ -39,33 +39,53 @@ test('cut-list dimensions follow SCAD joinery and lamination edits', () => {
 test('adds machining allowances per blank and rejects undersized rough stock', () => {
   const side = list()[0];
   const rough = roughDimensions(side,1,.5,1);
-  expect(rough).toEqual({quantity:1,thickness:1,width:6.5,length:19});
+  expect(rough).toMatchObject({quantity:1,thickness:1,width:6.5,length:19,method:'separate',piecesPerBoard:1});
   expect(roughDimensions({...side,quantity:2},1,.5,1)).toEqual({...rough,quantity:2});
-  expect(roughDimensions(side,1,0,0)).toEqual({quantity:1,thickness:1,width:6,length:18});
+  expect(roughDimensions(side,1,0,0)).toMatchObject({quantity:1,thickness:1,width:6,length:18});
   for (const args of [[.5,.5,1],[1,-1,1],[1,.5,NaN],[1,.5,-1]]) {
     expect(roughDimensions(side,...args)).toBeNull();
   }
 });
 
-test('keeps short blanks at the longer machine minimum without changing finished lengths', () => {
+test('mills short matching blanks as shared parents before crosscutting below the machine minimums', () => {
   const prep = preparation();
   expect(prep).toEqual({millingMinLength:14,sawMinLength:10,resawKerf:1/16,resawCleanup:1/16});
   const parts = groupCutList(list());
   const end = parts.find(p=>p.id==='end-a'), riser = parts.find(p=>p.id==='riser-a');
   expect(end.length).toBe(8);
   expect(riser.length).toBe(10.75);
-  expect(roughDimensions(end,1,.5,1,prep).length).toBe(14);
-  expect(roughDimensions(riser,1,.5,1,prep).length).toBe(14);
-  expect(roughDimensions(end,1,.5,1,{...prep,millingMinLength:8}).length).toBe(10);
-  expect(roughDimensions(end,1,.5,1,{...prep,sawMinLength:16}).length).toBe(16);
-  expect(roughDimensions(end,1,.5,10,prep).length).toBe(18);
+  expect(roughDimensions(end,1,.5,1,prep)).toMatchObject({quantity:1,length:18.125,blankLength:9,piecesPerBoard:2,method:'crosscut'});
+  expect(roughDimensions(riser,1,.5,1,prep)).toMatchObject({quantity:1,length:23.625,blankLength:11.75,piecesPerBoard:2});
+  // No finished dimensions or intermediate blank dimensions inherit the machine minimum.
+  expect(end.length).toBe(8);
+  expect(roughDimensions(end,1,.5,1,{...prep,millingMinLength:8})).toMatchObject({quantity:1,length:18.125});
+  expect(roughDimensions(end,1,.5,1,{...prep,sawMinLength:20})).toMatchObject({quantity:1,length:20});
+  // Longer individual blanks already meet the minimum; a combined board adds kerf with no saving.
+  expect(roughDimensions(end,1,.5,10,prep)).toMatchObject({quantity:2,length:18,method:'separate'});
+  // A lone blank still has to be milled on stock meeting both minimums.
+  expect(roughDimensions({...end,quantity:1},1,.5,1,prep)).toMatchObject({quantity:1,length:14});
+  expect(roughDimensions({...end,quantity:1},1,.5,1,{...prep,millingMinLength:8})).toMatchObject({quantity:1,length:10});
+});
+
+test('supports shared/separate stock overrides and accounts for every crosscut kerf', () => {
+  const prep = preparation(), [side,end] = groupCutList(list());
+  expect(roughDimensions(end,1,.5,1,prep,.25,{mode:'separate',crosscutKerf:.125})).toMatchObject({quantity:2,length:14,method:'separate'});
+  expect(roughDimensions(side,1,.5,1,prep,.25,{mode:'together',crosscutKerf:.125})).toMatchObject({quantity:1,length:38.125,piecesPerBoard:2,method:'crosscut'});
+  expect(roughDimensions(end,1,.5,1,prep,.25,{mode:'auto',crosscutKerf:.25}).length).toBe(18.25);
+  expect(roughDimensions(end,1,.5,1,prep,.25,{mode:'auto',crosscutKerf:0}).length).toBe(18);
+  expect(roughDimensions({...end,quantity:3},1,.5,1,prep,.25,{mode:'auto',crosscutKerf:.125})).toMatchObject({quantity:1,length:27.25,piecesPerBoard:3});
+  // Shared-parent selection must not add waste when the saw kerf erases the saving.
+  expect(roughDimensions(end,1,.5,1,prep,.25,{mode:'auto',crosscutKerf:10}).method).toBe('separate');
+  for(const crosscutKerf of [-1,NaN,Infinity]) expect(roughDimensions(end,1,.5,1,prep,.25,{mode:'auto',crosscutKerf})).toBeNull();
+  expect(roughDimensions(end,1,.5,1,prep,.25,{mode:'unknown',crosscutKerf:.125})).toBeNull();
 });
 
 test('makes both bottom halves from one parent board with one kerf and cleanup on each half', () => {
   const prep = preparation(), bottom = groupCutList(list()).find(p=>p.id==='bottom-a');
   expect(bottom).toMatchObject({quantity:2,resawGroup:'bottom-parent',thickness:.25,width:3.9375,length:15.375});
   expect(milledThickness(bottom,prep)).toBe(11/16);
-  expect(roughDimensions(bottom,1,.5,1,prep)).toEqual({quantity:1,thickness:1,width:4.4375,length:16.375});
+  expect(roughDimensions(bottom,1,.5,1,prep)).toMatchObject({quantity:1,thickness:1,width:4.4375,length:16.375,method:'resaw',piecesPerBoard:2});
+  expect(roughDimensions(bottom,1,.5,1,prep,.25,{mode:'together',crosscutKerf:.5})).toEqual(roughDimensions(bottom,1,.5,1,prep));
   expect(roughDimensions(bottom,.5,.5,1,prep)).toBeNull();
   expect(roughDimensions(bottom,.75,.5,1,prep)).toBeNull();
   const thicker = groupCutList(list({Bottom_thickness:.375})).find(p=>p.id==='bottom-a');
@@ -101,15 +121,16 @@ test('rounds milled thickness plus surfacing allowance up to buying sizes, inclu
 test('tallies rough board feet with machine lengths, standard thickness and one bottom parent', () => {
   const prep = preparation(), parts = groupCutList(list());
   const rough = parts.map(part=>roughDimensions(part,standardThickness(milledThickness(part,prep)+.25),.5,1,prep));
-  const expectedVolumes = [247,182,84,147,72.6640625]; // Cubic inches of rough stock.
+  const expectedVolumes = [247,117.8125,70.875,147,72.6640625]; // Cubic inches of parent stock.
   rough.forEach((row,i)=>expect(boardFeet(row)).toBeCloseTo(expectedVolumes[i]/144,10));
-  expect(rough.reduce((total,row)=>total+boardFeet(row),0)).toBeCloseTo(732.6640625/144,10);
+  expect(rough.reduce((total,row)=>total+boardFeet(row),0)).toBeCloseTo(655.3515625/144,10);
+  expect(rough.reduce((total,row)=>total+boardFeet(row),0)*1.2).toBeCloseTo(5.461263020833333,10);
   expect(boardFeet({...rough[0],thickness:1.25})).toBeCloseTo(247*1.25/144,10);
   expect(rough[4].quantity).toBe(1);
   // Unequal laminations split rows without changing volume when using the same stock.
   const split = groupCutList(list({Handle_lamination_fraction:.6}));
   expect(split.reduce((total,part)=>total+boardFeet(roughDimensions(part,1,.5,1,prep)),0))
-    .toBeCloseTo(732.6640625/144,10);
+    .toBeCloseTo(655.3515625/144,10);
 });
 
 test('validates stock-preparation defaults and optional resaw-group records', () => {
