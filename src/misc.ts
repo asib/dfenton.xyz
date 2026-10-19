@@ -13,7 +13,8 @@ interface DiagramEntry extends EntryBase {
 export interface CadEntry extends EntryBase {
   type: 'cad';
   model: string;
-  source: string;
+  source?: string;
+  sourceUrl?: string;
   notes?: string;
   customizer?: {
     conditions?: Record<string, { parameter: string; value: string | number | boolean }>;
@@ -55,9 +56,10 @@ export const miscEntries = Object.entries(metadata).map(([path, entry]) => {
   }
   if (entry.type === 'cad' && (
     typeof entry.model !== 'string' || !/^[a-z0-9][a-z0-9-]*\.stl$/.test(entry.model) ||
-    typeof entry.source !== 'string' || !/^[a-z0-9][a-z0-9-]*\.scad$/.test(entry.source) ||
+    (entry.source !== undefined && (typeof entry.source !== 'string' || !/^[a-z0-9][a-z0-9-]*\.scad$/.test(entry.source))) ||
+    (entry.sourceUrl !== undefined && (typeof entry.sourceUrl !== 'string' || !entry.sourceUrl.startsWith('https://'))) ||
     (entry.notes !== undefined && typeof entry.notes !== 'string') ||
-    (entry.customizer !== undefined && !validCustomizer(entry.customizer)) ||
+    (entry.customizer !== undefined && (!entry.source || !validCustomizer(entry.customizer))) ||
     (entry.attribution !== undefined && (
       typeof entry.attribution.text !== 'string' ||
       typeof entry.attribution.url !== 'string' || !entry.attribution.url.startsWith('https://')

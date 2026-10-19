@@ -3,7 +3,7 @@ import type { CadEntry } from '../../misc';
 import { compileJob } from './compiler';
 import { configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
 
-type Entry = CadEntry & { href: string };
+type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
 interface Result { values: Values; stl: string; source: string }
 
@@ -165,6 +165,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
       </> : source ? <span className="cad-download-pending">Update successfully to download these settings.</span> :
         <a href={modelUrl} download>Default STL ↓</a>}
       <a href={sourceUrl} download>Original source ↓</a>
+      {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
     </div>
   </aside>;
 }

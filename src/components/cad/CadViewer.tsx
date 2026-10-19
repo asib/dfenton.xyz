@@ -42,7 +42,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         setStatus('');
       } catch {
         if (!controller.signal.aborted) {
-          setStatus('The 3D view could not load. You can still download the model and source below.');
+          setStatus('The 3D view could not load. You can still download the model below.');
         }
       }
     };
@@ -122,10 +122,11 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
           {viewer && <p className="cad-dimensions">Bounds: {viewer.size.x.toFixed(1)} × {viewer.size.y.toFixed(1)} × {viewer.size.z.toFixed(1)} mm (X × Y × Z)</p>}
           {!entry.customizer && <div className="cad-downloads">
             <a href={modelUrl} download>Download STL ↓</a>
-            <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>
+            {entry.source && <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>}
+            {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
           </div>}
         </div>
-        {entry.customizer && <ParametricControls entry={entry} available={!!viewer && !status} onCompiled={onCompiled} />}
+        {entry.customizer && entry.source && <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} />}
       </div>
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}

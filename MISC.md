@@ -54,11 +54,17 @@ CAD entries use the same list, local page URLs, and theme-aware previews. Set `t
 }
 ```
 
-Keep the STL, original OpenSCAD file, and previews in the entry folder. `model` and `source` must be local lowercase filenames ending in `.stl` and `.scad`. `notes` and `attribution` are optional. Preserve source comments and attribution. There are no third-party runtime requests: Three.js is bundled with the site and model files are served locally.
+Keep the STL and previews in the entry folder, along with the original OpenSCAD file when supplied. `model` must be a local lowercase `.stl` filename. Optional `source` is a local lowercase `.scad` filename and is required when `customizer` is present. Optional `sourceUrl` links to an editable CAD document over HTTPS, such as an Onshape document. `notes` and `attribution` are optional. Preserve source comments and attribution. There are no third-party runtime requests: Three.js is bundled with the site and model files are served locally.
 
 The viewer assumes STL coordinates are millimeters with Z up, matching OpenSCAD. It provides orbit/pan/zoom, keyboard rotation/zoom, solid/edge/wireframe modes, and one movable X/Y/Z clipping plane with a flip control. Colored stencil caps show cut material while preserving cavities; these require closed, consistently wound meshes. The first entry is a single solid, so part visibility controls are not shown. View controls do not affect the downloadable solid. Models with `customizer` also expose editable source parameters and regenerate the geometry in the browser.
 
-Re-export the supplied default model using OpenSCAD 2021.01 or later:
+### Onshape and other STL imports
+
+An exported mesh can be a complete CAD entry without an OpenSCAD file. Omit `source` and `customizer`, and provide `sourceUrl` if an editable design is available elsewhere. The local page still includes the full Three.js viewer and a hosted STL download; the source link is supplementary. Do not fabricate a SCAD file or editable parameters from a mesh.
+
+The planer crank drill adapter at `/misc/planer-crank-drill-adapter/` was exported from the shared Onshape document's **Crank adapter** Part Studio, selecting the single **Planer crank adapter - 12 mm female hex** part. Export settings: STL, Binary, Millimeter, Fine resolution, Download, with **Export models oriented Y axis up** unchecked. This preserves the site's Z-up convention. Its exported bounds are 68 × 68 × 40 mm. Retain the shared source URL, including its query parameters, and require export permission before downloading future revisions. Re-export and commit the mesh to update the page; it does not track Onshape changes automatically. Capture both preview images from the exported mesh in the local viewer.
+
+For OpenSCAD entries, re-export the supplied default model using OpenSCAD 2021.01 or later:
 
 ```sh
 openscad --export-format binstl \
