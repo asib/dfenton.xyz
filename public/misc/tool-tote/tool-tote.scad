@@ -331,13 +331,147 @@ if (Show_cut_list) {
 // Each view defines right/up/toward-camera axes, then dimension witnesses:
 // [label, point A, point B, horizontal|vertical, outside side (-1|1), tier].
 // The private drawing pass always renders the assembled tote, independent of Part.
-function drawing_point(p) = inch * p;
+// Avoid echo's six-significant-digit rounding: encode each millimetre
+// coordinate as integer whole millimetres plus integer millionths.
+function drawing_point(p) = [for (n=p*inch) [floor(n), round((n-floor(n))*1000000)]];
 // Crop only the drawing, not the model. Breaks mark continuing material.
 drawing_notch_x = riser_inner_x - Joint_fit/2;
 drawing_left_x = drawing_notch_x - 1;
 drawing_bottom_z = max(Side_height + (handle_bottom_z-Side_height)/2, handle_bottom_z-0.75);
 drawing_laminate_section_y = -Handle_width/2 + Handle_width*Handle_lamination_fraction/2;
+// Part sheets select one physical mesh by its source color. Dimensions are
+// finished sizes; stock preparation stays in the cut list. The optional sixth
+// view field contains dashed machining/reference lines, not model edges.
+function drawing_dim(label, a, b, direction, side, tier=1) =
+    [label, drawing_point(a), drawing_point(b), direction, side, tier];
+function drawing_line(a, b) = [drawing_point(a), drawing_point(b)];
+function drawing_section(depth, crop, breaks=[]) = [depth*inch, crop*inch, breaks, [], []];
+drawing_groove_top = Bottom_groove_height + Bottom_thickness + Bottom_groove_fit;
+drawing_profile_top = min(Side_height, drawing_groove_top + 0.75);
+drawing_dado_inner = end_inner_x - Joint_fit/2;
+drawing_dado_outer = min(Body_length/2, end_outer_x + Joint_fit/2);
+drawing_dado_left = max(-Body_length/2, drawing_dado_inner - 1);
+drawing_cheek_y = ((Handle_width+Joint_fit)/2 + Riser_width/2)/2;
+
+function drawing_handle_part(index, quantity) = let(
+    y0 = index == 0 ? -Handle_width/2 : lamination_y,
+    y1 = index == 0 ? lamination_y : Handle_width/2,
+    ymid = (y0+y1)/2,
+    end_plane = (drawing_notch_x+Handle_length/2)/2
+) [index == 0 ? "handle-a" : "handle-b",
+   quantity == 2 ? "Handle laminations" : str("Handle lamination ", index == 0 ? "A" : "B"), quantity,
+   ["Grain along length. Both underside notches have the same dimensions; mirror at the other end.",
+    "Glue the two laminations face to face. The notch roof bears on the riser-slot floor; see joint sheet.",
+    Cheek_screw_bores ? "Optional bores are through each lamination, mirrored at both ends. Layout remains unconfirmed." : "Optional screw bores are off."],
+   index == 0 ? handle_a_color : handle_b_color, [
+    ["face", "Broad face / both ends notched", [[1,0,0],[0,0,1],[0,-1,0]], [
+        drawing_dim("Length", [-Handle_length/2,y0,handle_top_z], [Handle_length/2,y0,handle_top_z], "horizontal", 1),
+        drawing_dim("Blank height", [0,y0,handle_bottom_z], [0,y0,handle_top_z], "vertical", 1),
+        drawing_dim("Notch depth", [drawing_notch_x,y0,handle_bottom_z], [drawing_notch_x,y0,notch_seat_z], "vertical", -1),
+        drawing_dim("Each notch", [drawing_notch_x,y0,notch_seat_z], [Handle_length/2,y0,notch_seat_z], "horizontal", -1)
+    ]],
+    ["end", "Section through notched end", [[0,1,0],[0,0,1],[1,0,0]], [
+        drawing_dim("Lamination thickness", [end_plane,y0,notch_seat_z], [end_plane,y1,notch_seat_z], "horizontal", -1),
+        drawing_dim("Above notch", [end_plane,y1,notch_seat_z], [end_plane,y1,handle_top_z], "vertical", 1)
+    ], drawing_section(end_plane,[y0,notch_seat_z,y1,handle_top_z])],
+    if (Cheek_screw_bores)
+    ["bores", "Optional bore / right end enlarged", [[1,0,0],[0,0,1],[0,-1,0]], [
+        drawing_dim("Axis from tip", [riser_center_x,ymid,screw_z], [Handle_length/2,ymid,screw_z], "horizontal", -1),
+        drawing_dim("Axis above roof", [riser_center_x,ymid,notch_seat_z], [riser_center_x,ymid,screw_z], "vertical", 1),
+        drawing_dim("Bore diameter", [riser_center_x-Screw_bore_diameter/2,ymid,screw_z], [riser_center_x+Screw_bore_diameter/2,ymid,screw_z], "horizontal", 1)
+    ], drawing_section(-ymid,[drawing_notch_x-0.25,handle_bottom_z,Handle_length/2,handle_top_z],["left"]), [
+        drawing_line([riser_center_x-Screw_bore_diameter,ymid,screw_z],[riser_center_x+Screw_bore_diameter,ymid,screw_z]),
+        drawing_line([riser_center_x,ymid,screw_z-Screw_bore_diameter],[riser_center_x,ymid,screw_z+Screw_bore_diameter])
+    ]]
+]];
+
+function drawing_part_sheets() = [
+    ["side", "Sides", 2,
+     ["Inside face shown. Grain along length. End dados are mirrored: use the same inset at both ends.",
+      "Dashed line marks the stopped bottom-groove run; its ends overlap the end-panel dados.",
+      "Cut only the inside face. The two sides are identical blanks, turned inward when assembled."], side_b_color, [
+        ["face", "Inside face", [[1,0,0],[0,0,1],[0,-1,0]], [
+            drawing_dim("Length", [-Body_length/2,inner_w/2,Side_height], [Body_length/2,inner_w/2,Side_height], "horizontal", 1),
+            drawing_dim("Height", [-Body_length/2,inner_w/2,0], [-Body_length/2,inner_w/2,Side_height], "vertical", -1),
+            drawing_dim("Stopped groove run", [-side_groove_half_length,inner_w/2,Bottom_groove_height], [side_groove_half_length,inner_w/2,Bottom_groove_height], "horizontal", -1),
+            drawing_dim("Stop from each end", [-Body_length/2,inner_w/2,Bottom_groove_height], [-side_groove_half_length,inner_w/2,Bottom_groove_height], "horizontal", -1, 2)
+        ], [], [
+            drawing_line([-side_groove_half_length,inner_w/2,(Bottom_groove_height+drawing_groove_top)/2], [side_groove_half_length,inner_w/2,(Bottom_groove_height+drawing_groove_top)/2]),
+            for (s=[-1,1]) drawing_line([s*side_groove_half_length,inner_w/2,Bottom_groove_height], [s*side_groove_half_length,inner_w/2,drawing_groove_top])
+        ]],
+        ["dado", "End dado / section above bottom groove", [[1,0,0],[0,1,0],[0,0,1]], [
+            drawing_dim("Dado width", [drawing_dado_inner,inner_w/2,0], [drawing_dado_outer,inner_w/2,0], "horizontal", 1),
+            if (drawing_dado_outer < Body_length/2)
+                drawing_dim("Inset from end", [drawing_dado_outer,inner_w/2,0], [Body_length/2,inner_w/2,0], "horizontal", 1, 2),
+            drawing_dim("Side thickness", [Body_length/2,inner_w/2,0], [Body_length/2,Body_width/2,0], "vertical", 1),
+            drawing_dim("Dado depth", [drawing_dado_inner,inner_w/2,0], [drawing_dado_inner,inner_w/2+End_dado_depth,0], "vertical", -1)
+        ], drawing_section((Side_height+drawing_groove_top)/2,[drawing_dado_left,inner_w/2,Body_length/2,Body_width/2],drawing_dado_left > -Body_length/2 ? ["left"] : [])],
+        ["groove", "Bottom groove / section at side midpoint", [[0,1,0],[0,0,1],[1,0,0]], [
+            drawing_dim("Groove depth", [0,inner_w/2,Bottom_groove_height], [0,inner_w/2+Bottom_groove_depth,Bottom_groove_height], "horizontal", -1),
+            drawing_dim("From bottom", [0,inner_w/2,0], [0,inner_w/2,Bottom_groove_height], "vertical", -1),
+            drawing_dim("Groove width", [0,inner_w/2,Bottom_groove_height], [0,inner_w/2,drawing_groove_top], "vertical", -1, 2)
+        ], drawing_section(0,[inner_w/2,0,Body_width/2,drawing_profile_top],drawing_profile_top < Side_height ? ["top"] : [])]
+    ]],
+    ["end", "Ends", 2,
+     ["Grain along the full end-panel length. Riser housing is centered on the OUTSIDE face; bottom groove is INSIDE.",
+      "Both cuts run through their respective panel edges. Dashed section line marks the original outside face.",
+      "Center panels in the side dados and align all wall bottoms. Turn the two ends to face opposite directions."], end_b_color, [
+        ["inside", "Inside face / bottom groove", [[0,-1,0],[0,0,1],[-1,0,0]], [
+            drawing_dim("Length", [end_inner_x,-end_w/2,Side_height], [end_inner_x,end_w/2,Side_height], "horizontal", 1),
+            drawing_dim("Height", [end_inner_x,end_w/2,0], [end_inner_x,end_w/2,Side_height], "vertical", -1),
+            drawing_dim("From bottom", [end_inner_x,-end_w/2,0], [end_inner_x,-end_w/2,Bottom_groove_height], "vertical", 1),
+            drawing_dim("Groove width", [end_inner_x,-end_w/2,Bottom_groove_height], [end_inner_x,-end_w/2,drawing_groove_top], "vertical", 1, 2)
+        ]],
+        ["outside", "Outside face / centered riser housing", [[0,1,0],[0,0,1],[1,0,0]], [
+            drawing_dim("Housing width", [end_outer_x,-(Riser_width+Joint_fit)/2,Side_height], [end_outer_x,(Riser_width+Joint_fit)/2,Side_height], "horizontal", 1),
+            drawing_dim("Each margin", [end_outer_x,-end_w/2,0], [end_outer_x,-(Riser_width+Joint_fit)/2,0], "horizontal", -1)
+        ]],
+        ["section", "Lower end / section through housing center", [[1,0,0],[0,0,1],[0,-1,0]], [
+            drawing_dim("Blank thickness", [end_inner_x,0,0], [end_outer_x,0,0], "horizontal", -1, 2),
+            drawing_dim("Groove depth", [end_inner_x,0,Bottom_groove_height], [end_inner_x+Bottom_groove_depth,0,Bottom_groove_height], "horizontal", -1),
+            drawing_dim("Housing depth", [riser_inner_x,0,drawing_profile_top], [end_outer_x,0,drawing_profile_top], "horizontal", 1)
+        ], drawing_section(0,[end_inner_x,0,end_outer_x,drawing_profile_top],drawing_profile_top < Side_height ? ["top"] : []), [
+            drawing_line([end_outer_x,0,0], [end_outer_x,0,drawing_profile_top])
+        ]]
+    ]],
+    ["riser", "Risers", 2,
+     ["Grain along riser length. Bridle slot is centered across the width and cut through the full thickness.",
+      str("Bottoms align with tote wall bottoms; each is housed ", Riser_dado_depth, " in into an end's outside face."),
+      Cheek_screw_bores ? "Optional bore is centered in thickness, through both cheeks along Y. Layout remains unconfirmed." : "Optional screw bores are off."], riser_b_color, [
+        ["face", "Broad face / centered bridle slot", [[0,1,0],[0,0,1],[1,0,0]], [
+            drawing_dim("Length", [riser_outer_x,-Riser_width/2,0], [riser_outer_x,-Riser_width/2,Riser_length], "vertical", -1),
+            drawing_dim("Width", [riser_outer_x,-Riser_width/2,0], [riser_outer_x,Riser_width/2,0], "horizontal", -1),
+            drawing_dim("Slot width", [riser_outer_x,-(Handle_width+Joint_fit)/2,Riser_length], [riser_outer_x,(Handle_width+Joint_fit)/2,Riser_length], "horizontal", 1),
+            drawing_dim("Slot depth", [riser_outer_x,Riser_width/2,notch_seat_z], [riser_outer_x,Riser_width/2,Riser_length], "vertical", 1)
+        ]],
+        ["cheek", "Upper cheek / section along thickness", [[1,0,0],[0,0,1],[0,-1,0]], [
+            drawing_dim("Thickness", [riser_inner_x,drawing_cheek_y,Riser_length], [riser_outer_x,drawing_cheek_y,Riser_length], "horizontal", -1),
+            if (Cheek_screw_bores) drawing_dim("Bore diameter", [riser_center_x-Screw_bore_diameter/2,drawing_cheek_y,screw_z], [riser_center_x+Screw_bore_diameter/2,drawing_cheek_y,screw_z], "horizontal", 1),
+            if (Cheek_screw_bores) drawing_dim("Axis from top", [riser_center_x,drawing_cheek_y,screw_z], [riser_center_x,drawing_cheek_y,Riser_length], "vertical", 1)
+        ], drawing_section(-drawing_cheek_y,[riser_inner_x,max(0,notch_seat_z-0.5),riser_outer_x,Riser_length],["bottom"]), [
+            if (Cheek_screw_bores) drawing_line([riser_inner_x,drawing_cheek_y,screw_z],[riser_outer_x,drawing_cheek_y,screw_z]),
+            if (Cheek_screw_bores) drawing_line([riser_center_x,drawing_cheek_y,screw_z-Screw_bore_diameter],[riser_center_x,drawing_cheek_y,screw_z+Screw_bore_diameter])
+        ]]
+    ]],
+    drawing_handle_part(0, Handle_lamination_fraction == 0.5 ? 2 : 1),
+    if (Handle_lamination_fraction != 0.5) drawing_handle_part(1,1),
+    ["bottom", "Bookmatched bottom halves", 2,
+     ["Resaw ONE parent board, open as a book, then edge-glue the two halves. Grain runs along length.",
+      str("Glued panel: ", bottom_l, " x ", bottom_w, " x ", Bottom_thickness, " in. Dashed edge is the glue joint."),
+      str("Total panel clearance: ", Bottom_width_allowance, " in across width; ", Bottom_length_allowance, " in along length; split equally at opposing edges."),
+      "Dimensions are finished sizes. See the cut list for parent-stock thickness, resaw kerf, cleanup and machining allowances."], bottom_a_color, [
+        ["face", "One half / face view", [[1,0,0],[0,1,0],[0,0,1]], [
+            drawing_dim("Length", [-bottom_l/2,0,Bottom_groove_height], [bottom_l/2,0,Bottom_groove_height], "horizontal", 1),
+            drawing_dim("Half width", [-bottom_l/2,-bottom_w/2,Bottom_groove_height], [-bottom_l/2,0,Bottom_groove_height], "vertical", -1)
+        ], [], [drawing_line([-bottom_l/2,0,Bottom_groove_height],[bottom_l/2,0,Bottom_groove_height])]],
+        ["edge", "End grain / finished thickness", [[0,1,0],[0,0,1],[1,0,0]], [
+            drawing_dim("Thickness", [bottom_l/2,0,Bottom_groove_height], [bottom_l/2,0,Bottom_groove_height+Bottom_thickness], "vertical", 1)
+        ]]
+    ]]
+];
+
 if (!is_undef($misc_drawing) && $misc_drawing) {
+    echo("PART_DRAWINGS_V1", drawing_part_sheets());
     echo("DRAWING_V1", ["inches", [
         ["front", "Front", [[1,0,0], [0,0,1], [0,-1,0]], [
             ["Handle", drawing_point([-Handle_length/2,0,handle_top_z]), drawing_point([Handle_length/2,0,handle_top_z]), "horizontal", 1, 1],

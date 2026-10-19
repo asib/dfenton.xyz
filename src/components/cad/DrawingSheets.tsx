@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { inches } from './cutList';
-import { dimensionValue, project, type DrawingDimension, type DrawingOutput, type DrawingSheet, type ProjectedView } from './drawings';
+import { dimensionValue, project, type DrawingDimension, type DrawingOutput, type DrawingSheet, type PartDrawing, type ProjectedView } from './drawings';
 
 interface Placement { view: ProjectedView; x: number; y: number; scale: number }
 const width = (view: ProjectedView) => view.bounds[2] - view.bounds[0];
@@ -35,15 +35,19 @@ function Dimension({ dimension, placement, units }: { dimension: DrawingDimensio
   </g>;
 }
 
-function ViewGeometry({ placement, units }: { placement: Placement; units: DrawingSheet['units'] }) {
+function ViewGeometry({ placement, units, hatchPrefix = 'joint' }: { placement: Placement; units: DrawingSheet['units']; hatchPrefix?: string }) {
   const { view, x, y, scale } = placement;
   const px = (n: number) => x + (n - view.bounds[0]) * scale;
   const py = (n: number) => y + (view.bounds[3] - n) * scale;
   const path = view.lines.map(([a, b, c, d]) => `M${String(px(a))},${String(py(b))}L${String(px(c))},${String(py(d))}`).join('');
   return <g data-drawing-view={view.id}>
-    {view.profiles?.map((loops, i) => <path key={i} data-section-part={i} fill={`url(#joint-hatch-${String(i % 3)})`} fillRule="evenodd"
+    {view.profiles?.map((loops, i) => <path key={i} data-section-part={i} fill={`url(#${hatchPrefix}-hatch-${String(i % 3)})`} fillRule="evenodd"
       d={loops.map(loop => `${loop.map((p, j) => `${j ? 'L' : 'M'}${String(px(p[0]))},${String(py(p[1]))}`).join('')}Z`).join('')} />)}
     <path className="cad-drawing-edges" d={path} />
+    {view.guides?.map(([a, b], i) => {
+      const p = project(a, view.axes), q = project(b, view.axes);
+      return <line key={i} className="cad-drawing-guide" x1={px(p[0])} y1={py(p[1])} x2={px(q[0])} y2={py(q[1])} />;
+    })}
     {view.breaks?.map(([a, b, c, d], i) => {
       const ax = px(a), ay = py(b), bx = px(c), by = py(d), length = Math.hypot(bx - ax, by - ay);
       const nx = -(by - ay) / length * 4, ny = (bx - ax) / length * 4;
@@ -60,6 +64,13 @@ function ViewGeometry({ placement, units }: { placement: Placement; units: Drawi
     })}
     {view.dimensions.map((dimension, i) => <Dimension key={i} dimension={dimension} placement={placement} units={units} />)}
   </g>;
+}
+
+function Hatches({ prefix }: { prefix: string }) {
+  return <defs>{[45, -45, 45].map((angle, i) => <pattern key={i} id={`${prefix}-hatch-${String(i)}`} patternUnits="userSpaceOnUse" width={i === 2 ? 12 : 8} height={i === 2 ? 12 : 8} patternTransform={`rotate(${String(angle)})`}>
+    <line className="cad-drawing-hatch" x1="0" y1="0" x2="0" y2="12" />
+    {i === 2 && <line className="cad-drawing-hatch" x1="3" y1="0" x2="3" y2="12" />}
+  </pattern>)}</defs>;
 }
 
 function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
@@ -103,10 +114,7 @@ function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
   return <svg className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="joint-sheet-title joint-sheet-description">
     <title id="joint-sheet-title">{title} — handle/riser joint detail</title>
     <desc id="joint-sheet-description">Enlarged longitudinal and transverse sections through the assembled handle/riser bridle joint. Hatching distinguishes the wooden pieces. The highlighted bearing surface joins the handle notch roof to the riser-slot floor.</desc>
-    <defs>{[45, -45, 45].map((angle, i) => <pattern key={i} id={`joint-hatch-${String(i)}`} patternUnits="userSpaceOnUse" width={i === 2 ? 12 : 8} height={i === 2 ? 12 : 8} patternTransform={`rotate(${String(angle)})`}>
-      <line className="cad-drawing-hatch" x1="0" y1="0" x2="0" y2="12" />
-      {i === 2 && <line className="cad-drawing-hatch" x1="3" y1="0" x2="3" y2="12" />}
-    </pattern>)}</defs>
+    <Hatches prefix="joint" />
     <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / HANDLE–RISER JOINT</text>
     <text className="cad-drawing-sheet-meta" x="1170" y="32" textAnchor="end">{sheet.units === 'inches' ? 'INCHES' : 'MILLIMETRES'} · ENLARGED SECTIONS</text>
     {placements.map(placement => <g key={placement.view.id}>
@@ -121,8 +129,46 @@ function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
   </svg>;
 }
 
+function PartSheet({ part, units, number, title }: { part: PartDrawing; units: DrawingSheet['units']; number: number; title: string }) {
+  const [main, ...details] = part.views;
+  const bottomMargin = (view: ProjectedView) => 32 * Math.max(0, ...view.dimensions
+    .filter(d => d.direction === 'horizontal' && d.side === -1).map(d => d.tier));
+  const mainScale = Math.min(880 / width(main), 360 / height(main));
+  const mainPlacement = { view: main, x: (1200 - width(main) * mainScale) / 2, y: 110, scale: mainScale };
+  const mainCaption = mainPlacement.y + height(main) * mainScale + bottomMargin(main) + 35;
+  const detailY = mainCaption + 130;
+  const detailPlacements = details.map((view, i) => {
+    const scale = Math.min(340 / width(view), 270 / height(view));
+    const center = details.length === 1 ? 600 : 310 + i * 580;
+    return { view, x: center - width(view) * scale / 2, y: detailY, scale };
+  });
+  const detailCaption = Math.max(mainCaption, ...detailPlacements.map(p => p.y + height(p.view) * p.scale + bottomMargin(p.view) + 35));
+  const notesY = detailCaption + 50, sheetHeight = notesY + part.notes.length * 23 + 45;
+  const prefix = `part-${part.id}`;
+  return <svg className="cad-drawing-sheet" data-part-sheet={part.id} viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby={`${prefix}-title ${prefix}-description`}>
+    <title id={`${prefix}-title`}>{part.title} — dimensioned part sheet, quantity {part.quantity}</title>
+    <desc id={`${prefix}-description`}>Finished part dimensions and joinery. Detail views use independent scales. Dashed lines identify machining references; hatching identifies sectioned material. Use written dimensions.</desc>
+    <Hatches prefix={prefix} />
+    <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / {part.title.toUpperCase()}</text>
+    <text className="cad-drawing-sheet-meta" x="1170" y="32" textAnchor="end">QTY {part.quantity} · {units === 'inches' ? 'INCHES' : 'MILLIMETRES'} · FINISHED DIMENSIONS</text>
+    <ViewGeometry placement={mainPlacement} units={units} hatchPrefix={prefix} />
+    <text className="cad-drawing-view-title" x="600" y={mainCaption} textAnchor="middle">{main.title.toUpperCase()}</text>
+    {detailPlacements.map(p => <g key={p.view.id}>
+      <ViewGeometry placement={p} units={units} hatchPrefix={prefix} />
+      <text className="cad-drawing-view-title" x={p.x + width(p.view) * p.scale / 2} y={detailCaption} textAnchor="middle">{p.view.title.toUpperCase()}</text>
+    </g>)}
+    {part.notes.map((note, i) => <text key={i} className="cad-drawing-note" x="30" y={notesY + i * 23}>{note}</text>)}
+    <text className="cad-drawing-sheet-meta" x="30" y={sheetHeight - 20}>DETAIL SCALES VARY · BREAK MARKS INDICATE CONTINUING MATERIAL · USE WRITTEN DIMENSIONS</text>
+    <text className="cad-drawing-sheet-meta" x="1170" y={sheetHeight - 20} textAnchor="end">PART / {String(number).padStart(2, '0')}</text>
+  </svg>;
+}
+
 export default function DrawingSheets({ output, title }: { output: DrawingOutput; title: string }) {
   const [zoom, setZoom] = useState(1);
+  const [partId, setPartId] = useState('side');
+  const parts = output.sheet?.parts ?? [];
+  const partIndex = Math.max(0, parts.findIndex(part => part.id === partId));
+  const part = parts.length > 0 ? parts[partIndex] : undefined;
   return <section className="cad-drawings" aria-labelledby="cad-drawings-title">
     <div className="cad-drawings-heading">
       <h2 id="cad-drawings-title">Drawings</h2>
@@ -143,6 +189,20 @@ export default function DrawingSheets({ output, title }: { output: DrawingOutput
         <h3 id="cad-joint-detail-title" className="cad-drawing-sheet-heading">Handle/riser joint detail</h3>
         <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Handle/riser joint drawing sheet, scroll to pan">
           <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}><JointSheet sheet={output.sheet} title={title} /></div>
+        </div>
+      </>}
+      {part && <>
+        <div className="cad-drawings-heading cad-part-heading">
+          <h3 id="cad-part-sheets-title" className="cad-drawing-sheet-heading">Dimensioned part sheets</h3>
+          <label>Part sheet <select aria-label="Part sheet" value={part.id} onChange={event => { setPartId(event.target.value); }}>
+            {parts.map(p => <option key={p.id} value={p.id}>{p.title} · Qty {p.quantity}</option>)}
+          </select></label>
+        </div>
+        <p className="cad-drawing-help">Choose a part to see its finished dimensions and joinery. Matching pieces share a sheet; unequal handle laminations get separate sheets. Rough stock and machining allowances are in the cut list.</p>
+        <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Dimensioned part drawing sheet, scroll to pan">
+          <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}>
+            <PartSheet part={part} units={output.sheet.units} number={partIndex + 3} title={title} />
+          </div>
         </div>
       </>}
     </>}

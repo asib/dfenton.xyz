@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { render, parameters } from 'openrscad-engine/node';
 import { compileDrawings } from '../src/components/cad/drawingCompiler';
-import { dimensionValue, parseDrawingDefinition } from '../src/components/cad/drawings';
+import { dimensionValue, parseDrawingDefinition, parsePartDrawingDefinitions } from '../src/components/cad/drawings';
 import { projectDrawing } from '../src/components/cad/drawingGeometry';
 import { displayMesh } from '../src/components/cad/displayMesh';
 import { configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
@@ -43,6 +43,112 @@ describe('orthographic visible edges', () => {
   test('retains seams between touching physical pieces', () => {
     const view = projection('color("red") cube([5,1,5]); color("blue") translate([5,0,0]) cube([5,1,5]);');
     expect(covers(view.lines,5,2.5)).toBe(true);
+  });
+});
+
+const partView = (sheet, part, view) => sheet.parts.find(p=>p.id===part).views.find(v=>v.id===`part-${part}-${view}`);
+const partDimensions = (sheet, part) => Object.fromEntries(sheet.parts.find(p=>p.id===part).views.flatMap(v=>
+  v.dimensions.map(d=>[d.label,dimensionValue(d,v,sheet.units)])));
+
+describe('dimensioned part sheets', () => {
+  test('covers all ten pieces with five grouped sheets and finished sizes', () => {
+    const sheet=drawing();
+    expect(sheet.parts.map(p=>[p.id,p.quantity])).toEqual([['side',2],['end',2],['riser',2],['handle-a',2],['bottom',2]]);
+    const expected={side:{Length:18,Height:6,'Side thickness':.75},end:{Length:8,Height:6,'Blank thickness':.75},
+      riser:{Length:10.75,Width:2.5,Thickness:.75},'handle-a':{Length:20,'Blank height':3,'Lamination thickness':.5625},
+      bottom:{Length:15.375,'Half width':3.9375,Thickness:.25}};
+    for (const [id,dimensions] of Object.entries(expected)) for (const [label,value] of Object.entries(dimensions)) {
+      expect(partDimensions(sheet,id)[label]).toBeCloseTo(value,6);
+    }
+    const side=partView(sheet,'side','face'), end=partView(sheet,'end','inside'), bottom=partView(sheet,'bottom','face');
+    expect((side.bounds[2]-side.bounds[0])/25.4).toBeCloseTo(18,5);
+    expect((end.bounds[2]-end.bounds[0])/25.4).toBeCloseTo(8,5);
+    expect((bottom.bounds[3]-bottom.bounds[1])/25.4).toBeCloseTo(3.9375,5);
+  });
+  test('defines stopped-groove runs inside both ends and measures the actual side dado and groove cuts', () => {
+    const sheet=drawing(), dimensions=partDimensions(sheet,'side');
+    expect(dimensions['Stopped groove run']).toBeCloseTo(15.5,6);
+    expect(dimensions['Stop from each end']).toBeCloseTo(1.25,6);
+    expect(dimensions['Inset from end']).toBeCloseTo(.75,6);
+    expect(dimensions['Dado width']).toBeCloseTo(.75,6);
+    expect(dimensions['Dado depth']).toBeCloseTo(.25,6);
+    expect(dimensions['Groove depth']).toBeCloseTo(.25,6);
+    expect(dimensions['From bottom']).toBeCloseTo(.5,6);
+    expect(dimensions['Groove width']).toBeCloseTo(.25,6);
+    const dado=partView(sheet,'side','dado'), groove=partView(sheet,'side','groove');
+    expect(contains(dado.profiles[0],7.875*25.4,3.85*25.4)).toBe(false);
+    expect(contains(dado.profiles[0],7.875*25.4,4.1*25.4)).toBe(true);
+    expect(contains(groove.profiles[0],3.85*25.4,.625*25.4)).toBe(false);
+    expect(contains(groove.profiles[0],4.1*25.4,.625*25.4)).toBe(true);
+    const guide=partView(sheet,'side','face').guides[0];
+    expect(guide[0][0]/25.4).toBeCloseTo(-7.75,6);
+    expect(guide[1][0]/25.4).toBeCloseTo(7.75,6);
+  });
+  test('shows the end housing and bottom groove on opposite faces with a solid web between them', () => {
+    const sheet=drawing(), dimensions=partDimensions(sheet,'end');
+    expect(dimensions['Housing width']).toBeCloseTo(2.5,6);
+    expect(dimensions['Each margin']).toBeCloseTo(2.75,6);
+    expect(dimensions['Housing depth']).toBeCloseTo(.25,6);
+    expect(dimensions['Groove depth']).toBeCloseTo(.25,6);
+    const loops=partView(sheet,'end','section').profiles[0];
+    expect(contains(loops,7.625*25.4,.625*25.4)).toBe(false);
+    expect(contains(loops,7.875*25.4,.625*25.4)).toBe(true);
+    expect(contains(loops,8.125*25.4,.625*25.4)).toBe(false);
+  });
+  test('tracks fractional fit, groove, panel and end-placement edits without rounding construction dimensions', () => {
+    const sheet=drawing({Side_thickness:.875,End_thickness:1,End_setback:1.125,End_dado_depth:.3125,
+      Riser_dado_depth:.3125,Bottom_groove_depth:.375,Bottom_groove_height:.625,Bottom_groove_fit:.03125,Joint_fit:.04});
+    const side=partDimensions(sheet,'side'),end=partDimensions(sheet,'end'),bottom=partDimensions(sheet,'bottom');
+    expect(side['Dado width']).toBeCloseTo(1.04,6);
+    expect(side['Inset from end']).toBeCloseTo(1.105,6);
+    expect(side['Stopped groove run']).toBeCloseTo(14.5,6);
+    expect(side['Stop from each end']).toBeCloseTo(1.75,6);
+    expect(side['Groove width']).toBeCloseTo(.28125,6);
+    expect(side['Groove depth']).toBeCloseTo(.375,6);
+    expect(side['From bottom']).toBeCloseTo(.625,6);
+    expect(end['Housing width']).toBeCloseTo(2.54,6);
+    expect(end['Housing depth']).toBeCloseTo(.3125,6);
+    expect(end.Length).toBeCloseTo(7.875,6);
+    expect(bottom.Length).toBeCloseTo(14.375,6);
+    expect(bottom['Half width']).toBeCloseTo(3.9375,6);
+  });
+  test('splits unequal laminations while retaining one resawn bottom pair', () => {
+    const sheet=drawing({Handle_lamination_fraction:.4});
+    expect(sheet.parts.reduce((sum,p)=>sum+p.quantity,0)).toBe(10);
+    expect(sheet.parts.filter(p=>p.id.startsWith('handle')).map(p=>p.quantity)).toEqual([1,1]);
+    expect(partDimensions(sheet,'handle-a')['Lamination thickness']).toBeCloseTo(.45,6);
+    expect(partDimensions(sheet,'handle-b')['Lamination thickness']).toBeCloseTo(.675,6);
+    expect(sheet.parts.filter(p=>p.id==='bottom').map(p=>p.quantity)).toEqual([2]);
+  });
+  test('fully locates optional bores and preserves the holes in part sections', () => {
+    const sheet=drawing({Cheek_screw_bores:true}),handle=partDimensions(sheet,'handle-a'),riser=partDimensions(sheet,'riser');
+    expect(handle['Bore diameter']).toBeCloseTo(.15625,6);
+    expect(handle['Axis from tip']).toBeCloseTo(1.625,6);
+    expect(handle['Axis above roof']).toBeCloseTo(.875,6);
+    expect(riser['Axis from top']).toBeCloseTo(.875,6);
+    expect(riser['Bore diameter']).toBeCloseTo(.15625,6);
+    for (const [part,view] of [['handle-a','bores'],['riser','cheek']]) {
+      const loops=partView(sheet,part,view).profiles[0];
+      expect(contains(loops,8.375*25.4,9.875*25.4)).toBe(false);
+      expect(contains(loops,8.375*25.4,10.25*25.4)).toBe(true);
+    }
+  });
+  test('dimensions a flush end dado by its clipped cut width and omits the zero inset', () => {
+    const dimensions=partDimensions(drawing({End_setback:0,Joint_fit:.04}),'side');
+    expect(dimensions['Inset from end']).toBeUndefined();
+    expect(dimensions['Dado width']).toBeCloseTo(.77,6);
+  });
+  test('rejects ambiguous physical-part mapping and malformed sheets; keeps older assembly-only sources compatible', () => {
+    expect(()=>compileDrawings(source.replace('], side_b_color, [','], [0,0,0], ['),render)).toThrow('Expected one physical mesh');
+    expect(parsePartDrawingDefinitions('')).toEqual([]);
+    const result=render(`$misc_drawing=true;\n${source}`),output=result.echo;result.free();
+    expect(()=>parsePartDrawingDefinitions(output+'\n'+output)).toThrow('one part drawing');
+    const row=JSON.parse(output.split('\n').find(l=>l.startsWith('ECHO: "PART_DRAWINGS_V1",')).replace('ECHO: "PART_DRAWINGS_V1", ',''));
+    row[0][2]=0;
+    expect(()=>parsePartDrawingDefinitions('ECHO: "PART_DRAWINGS_V1", '+JSON.stringify(row))).toThrow('Invalid part drawing');
+    const older=compileDrawings(source.replace('echo("PART_DRAWINGS_V1", drawing_part_sheets());',''),render);
+    expect(older.parts).toEqual([]);
+    expect(older.views).toHaveLength(5);
   });
 });
 
