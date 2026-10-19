@@ -1,13 +1,18 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { render, parameters } from 'openrscad-engine/node';
-import { parseCutList, groupCutList, roughDimensions, inches, csvCell } from '../src/components/cad/cutList';
+import { parseCutList, parseStockPreparation, groupCutList, milledThickness, roughDimensions, inches, csvCell } from '../src/components/cad/cutList';
 import { configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
 const source = readFileSync(new URL('../public/misc/tool-tote/tool-tote.scad', import.meta.url), 'utf8');
 const schema = parseParameters(parameters(source));
 function list(changes = {}) {
   const result = render(configuredSource(source, schema, {...defaults(schema),...changes}));
   try { expect(result.ok).toBe(true); return parseCutList(result.echo); }
+  finally { result.free(); }
+}
+function preparation() {
+  const result = render(source);
+  try { return parseStockPreparation(result.echo); }
   finally { result.free(); }
 }
 
@@ -34,12 +39,52 @@ test('cut-list dimensions follow SCAD joinery and lamination edits', () => {
 test('adds machining allowances per blank and rejects undersized rough stock', () => {
   const side = list()[0];
   const rough = roughDimensions(side,1,.5,1);
-  expect(rough).toEqual({thickness:1,width:6.5,length:19});
-  expect(roughDimensions({...side,quantity:2},1,.5,1)).toEqual(rough);
-  expect(roughDimensions(side,.75,0,0)).toEqual({thickness:.75,width:6,length:18});
+  expect(rough).toEqual({quantity:1,thickness:1,width:6.5,length:19});
+  expect(roughDimensions({...side,quantity:2},1,.5,1)).toEqual({...rough,quantity:2});
+  expect(roughDimensions(side,.75,0,0)).toEqual({quantity:1,thickness:.75,width:6,length:18});
   for (const args of [[.5,.5,1],[1,-1,1],[1,.5,NaN],[1,.5,-1]]) {
     expect(roughDimensions(side,...args)).toBeNull();
   }
+});
+
+test('keeps short blanks at the longer machine minimum without changing finished lengths', () => {
+  const prep = preparation();
+  expect(prep).toEqual({millingMinLength:14,sawMinLength:10,resawKerf:1/16,resawCleanup:1/16});
+  const parts = groupCutList(list());
+  const end = parts.find(p=>p.id==='end-a'), riser = parts.find(p=>p.id==='riser-a');
+  expect(end.length).toBe(8);
+  expect(riser.length).toBe(10.75);
+  expect(roughDimensions(end,.75,.5,1,prep).length).toBe(14);
+  expect(roughDimensions(riser,.75,.5,1,prep).length).toBe(14);
+  expect(roughDimensions(end,.75,.5,1,{...prep,millingMinLength:8}).length).toBe(10);
+  expect(roughDimensions(end,.75,.5,1,{...prep,sawMinLength:16}).length).toBe(16);
+  expect(roughDimensions(end,.75,.5,10,prep).length).toBe(18);
+});
+
+test('makes both bottom halves from one parent board with one kerf and cleanup on each half', () => {
+  const prep = preparation(), bottom = groupCutList(list()).find(p=>p.id==='bottom-a');
+  expect(bottom).toMatchObject({quantity:2,resawGroup:'bottom-parent',thickness:.25,width:3.9375,length:15.375});
+  expect(milledThickness(bottom,prep)).toBe(11/16);
+  expect(roughDimensions(bottom,11/16,.5,1,prep)).toEqual({quantity:1,thickness:11/16,width:4.4375,length:16.375});
+  expect(roughDimensions(bottom,.5,.5,1,prep)).toBeNull();
+  expect(roughDimensions(bottom,.75,.5,1,prep).thickness).toBe(.75);
+  const thicker = groupCutList(list({Bottom_thickness:.375})).find(p=>p.id==='bottom-a');
+  expect(milledThickness(thicker,prep)).toBe(15/16);
+  expect(milledThickness(bottom,{...prep,resawKerf:1/8,resawCleanup:3/32})).toBe(13/16);
+  expect(roughDimensions({...bottom,quantity:1},1,.5,1,prep)).toBeNull();
+  expect(roughDimensions(bottom,1,.5,1)).toBeNull();
+  for(const key of Object.keys(prep)) expect(roughDimensions(bottom,1,.5,1,{...prep,[key]:NaN})).toBeNull();
+  // The handle still uses two separate pieces of solid wood, not one resaw parent.
+  const handle = groupCutList(list()).find(p=>p.id==='handle-a');
+  expect(roughDimensions(handle,handle.thickness,.5,1,prep).quantity).toBe(2);
+});
+
+test('validates stock-preparation defaults and optional resaw-group records', () => {
+  expect(parseStockPreparation('')).toBeNull();
+  for (const values of [[],[14,10,0,.0625],[14,10,'kerf',.0625]]) {
+    expect(()=>parseStockPreparation(`ECHO: "CUTLIST_STOCK_V1", ${JSON.stringify(values)}`)).toThrow();
+  }
+  expect(()=>parseCutList('ECHO: "CUTLIST_V1", [["a","A","Wood",1,1,1,1,"A",0]]')).toThrow();
 });
 
 test('formats exact woodworking fractions without rounding arbitrary dimensions to a fraction', () => {

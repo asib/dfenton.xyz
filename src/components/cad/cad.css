@@ -94,17 +94,18 @@
 .cad-cut-list input:invalid { border-color: var(--cad-section); }
 .cad-stock-allowances { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 24px 0 12px; }
 .cad-stock-allowances legend { margin-bottom: 12px; font-size: 13px; font-weight: 600; }
-.cad-stock-allowances label { display: grid; grid-template-columns: auto 80px; align-items: center; gap: 8px; font-size: 12px; }
+.cad-stock-allowances label { display: grid; grid-template-columns: minmax(0, 1fr) 80px; align-items: center; gap: 8px; font-size: 12px; max-width: 100%; }
 .cad-stock-allowances input { width: 80px; }
 .cad-table-scroll { position: relative; width: 100%; overflow-x: auto; margin: 20px 0; }
 .cad-cut-list table { border-collapse: collapse; width: 100%; text-align: left; font-size: 11px; font-variant-numeric: tabular-nums; }
 .cad-cut-list :is(th, td) { border: 1px solid var(--cad-border); padding: 8px 6px; vertical-align: middle; }
 .cad-cut-list thead th { background: #213c4a; color: #fff; border-color: #91a8b5; text-align: center; font-weight: 500; line-height: 1.7; }
 .dark .cad-cut-list thead th { background: #334651; border-color: #a2b9c6; color: #e9f2f7; }
-.cad-cut-table { min-width: 720px; }
+.cad-cut-table { min-width: 800px; }
 .cad-cut-table tbody th { min-width: 155px; font-weight: 500; }
 .cad-blank-swatches { display: inline-flex; gap: 3px; margin-right: 8px; vertical-align: middle; }
 .cad-cut-table td { text-align: right; white-space: nowrap; }
 .cad-cut-table .cad-size-cell { background: rgb(34 60 74 / 5%); }
 .dark .cad-cut-table .cad-size-cell { background: rgb(255 255 255 / 4%); }
 .cad-cut-table input { width: 70px; font-size: 11px; padding: 6px; }
+.cad-resaw-note { font-size: 12px; line-height: 1.8; padding: 12px 16px; border-left: 3px solid var(--cad-body); margin: 16px 0; max-width: 100ch; }

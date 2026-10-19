@@ -8,7 +8,9 @@
   starts as a 3 x 1.125 blank, laminated from two pieces across its width.
   Its underside notches seat 3 above the 6-high sides. The 0.5 notch depth
   and 0.25 riser housing depth are adjustable, user-confirmed defaults.
-  The bottom is two edge-glued, bookmatched resawn boards, NOT plywood.
+  The bottom is two edge-glued, bookmatched halves resawn from ONE parent
+  board, NOT plywood. Keep stock at least 14 long through jointing/planing
+  and 10 long through table-saw operations; finish shorter parts afterward.
 
   Interpretations left adjustable: end panels sit 0.75 in from side ends,
   enter 0.25-deep side dados, and have square tops; risers start at Z=0.
@@ -92,6 +94,14 @@ handle_a_color = [214/255, 108/255, 50/255];
 handle_b_color = [86/255, 125/255, 50/255];
 bottom_a_color = [122/255, 134/255, 154/255];
 bottom_b_color = [188/255, 169/255, 73/255];
+
+// Stock-preparation defaults for the console cut list and web worksheet.
+// These affect stock planning only, not the finished model. Web worksheet
+// controls can override them without changing the finished SCAD dimensions.
+stock_milling_min_length = 14;
+stock_saw_min_length = 10;
+stock_resaw_kerf = 1/16;
+stock_resaw_cleanup_per_half = 1/16;
 
 inch = 25.4;
 eps = 0.001;
@@ -275,7 +285,9 @@ module selected_part() {
 }
 
 if (Show_cut_list) {
-    // Structured worksheet: id, name, material, quantity, thickness, width, length, blank kind.
+    echo("CUTLIST_STOCK_V1", [stock_milling_min_length, stock_saw_min_length,
+                             stock_resaw_kerf, stock_resaw_cleanup_per_half]);
+    // Structured worksheet: id, name, material, quantity, thickness, width, length, blank kind, optional resaw-parent group.
     // Finished rectangular blanks, before joinery; all dimensions in inches.
     echo("CUTLIST_V1", [
         ["side-a", "Side A", "Solid hardwood", 1, Side_thickness, Side_height, Body_length, "Side"],
@@ -286,8 +298,8 @@ if (Show_cut_list) {
         ["riser-b", "Riser B", "Solid hardwood", 1, Riser_thickness, Riser_width, Riser_length, "Riser"],
         ["handle-a", "Handle lamination A", "Solid hardwood", 1, Handle_width*Handle_lamination_fraction, Handle_blank_height, Handle_length, "Handle lamination"],
         ["handle-b", "Handle lamination B", "Solid hardwood", 1, Handle_width*(1-Handle_lamination_fraction), Handle_blank_height, Handle_length, "Handle lamination"],
-        ["bottom-a", "Bottom half A", "Bookmatched hardwood", 1, Bottom_thickness, bottom_w/2, bottom_l, "Bottom half"],
-        ["bottom-b", "Bottom half B", "Bookmatched hardwood", 1, Bottom_thickness, bottom_w/2, bottom_l, "Bottom half"]
+        ["bottom-a", "Bottom half A", "Bookmatched hardwood", 1, Bottom_thickness, bottom_w/2, bottom_l, "Bottom half", "bottom-parent"],
+        ["bottom-b", "Bottom half B", "Bookmatched hardwood", 1, Bottom_thickness, bottom_w/2, bottom_l, "Bottom half", "bottom-parent"]
     ]);
     echo("FINISHED BLANKS: inches; allow additional stock for machining.");
     echo("Sides x2: L, H, T", [Body_length, Side_height, Side_thickness]);
@@ -296,6 +308,11 @@ if (Show_cut_list) {
     echo("Handle lamination A: L, H, T", [Handle_length, Handle_blank_height, Handle_width*Handle_lamination_fraction]);
     echo("Handle lamination B: L, H, T", [Handle_length, Handle_blank_height, Handle_width*(1-Handle_lamination_fraction)]);
     echo("Bookmatched bottom halves x2: L, W, T", [bottom_l, bottom_w/2, Bottom_thickness]);
+    echo("Bottom parent x1: minimum milled T, rough W, rough L",
+         [2*(Bottom_thickness+stock_resaw_cleanup_per_half)+stock_resaw_kerf,
+          bottom_w/2+0.5, max(bottom_l+1, stock_milling_min_length, stock_saw_min_length)]);
+    echo("Keep stock at least this long through jointer/planer and table-saw operations",
+         [stock_milling_min_length, stock_saw_min_length]);
     echo("Glued bottom panel: L, W, T", [bottom_l, bottom_w, Bottom_thickness]);
     echo("Inside clear length/width", [inner_l, inner_w]);
     echo("Handle notch seat / handle top / riser top", [notch_seat_z, handle_top_z, Riser_length]);
