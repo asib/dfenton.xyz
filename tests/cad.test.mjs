@@ -115,13 +115,13 @@ describe('tool tote customization', () => {
   function tote(changes = {}) {
     const result = render(configuredSource(toteSource, toteSchema, { ...toteDefaults, ...changes }));
     try {
-      return { ok: result.ok, error: result.error, degraded: result.geom_errors, warnings: result.warnings,
+      return { ok: result.ok, error: result.error, degraded: result.geom_errors, warnings: result.warnings, positions: result.positions,
         stats: result.ok ? meshStats(binaryStl(result.positions, result.normals)) : null };
     } finally { result.free(); }
   }
   test('keeps inch defaults and matches the committed initial mesh in millimetres', () => {
-    expect(toteSchema).toHaveLength(30);
-    expect(toteDefaults).toMatchObject({ Riser_length: 10.75, Handle_width: 1.125, Handle_notch_depth: 0.5, Riser_dado_depth: 0.25 });
+    expect(toteSchema).toHaveLength(31);
+    expect(toteDefaults).toMatchObject({ Riser_length: 10.75, Handle_width: 1.125, Handle_notch_depth: 0.5, Handle_end_cutaway_depth: 1.5, Riser_dado_depth: 0.25 });
     expect(configuredSource(toteSource, toteSchema, toteDefaults)).toBe(toteSource);
     const actual = tote();
     expect(actual.ok).toBe(true);
@@ -149,5 +149,32 @@ describe('tool tote customization', () => {
     const invalid = tote({ Riser_length: 8 });
     expect(invalid.ok).toBe(false);
     expect(invalid.error).toContain('Handle must clear sides');
+  });
+  test('raises both handle tips on both laminations while retaining full blank height and the bridle notches', () => {
+    const inch3 = 25.4 ** 3;
+    for (const fraction of [0.5, 0.4]) for (const Part of ['handle_laminate_1', 'handle_laminate_2']) {
+      const thickness = 1.125 * (Part === 'handle_laminate_1' ? fraction : 1 - fraction);
+      for (const depth of [0, 0.75, 1.5]) {
+        const handle = tote({ Part, Handle_lamination_fraction: fraction, Handle_end_cutaway_depth: depth });
+        expect(handle.ok).toBe(true);
+        expect(handle.stats.closed).toBe(true);
+        expect(handle.stats.max[2]).toBeCloseTo(3 * 25.4, 3);
+        expect(handle.stats.min[2]).toBe(0);
+        // Two 3/4 × 1/2 notches and two 1-1/4-inch-long end cutaways.
+        expect(handle.stats.volume / inch3).toBeCloseTo((60 - 0.75 - 2.5 * depth) * thickness, 4);
+        for (const tipX of [0, 20 * 25.4]) {
+          const tipHeights = [];
+          for (let i = 0; i < handle.positions.length; i += 3) {
+            if (Math.abs(handle.positions[i] - tipX) < 0.001) tipHeights.push(handle.positions[i + 2]);
+          }
+          expect(Math.min(...tipHeights)).toBeCloseTo(depth * 25.4, 3);
+        }
+      }
+    }
+    for (const depth of [-0.1, 3, 4]) {
+      const invalid = tote({ Handle_end_cutaway_depth: depth });
+      expect(invalid.ok).toBe(false);
+      expect(invalid.error).toContain('Handle end cutaway depth');
+    }
   });
 });

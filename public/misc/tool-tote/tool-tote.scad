@@ -8,6 +8,8 @@
   starts as a 3 x 1.125 blank, laminated from two pieces across its width.
   Its underside notches seat 3 above the 6-high sides. The 0.5 notch depth
   and 0.25 riser housing depth are adjustable, user-confirmed defaults.
+  Both projecting handle ends are cut away underneath, beyond the risers.
+  Cutaway depth defaults to an adjustable 1.5; it was not dimensioned.
   The bottom is two edge-glued, bookmatched halves resawn from ONE parent
   board, NOT plywood. Keep stock at least 14 long through jointing/planing
   and 10 long through table-saw operations; finish shorter parts afterward.
@@ -59,6 +61,8 @@ Handle_lamination_fraction = 0.5; // [0.2:0.05:0.8]
 // Distance from side-board TOP to the horizontal seat in each handle notch.
 Notch_clearance_above_sides = 3;
 Handle_notch_depth = 0.5;
+// Remove this height below each overhanging tip, from the outer notch edge to the end. Undimensioned in sketch; zero disables the cutaway.
+Handle_end_cutaway_depth = 1.5;
 
 /* [Bookmatched solid bottom - inches] */
 Bottom_thickness = 0.25;
@@ -157,6 +161,8 @@ assert(Handle_notch_depth > 0 && Handle_notch_depth < Handle_blank_height &&
        "Handle must clear sides, engage riser slots and cover riser tops.");
 assert(Handle_length / 2 > riser_outer_x + Joint_fit / 2,
        "Handle ends must extend beyond both risers.");
+assert(Handle_end_cutaway_depth >= 0 && Handle_end_cutaway_depth < Handle_blank_height,
+       "Handle end cutaway depth must be nonnegative and leave wood above each tip.");
 assert(Handle_lamination_fraction > 0 && Handle_lamination_fraction < 1,
        "Both handle laminations must have positive thickness.");
 assert(!Cheek_screw_bores ||
@@ -226,6 +232,12 @@ module handle_piece(y0, width) {
         for (s = [-1, 1]) at_end(s) {
             box_at([riser_inner_x-Joint_fit/2, -Handle_width/2-eps, handle_bottom_z-eps],
                    [Riser_thickness+Joint_fit, Handle_width+2*eps, Handle_notch_depth+eps]);
+            // Raise the underside of the overhanging tip, independently of
+            // the bridle notch. Both laminations share this stepped profile.
+            if (Handle_end_cutaway_depth > 0)
+                box_at([riser_outer_x+Joint_fit/2, -Handle_width/2-eps, handle_bottom_z-eps],
+                       [Handle_length/2-riser_outer_x-Joint_fit/2+eps,
+                        Handle_width+2*eps, Handle_end_cutaway_depth+eps]);
             if (Cheek_screw_bores) cheek_bore();
         }
     }
@@ -317,6 +329,8 @@ if (Show_cut_list) {
     echo("Inside clear length/width", [inner_l, inner_w]);
     echo("Handle notch seat / handle top / riser top", [notch_seat_z, handle_top_z, Riser_length]);
     echo("Riser-slot engagement", bridle_engagement);
+    echo("Handle end cutaway depth / remaining tip height",
+         [Handle_end_cutaway_depth, Handle_blank_height-Handle_end_cutaway_depth]);
     echo("Body end setback and riser dado depth", [End_setback, Riser_dado_depth]);
 }
 
