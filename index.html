@@ -57,11 +57,13 @@
 
     window.dispatchEvent(new Event('storage'));
   </script>
+
+  <!-- Capture the React page, rather than an empty root, for document transitions. -->
+  <script type="module" src="/src/main.tsx" blocking="render"></script>
 </head>
 
 <body>
   <div id="root"></div>
-  <script type="module" src="/src/main.tsx"></script>
 </body>
 
 </html>

@@ -3,6 +3,7 @@ import DarkModeToggle from './components/DarkModeToggle';
 import { miscEntries } from './misc';
 
 const CadViewer = lazy(() => import('./components/cad/CadViewer'));
+const titleTransitionName = (href: string) => `misc-${href.split('/')[2]}-title`;
 
 export default function MiscPage() {
   const [height, setHeight] = useState(720);
@@ -40,14 +41,16 @@ export default function MiscPage() {
 
   return (
     <>
+      {/* Opt in only on Misc pages; the browser keeps ordinary links and history. */}
+      <style>{'@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }'}</style>
       <DarkModeToggle />
       <main className={`mx-auto my-4 px-6 md:px-12 ${entry?.type === 'cad' ? 'max-w-[1180px]' : entry ? 'max-w-[916px]' : 'max-w-[calc(65ch+6rem)]'}`}>
-        <nav aria-label="Site navigation" className="text-sm mb-8 pr-12">
+        <nav aria-label="Site navigation" className="text-sm mb-8 pr-12" style={{ viewTransitionName: 'misc-navigation' }}>
           <a className="underline underline-offset-4 decoration-dotted hover:decoration-solid" href={isIndex ? '/' : '/misc/'}>
             ← {isIndex ? 'Jacob Fenton' : 'Misc'}
           </a>
         </nav>
-        <h1 className="text-3xl md:text-4xl mb-8">{title}</h1>
+        <h1 className="text-3xl md:text-4xl mb-8 w-fit" style={{ viewTransitionName: entry ? titleTransitionName(entry.href) : 'misc-heading' }}>{title}</h1>
         {isIndex && (
           <ul className="space-y-8 text-sm">
             {miscEntries.map((item) => (
@@ -58,7 +61,7 @@ export default function MiscPage() {
                     {item.previewDark && <img src={`${item.href}${item.previewDark}`} alt="" width="176" height="112" loading="lazy" className="hidden dark:block w-full h-full object-contain" />}
                   </span>
                   <span>
-                    <span className="block text-lg underline underline-offset-4 decoration-dotted group-hover:decoration-solid">{item.title}</span>
+                    <span className="block w-fit text-lg underline underline-offset-4 decoration-dotted group-hover:decoration-solid" style={{ viewTransitionName: titleTransitionName(item.href) }}>{item.title}</span>
                     <span className="block mt-2 opacity-70">{item.description}</span>
                   </span>
                 </a>

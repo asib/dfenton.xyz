@@ -13,3 +13,26 @@
         color-scheme: dark;
     }
 }
+
+/* Misc titles share a stable name between their list row and detail heading. */
+::view-transition-group(*) {
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::view-transition-old(*) {
+    animation-duration: 120ms;
+}
+
+::view-transition-new(*) {
+    animation-duration: 180ms;
+}
+
+/* Also stop an in-flight transition if the preference changes during navigation. */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+        animation-duration: 0s;
+    }
+}
