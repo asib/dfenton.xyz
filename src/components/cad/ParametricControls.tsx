@@ -5,7 +5,7 @@ import { configuredSource, defaults, parameterLabel, parseParameters, type Param
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
-interface Result { values: Values; stl: string; source: string }
+interface Result { values: Values; stl: string; source: string; output: string }
 
 export default function ParametricControls({ entry, available, onCompiled }: {
   entry: Entry; available: boolean; onCompiled: (stl: ArrayBuffer) => void;
@@ -21,6 +21,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
   const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;
   const modelUrl = `${entry.href}${entry.model}`;
+  const outputLabel = entry.customizer?.outputLabel;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -36,11 +37,20 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         const values = defaults(parameters);
         // Verify that configured downloads can preserve these literal assignments.
         configuredSource(text, parameters, values);
+        // Entries with textual output also compute their default cut list in the
+        // worker. The committed fallback mesh stays visible while this runs.
+        let output = '';
+        if (outputLabel) {
+          const compiled = await compileJob({ kind: 'compile', source: text }, controller.signal);
+          controller.signal.throwIfAborted();
+          if (compiled.kind !== 'model') return;
+          output = compiled.output;
+        }
         setSource({ text, parameters });
         draftValues.current = values;
         edited.current = false;
         setDraft(values);
-        setResult({ values, stl: modelUrl, source: sourceUrl });
+        setResult({ values, stl: modelUrl, source: sourceUrl, output });
         setPhase('');
       } catch (failure) {
         if (controller.signal.aborted) return;
@@ -50,7 +60,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); };
-  }, [sourceUrl, modelUrl, retry]);
+  }, [sourceUrl, modelUrl, outputLabel, retry]);
 
   useEffect(() => () => {
     if (result?.stl.startsWith('blob:')) URL.revokeObjectURL(result.stl);
@@ -93,6 +103,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
       setResult({ values: { ...values },
         stl: URL.createObjectURL(new Blob([compiled.stl], { type: 'model/stl' })),
         source: URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
+        output: compiled.output,
       });
       setPhase('');
     } catch (failure) {
@@ -126,8 +137,8 @@ export default function ParametricControls({ entry, available, onCompiled }: {
   const groups = [...new Set(source?.parameters.map((parameter) => parameter.group))];
 
   return <aside className="cad-parameters" aria-label="Model parameters">
-    <h2>Customize the guide</h2>
-    <p className="cad-parameter-intro">Dimensions in mm. Changes update the model when you leave a field.</p>
+    <h2>Model parameters</h2>
+    <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model when you leave a field.</p>
     {source && <form
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
       onBlur={(event) => {
@@ -184,6 +195,10 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         <p>{phase ? `${phase}${source ? ' The previous valid model is still shown.' : ''}` :
           pending ? 'Finish editing a field to update the model. The previous valid model is still shown.' : source ? 'Model is up to date.' : ''}</p>}
     </div>
+    {outputLabel && result?.output && <details className="cad-model-output">
+      <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
+      <pre>{result.output.replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
+    </details>}
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">
       {canDownload ? <>

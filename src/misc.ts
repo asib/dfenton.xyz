@@ -17,6 +17,8 @@ export interface CadEntry extends EntryBase {
   sourceUrl?: string;
   notes?: string;
   customizer?: {
+    units?: 'mm' | 'inches';
+    outputLabel?: string;
     conditions?: Record<string, { parameter: string; value: string | number | boolean }>;
   };
   attribution?: { text: string; url: string };
@@ -28,6 +30,9 @@ const previewFilename = /^[a-z0-9][a-z0-9-]*\.(svg|png|webp|jpe?g)$/;
 
 function validCustomizer(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;
+  if ('units' in value && value.units !== undefined && value.units !== 'mm' && value.units !== 'inches') return false;
+  if ('outputLabel' in value && value.outputLabel !== undefined &&
+      (typeof value.outputLabel !== 'string' || !value.outputLabel.trim())) return false;
   if (!('conditions' in value) || value.conditions === undefined) return true;
   if (typeof value.conditions !== 'object' || value.conditions === null) return false;
   return Object.entries(value.conditions).every(([name, condition]: [string, unknown]) =>

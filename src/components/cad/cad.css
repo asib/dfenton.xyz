@@ -71,6 +71,7 @@
 .cad-error { color: var(--cad-section); }
 .cad-parameters .cad-downloads { font-size: 12px; line-height: 1.8; gap: 12px; flex-direction: column; margin: 16px 0; }
 .cad-download-pending { opacity: .7; }
+.cad-model-output pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 11px; line-height: 1.8; margin-bottom: 16px; }
 @media (max-width: 850px) {
   .cad-workbench { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .cad-workbench .cad-viewer { position: static; }

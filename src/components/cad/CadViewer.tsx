@@ -103,9 +103,9 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             <label>Section
               <select value={axis} onChange={(event) => { setAxis(event.target.value as SectionAxis); }}>
                 <option value="off">Off</option>
-                <option value="x">X · width</option>
-                <option value="y">Y · reach</option>
-                <option value="z">Z · height</option>
+                <option value="x">X axis</option>
+                <option value="y">Y axis</option>
+                <option value="z">Z axis</option>
               </select>
             </label>
             <button type="button" onClick={reset}>Reset view</button>

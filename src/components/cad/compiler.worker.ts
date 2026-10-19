@@ -4,7 +4,7 @@ import { binaryStl } from './stl';
 
 export interface CompileRequest { kind: 'parameters' | 'compile'; source: string }
 export type CompileResponse = { kind: 'ready' } | { kind: 'parameters'; json: string } |
-  { kind: 'model'; stl: ArrayBuffer } | { kind: 'error'; message: string };
+  { kind: 'model'; stl: ArrayBuffer; output: string } | { kind: 'error'; message: string };
 
 // Use the published raw API: 0.14.0's convenience wrapper has a mismatched
 // render_with_files signature. A fresh worker bounds each job's WASM memory.
@@ -23,7 +23,7 @@ self.onmessage = async ({ data }: MessageEvent<CompileRequest>) => {
       if (result.warnings) throw new Error(result.warnings);
       if (result.is_2d) throw new Error('This viewer requires a solid 3D model.');
       const stl = binaryStl(result.positions, result.normals);
-      self.postMessage({ kind: 'model', stl } satisfies CompileResponse, { transfer: [stl] });
+      self.postMessage({ kind: 'model', stl, output: result.echo } satisfies CompileResponse, { transfer: [stl] });
     } finally {
       result.free();
     }
