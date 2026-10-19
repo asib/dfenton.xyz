@@ -35,6 +35,33 @@ function Dimension({ dimension, placement, units }: { dimension: DrawingDimensio
   </g>;
 }
 
+function ViewGeometry({ placement, units }: { placement: Placement; units: DrawingSheet['units'] }) {
+  const { view, x, y, scale } = placement;
+  const px = (n: number) => x + (n - view.bounds[0]) * scale;
+  const py = (n: number) => y + (view.bounds[3] - n) * scale;
+  const path = view.lines.map(([a, b, c, d]) => `M${String(px(a))},${String(py(b))}L${String(px(c))},${String(py(d))}`).join('');
+  return <g data-drawing-view={view.id}>
+    {view.profiles?.map((loops, i) => <path key={i} data-section-part={i} fill={`url(#joint-hatch-${String(i % 3)})`} fillRule="evenodd"
+      d={loops.map(loop => `${loop.map((p, j) => `${j ? 'L' : 'M'}${String(px(p[0]))},${String(py(p[1]))}`).join('')}Z`).join('')} />)}
+    <path className="cad-drawing-edges" d={path} />
+    {view.breaks?.map(([a, b, c, d], i) => {
+      const ax = px(a), ay = py(b), bx = px(c), by = py(d), length = Math.hypot(bx - ax, by - ay);
+      const nx = -(by - ay) / length * 4, ny = (bx - ax) / length * 4;
+      const points = [[ax, ay], [ax + (bx - ax) * .42, ay + (by - ay) * .42],
+        [ax + (bx - ax) * .47 + nx, ay + (by - ay) * .47 + ny], [ax + (bx - ax) * .53 - nx, ay + (by - ay) * .53 - ny],
+        [ax + (bx - ax) * .58, ay + (by - ay) * .58], [bx, by]];
+      return <polyline key={i} className="cad-drawing-edges cad-drawing-break" points={points.map(p => p.join(',')).join(' ')} />;
+    })}
+    {view.section?.contacts.map(([a, b], i) => {
+      const p = project(a, view.axes), q = project(b, view.axes);
+      return <line key={i} className="cad-drawing-bearing" x1={px(p[0])} y1={py(p[1])} x2={px(q[0])} y2={py(q[1])}>
+        <title>Handle notch roof bears on the riser-slot floor</title>
+      </line>;
+    })}
+    {view.dimensions.map((dimension, i) => <Dimension key={i} dimension={dimension} placement={placement} units={units} />)}
+  </g>;
+}
+
 function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
   const front = sheet.views.find(view => view.id === 'front');
   const top = sheet.views.find(view => view.id === 'top');
@@ -55,17 +82,42 @@ function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: string })
     <text className="cad-drawing-sheet-meta" x="1170" y="32" textAnchor="end">{sheet.units === 'inches' ? 'INCHES' : 'MILLIMETRES'} · THIRD ANGLE · VISIBLE EDGES</text>
     {placements.map(placement => {
       const { view, x, y } = placement;
-      const px = (n: number) => x + (n - view.bounds[0]) * scale;
-      const py = (n: number) => y + (view.bounds[3] - n) * scale;
-      const path = view.lines.map(([a, b, c, d]) => `M${String(px(a))},${String(py(b))}L${String(px(c))},${String(py(d))}`).join('');
-      return <g key={view.id} data-drawing-view={view.id}>
-        <path className="cad-drawing-edges" d={path} />
-        {view.dimensions.map((dimension, i) => <Dimension key={i} dimension={dimension} placement={placement} units={sheet.units} />)}
+      return <g key={view.id}>
+        <ViewGeometry placement={placement} units={sheet.units} />
         <text className="cad-drawing-view-title" x={x} y={y + height(view) * scale + 66}>{view.title.toUpperCase()}</text>
       </g>;
     })}
     <text className="cad-drawing-sheet-meta" x="30" y={sheetHeight - 20}>ASSEMBLED CONFIGURATION · USE WRITTEN DIMENSIONS; SCREEN SCALE VARIES</text>
     <text className="cad-drawing-sheet-meta" x="1170" y={sheetHeight - 20} textAnchor="end">ASSEMBLY / 01</text>
+  </svg>;
+}
+
+function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
+  const longitudinal = sheet.views.find(view => view.id === 'joint-longitudinal');
+  const transverse = sheet.views.find(view => view.id === 'joint-transverse');
+  if (!longitudinal || !transverse) return null;
+  const scale = Math.min(400 / width(longitudinal), 330 / width(transverse), 380 / Math.max(height(longitudinal), height(transverse)));
+  const placements: Placement[] = [{ view: longitudinal, x: 140, y: 180, scale }, { view: transverse, x: 770, y: 180, scale }];
+  const bottom = 180 + Math.max(height(longitudinal), height(transverse)) * scale;
+  const sheetHeight = bottom + 270;
+  return <svg className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="joint-sheet-title joint-sheet-description">
+    <title id="joint-sheet-title">{title} — handle/riser joint detail</title>
+    <desc id="joint-sheet-description">Enlarged longitudinal and transverse sections through the assembled handle/riser bridle joint. Hatching distinguishes the wooden pieces. The highlighted bearing surface joins the handle notch roof to the riser-slot floor.</desc>
+    <defs>{[45, -45, 45].map((angle, i) => <pattern key={i} id={`joint-hatch-${String(i)}`} patternUnits="userSpaceOnUse" width={i === 2 ? 12 : 8} height={i === 2 ? 12 : 8} patternTransform={`rotate(${String(angle)})`}>
+      <line className="cad-drawing-hatch" x1="0" y1="0" x2="0" y2="12" />
+      {i === 2 && <line className="cad-drawing-hatch" x1="3" y1="0" x2="3" y2="12" />}
+    </pattern>)}</defs>
+    <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / HANDLE–RISER JOINT</text>
+    <text className="cad-drawing-sheet-meta" x="1170" y="32" textAnchor="end">{sheet.units === 'inches' ? 'INCHES' : 'MILLIMETRES'} · ENLARGED SECTIONS</text>
+    {placements.map(placement => <g key={placement.view.id}>
+      <ViewGeometry placement={placement} units={sheet.units} />
+      <text className="cad-drawing-view-title" x={placement.x - 35} y={bottom + 110}>{placement.view.title.toUpperCase()}</text>
+      {placement.view.section?.notes.map((note, i) => <text key={i} className="cad-drawing-note" x={placement.x - 35} y={bottom + 140 + i * 22}>{note}</text>)}
+    </g>)}
+    <line className="cad-drawing-bearing" x1="30" y1={sheetHeight - 48} x2="65" y2={sheetHeight - 48} />
+    <text className="cad-drawing-note" x="78" y={sheetHeight - 44}>Bearing surface: handle notch roof rests on riser-slot floor. Both ends use the same joint.</text>
+    <text className="cad-drawing-sheet-meta" x="30" y={sheetHeight - 20}>HATCHES DISTINGUISH PARTS · BREAK MARKS INDICATE CONTINUING MATERIAL · USE WRITTEN DIMENSIONS</text>
+    <text className="cad-drawing-sheet-meta" x="1170" y={sheetHeight - 20} textAnchor="end">JOINT DETAIL / 02</text>
   </svg>;
 }
 
@@ -78,12 +130,21 @@ export default function DrawingSheets({ output, title }: { output: DrawingOutput
         <option value="1">Default</option><option value="1.5">150%</option><option value="2">200%</option>
       </select></label>
     </div>
-    <p className="cad-drawing-help">Assembly views follow the model dimensions and stay assembled when you change the 3D part view. On small screens or when enlarged, scroll within the sheet to pan.</p>
+    <p className="cad-drawing-help">Drawings follow the model dimensions and stay assembled when you change the 3D part view. On small screens or when enlarged, scroll within the sheet to pan.</p>
     <p role="status" className={`cad-drawing-status${output.stale && output.sheet ? ' cad-error' : ''}`}>
       {!output.sheet ? 'Drawings will appear after the model compiles.' : output.stale ? 'Previous valid drawings — model edits are pending or invalid.' : 'Drawings match the current model dimensions.'}
     </p>
-    {output.sheet && <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Assembly drawing sheet, scroll to pan">
-      <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}><AssemblySheet sheet={output.sheet} title={title} /></div>
-    </div>}
+    {output.sheet && <>
+      <h3 className="cad-drawing-sheet-heading">Assembly views</h3>
+      <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Assembly drawing sheet, scroll to pan">
+        <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}><AssemblySheet sheet={output.sheet} title={title} /></div>
+      </div>
+      {output.sheet.views.some(view => view.section) && <>
+        <h3 id="cad-joint-detail-title" className="cad-drawing-sheet-heading">Handle/riser joint detail</h3>
+        <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Handle/riser joint drawing sheet, scroll to pan">
+          <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}><JointSheet sheet={output.sheet} title={title} /></div>
+        </div>
+      </>}
+    </>}
   </section>;
 }

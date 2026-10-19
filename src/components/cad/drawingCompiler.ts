@@ -1,6 +1,7 @@
 import { displayMesh } from './displayMesh';
 import { parseDrawingDefinition, type DrawingSheet } from './drawings';
 import { projectDrawing } from './drawingGeometry';
+import { sectionDrawing } from './drawingSections';
 
 interface RenderResult {
   ok: boolean; error: string; geom_errors: string; warnings: string; is_2d: boolean;
@@ -18,6 +19,6 @@ export function compileDrawings(source: string, render: (source: string) => Rend
     const mesh = displayMesh(result.preview_positions, result.preview_normals, result.groups) ?? {
       positions: result.positions, normals: result.normals, groups: [{ start: 0, count: result.positions.length / 3 }],
     };
-    return { units: definition.units, views: definition.views.map(view => projectDrawing(mesh, view)) };
+    return { units: definition.units, views: definition.views.map(view => view.section ? sectionDrawing(mesh, view) : projectDrawing(mesh, view)) };
   } finally { result.free(); }
 }

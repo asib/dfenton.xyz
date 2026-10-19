@@ -332,6 +332,11 @@ if (Show_cut_list) {
 // [label, point A, point B, horizontal|vertical, outside side (-1|1), tier].
 // The private drawing pass always renders the assembled tote, independent of Part.
 function drawing_point(p) = inch * p;
+// Crop only the drawing, not the model. Breaks mark continuing material.
+drawing_notch_x = riser_inner_x - Joint_fit/2;
+drawing_left_x = drawing_notch_x - 1;
+drawing_bottom_z = max(Side_height + (handle_bottom_z-Side_height)/2, handle_bottom_z-0.75);
+drawing_laminate_section_y = -Handle_width/2 + Handle_width*Handle_lamination_fraction/2;
 if (!is_undef($misc_drawing) && $misc_drawing) {
     echo("DRAWING_V1", ["inches", [
         ["front", "Front", [[1,0,0], [0,0,1], [0,-1,0]], [
@@ -347,6 +352,35 @@ if (!is_undef($misc_drawing) && $misc_drawing) {
             ["Body", drawing_point([0,-Body_width/2,0]), drawing_point([0,Body_width/2,0]), "horizontal", -1, 1],
             ["Handle", drawing_point([0,-Handle_width/2,handle_top_z]), drawing_point([0,Handle_width/2,handle_top_z]), "horizontal", 1, 1],
             ["Risers", drawing_point([riser_outer_x,Riser_width/2,0]), drawing_point([riser_outer_x,Riser_width/2,Riser_length]), "vertical", 1, 1]
+        ]],
+        ["joint-longitudinal", "A-A / Longitudinal section", [[1,0,0], [0,0,1], [0,-1,0]], [
+            ["Notch", drawing_point([drawing_notch_x,0,handle_bottom_z]), drawing_point([drawing_notch_x,0,notch_seat_z]), "vertical", -1, 1],
+            ["Blank height", drawing_point([drawing_left_x,0,handle_bottom_z]), drawing_point([drawing_left_x,0,handle_top_z]), "vertical", -1, 2],
+            ["Notch length", drawing_point([drawing_notch_x,0,notch_seat_z]), drawing_point([Handle_length/2,0,notch_seat_z]), "horizontal", -1, 1],
+            ["Riser thickness", drawing_point([riser_inner_x,0,notch_seat_z]), drawing_point([riser_outer_x,0,notch_seat_z]), "horizontal", -1, 2],
+            ["Overhang", drawing_point([riser_outer_x,0,handle_top_z]), drawing_point([Handle_length/2,0,handle_top_z]), "horizontal", 1, 1]
+        ], [-drawing_laminate_section_y*inch,
+            inch*[drawing_left_x,drawing_bottom_z,Handle_length/2,handle_top_z], ["left","bottom"],
+            ["Section through handle lamination A; inboard to the left.",
+             "Handle continues left; riser continues down at the break marks.",
+             str("Seat is ", Notch_clearance_above_sides, " in above the tote side tops.")],
+            [[drawing_point([riser_inner_x,drawing_laminate_section_y,notch_seat_z]), drawing_point([riser_outer_x,drawing_laminate_section_y,notch_seat_z])]]
+        ]],
+        ["joint-transverse", "B-B / Transverse section", [[0,1,0], [0,0,1], [1,0,0]], [
+            ["Lam. A", drawing_point([riser_center_x,-Handle_width/2,handle_top_z]), drawing_point([riser_center_x,lamination_y,handle_top_z]), "horizontal", 1, 1],
+            ["Lam. B", drawing_point([riser_center_x,lamination_y,handle_top_z]), drawing_point([riser_center_x,Handle_width/2,handle_top_z]), "horizontal", 1, 2],
+            ["Handle width", drawing_point([riser_center_x,-Handle_width/2,handle_top_z]), drawing_point([riser_center_x,Handle_width/2,handle_top_z]), "horizontal", 1, 3],
+            ["Slot width", drawing_point([riser_center_x,-(Handle_width+Joint_fit)/2,notch_seat_z]), drawing_point([riser_center_x,(Handle_width+Joint_fit)/2,notch_seat_z]), "horizontal", -1, 1],
+            ["Riser width", drawing_point([riser_center_x,-Riser_width/2,drawing_bottom_z]), drawing_point([riser_center_x,Riser_width/2,drawing_bottom_z]), "horizontal", -1, 2],
+            ["Slot depth", drawing_point([riser_center_x,Riser_width/2,notch_seat_z]), drawing_point([riser_center_x,Riser_width/2,Riser_length]), "vertical", 1, 1],
+            if (handle_top_z > Riser_length)
+                ["Above riser", drawing_point([riser_center_x,Handle_width/2,Riser_length]), drawing_point([riser_center_x,Handle_width/2,handle_top_z]), "vertical", 1, 2]
+        ], [riser_center_x*inch,
+            inch*[-Riser_width/2,drawing_bottom_z,Riser_width/2,handle_top_z], ["bottom"],
+            ["Section through the middle of the riser thickness.",
+             str("Slot includes ", Joint_fit, " in total width clearance."),
+             Cheek_screw_bores ? "Optional screw bores shown; their layout is unconfirmed." : "Optional screw bores are off."],
+            [[drawing_point([riser_center_x,-Handle_width/2,notch_seat_z]), drawing_point([riser_center_x,Handle_width/2,notch_seat_z])]]
         ]]
     ]]);
     scale([inch, inch, inch]) assembly();

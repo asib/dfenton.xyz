@@ -69,6 +69,11 @@
 .cad-drawing-sheet-title { font-size: 16px; font-weight: 600; letter-spacing: 1px; }
 .cad-drawing-sheet-meta { font-size: 11px; letter-spacing: .7px; }
 .cad-drawing-view-title { font-size: 12px; font-weight: 600; letter-spacing: 1.5px; }
+.cad-drawing-sheet-heading { font-size: 15px; font-weight: 600; margin: 24px 0 12px; scroll-margin-top: 24px; }
+.cad-drawing-note { font-size: 12px; }
+.cad-drawing-hatch { stroke: var(--drawing-ink); stroke-width: .8; opacity: .3; }
+.cad-drawing-bearing { stroke: #116e66; stroke-width: 3; stroke-linecap: round; }
+.dark .cad-drawing-bearing { stroke: #85d9c9; }
 .cad-workspace { min-width: 0; margin: 20px 0 24px; }
 .cad-workspace-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 0; }
 .cad-workspace-title { display: none; margin-right: auto; font-weight: 600; }

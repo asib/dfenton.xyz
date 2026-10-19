@@ -50,7 +50,7 @@ describe('tote drawing contract', () => {
   test('draws the assembly and hides bottom grooves and covered bridle edges', () => {
     const sheet = drawing();
     expect(sheet.units).toBe('inches');
-    expect(sheet.views.map(v=>v.id)).toEqual(['front','top','right']);
+    expect(sheet.views.map(v=>v.id)).toEqual(['front','top','right','joint-longitudinal','joint-transverse']);
     const view = sheet.views[0];
     expect(view.bounds[2]-view.bounds[0]).toBeCloseTo(20*25.4,4);
     expect(view.bounds[3]).toBeCloseTo(11.5*25.4,4);
@@ -81,7 +81,7 @@ describe('tote drawing contract', () => {
     const output = result.echo;
     result.free();
     const parsed = parseDrawingDefinition(output);
-    expect(parsed.views).toHaveLength(3);
+    expect(parsed.views).toHaveLength(5);
     expect(()=>parseDrawingDefinition(output+'\n'+output)).toThrow();
     const record = JSON.parse(output.split('\n').find(l=>l.startsWith('ECHO: "DRAWING_V1",')).replace('ECHO: "DRAWING_V1", ',''));
     record[1][0][2][0] = [2,0,0];
@@ -89,5 +89,71 @@ describe('tote drawing contract', () => {
     record[1][0][2][0] = [1,0,0];
     record[1][0][3][0][2] = record[1][0][3][0][1];
     expect(()=>parseDrawingDefinition('ECHO: "DRAWING_V1", '+JSON.stringify(record))).toThrow('positive length');
+  });
+});
+
+// Even/odd containment preserves holes and disconnected section islands.
+function contains(loops, x, y) {
+  let inside = false;
+  for (const loop of loops) for (let i=0,j=loop.length-1;i<loop.length;j=i++) {
+    const [a,b]=loop[i], [c,d]=loop[j];
+    if ((b>y)!==(d>y) && x < (c-a)*(y-b)/(d-b)+a) inside=!inside;
+  }
+  return inside;
+}
+const measured = (sheet, id) => Object.fromEntries(sheet.views.find(v=>v.id===id).dimensions.map(d=>
+  [d.label, dimensionValue(d,sheet.views.find(v=>v.id===id),sheet.units)]));
+
+describe('handle/riser sections', () => {
+  test.each([0.25, 0.5, 0.75])('seats the notch roof on the slot floor at depth %p', depth => {
+    const sheet=drawing({Handle_notch_depth:depth});
+    const side=sheet.views.find(v=>v.id==='joint-longitudinal');
+    const end=sheet.views.find(v=>v.id==='joint-transverse');
+    expect(side.profiles).toHaveLength(2);
+    expect(end.profiles).toHaveLength(3);
+    const x=8.375*25.4,z=9*25.4;
+    expect(contains(side.profiles[0],x,z-.001)).toBe(true);
+    expect(contains(side.profiles[0],x,z+.001)).toBe(false);
+    expect(contains(side.profiles[1],x,z-.001)).toBe(false);
+    expect(contains(side.profiles[1],x,z+.001)).toBe(true);
+    expect(side.profiles.some(p=>contains(p,9.5*25.4,z-.001))).toBe(false);
+    expect(side.breaks).toHaveLength(2);
+    expect(end.breaks).toHaveLength(1);
+    expect(side.section.contacts[0][0][2]).toBeCloseTo(z,6);
+    expect(side.section.contacts[0][1][2]).toBeCloseTo(z,6);
+    expect(measured(sheet,'joint-longitudinal').Notch).toBeCloseTo(depth,6);
+    expect(measured(sheet,'joint-longitudinal')['Blank height']).toBeCloseTo(3,6);
+    expect(measured(sheet,'joint-transverse')['Slot depth']).toBeCloseTo(1.75,6);
+    expect(measured(sheet,'joint-transverse')['Above riser']).toBeCloseTo(1.25-depth,6);
+  });
+  test('dimensions changed fit, unequal laminations and the continuous notch from source geometry',()=>{
+    const sheet=drawing({Joint_fit:0.04,Handle_lamination_fraction:0.4});
+    const side=measured(sheet,'joint-longitudinal'), end=measured(sheet,'joint-transverse');
+    expect(side['Notch length']).toBeCloseTo(2.02,6);
+    expect(side['Riser thickness']).toBeCloseTo(.75,6);
+    expect(side.Overhang).toBeCloseTo(1.25,6);
+    expect(end['Lam. A']).toBeCloseTo(.45,6);
+    expect(end['Lam. B']).toBeCloseTo(.675,6);
+    expect(end['Slot width']).toBeCloseTo(1.165,6);
+    expect(end['Riser width']).toBeCloseTo(2.5,6);
+    const section=sheet.views.find(v=>v.id==='joint-transverse');
+    expect(section.profiles.some(p=>contains(p,.5725*25.4,9.5*25.4))).toBe(false);
+    expect(contains(section.profiles[1],-.3*25.4,10*25.4)).toBe(true);
+    expect(contains(section.profiles[2],.3*25.4,10*25.4)).toBe(true);
+  });
+  test('keeps bore voids and section islands open when optional bores are enabled',()=>{
+    const sheet=drawing({Cheek_screw_bores:true});
+    const side=sheet.views.find(v=>v.id==='joint-longitudinal');
+    const end=sheet.views.find(v=>v.id==='joint-transverse');
+    expect(side.profiles[1]).toHaveLength(2);
+    expect(side.profiles.some(p=>contains(p,8.375*25.4,9.875*25.4))).toBe(false);
+    expect(end.profiles.some(p=>contains(p,0.2*25.4,9.875*25.4))).toBe(false);
+    expect(end.profiles.some(p=>contains(p,1*25.4,9.875*25.4))).toBe(false);
+    expect(end.profiles.some(p=>contains(p,1*25.4,10.5*25.4))).toBe(true);
+  });
+  test('omits a zero-length projection dimension when the handle and riser tops are flush',()=>{
+    const sheet=drawing({Handle_notch_depth:1.25});
+    expect(measured(sheet,'joint-transverse')['Above riser']).toBeUndefined();
+    expect(sheet.views.find(v=>v.id==='joint-transverse').profiles).toHaveLength(3);
   });
 });
