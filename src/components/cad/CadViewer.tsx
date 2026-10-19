@@ -5,6 +5,8 @@ import { createScene, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls from './ParametricControls';
 import { coloredGeometry } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
+import CutListTable from './CutListTable';
+import type { CutListOutput } from './cutList';
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
@@ -18,6 +20,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [position, setPosition] = useState(50);
   const [flipped, setFlipped] = useState(false);
   const [, setRevision] = useState(0);
+  const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const modelUrl = `${entry.href}${entry.model}`;
 
   useEffect(() => {
@@ -133,8 +136,9 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
           </div>}
         </div>
-        {entry.customizer && entry.source && <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} />}
+        {entry.customizer && entry.source && <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} />}
       </div>
+      {entry.customizer?.cutList && <CutListTable output={cutList} palette={entry.customizer.parts} />}
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}
     </section>

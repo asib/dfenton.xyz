@@ -275,6 +275,20 @@ module selected_part() {
 }
 
 if (Show_cut_list) {
+    // Structured worksheet: id, name, material, quantity, thickness, width, length, blank kind.
+    // Finished rectangular blanks, before joinery; all dimensions in inches.
+    echo("CUTLIST_V1", [
+        ["side-a", "Side A", "Solid hardwood", 1, Side_thickness, Side_height, Body_length, "Side"],
+        ["side-b", "Side B", "Solid hardwood", 1, Side_thickness, Side_height, Body_length, "Side"],
+        ["end-a", "End A", "Solid hardwood", 1, End_thickness, Side_height, end_w, "End"],
+        ["end-b", "End B", "Solid hardwood", 1, End_thickness, Side_height, end_w, "End"],
+        ["riser-a", "Riser A", "Solid hardwood", 1, Riser_thickness, Riser_width, Riser_length, "Riser"],
+        ["riser-b", "Riser B", "Solid hardwood", 1, Riser_thickness, Riser_width, Riser_length, "Riser"],
+        ["handle-a", "Handle lamination A", "Solid hardwood", 1, Handle_width*Handle_lamination_fraction, Handle_blank_height, Handle_length, "Handle lamination"],
+        ["handle-b", "Handle lamination B", "Solid hardwood", 1, Handle_width*(1-Handle_lamination_fraction), Handle_blank_height, Handle_length, "Handle lamination"],
+        ["bottom-a", "Bottom half A", "Bookmatched hardwood", 1, Bottom_thickness, bottom_w/2, bottom_l, "Bottom half"],
+        ["bottom-b", "Bottom half B", "Bookmatched hardwood", 1, Bottom_thickness, bottom_w/2, bottom_l, "Bottom half"]
+    ]);
     echo("FINISHED BLANKS: inches; allow additional stock for machining.");
     echo("Sides x2: L, H, T", [Body_length, Side_height, Side_thickness]);
     echo("Ends x2: W, H, T", [end_w, Side_height, End_thickness]);

@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import type { CadEntry } from '../../misc';
 import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
+import type { CutListOutput } from './cutList';
 import { configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
 interface Result { values: Values; stl: string; source: string; output: string }
 
-export default function ParametricControls({ entry, available, onCompiled }: {
+export default function ParametricControls({ entry, available, onCompiled, onOutput }: {
   entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
+  onOutput: (output: CutListOutput) => void;
 }) {
   const [source, setSource] = useState<Source | null>(null);
   const [draft, setDraft] = useState<Values>({});
@@ -25,6 +27,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
   const modelUrl = `${entry.href}${entry.model}`;
   const outputLabel = entry.customizer?.outputLabel;
   const hasParts = !!entry.customizer?.parts?.length;
+  const hasCutList = !!entry.customizer?.cutList;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -43,7 +46,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
         // Entries with textual output also compute their default cut list in the
         // worker. The committed fallback mesh stays visible while this runs.
         let output = '';
-        if (outputLabel || hasParts) {
+        if (outputLabel || hasParts || hasCutList) {
           const compiled = await compileJob({ kind: 'compile', source: text }, controller.signal);
           controller.signal.throwIfAborted();
           if (compiled.kind !== 'model') return;
@@ -64,7 +67,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); };
-  }, [sourceUrl, modelUrl, outputLabel, hasParts, retry]);
+  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, retry]);
 
   useEffect(() => {
     if (!available || !initialModel) return;
@@ -80,6 +83,9 @@ export default function ParametricControls({ entry, available, onCompiled }: {
 
   const pending = !!result && JSON.stringify(draft) !== JSON.stringify(result.values);
   const canDownload = !!result && !pending && !phase && !error;
+  useEffect(() => {
+    onOutput({ text: result?.output ?? '', stale: !canDownload });
+  }, [result?.output, canDownload, onOutput]);
   const edit = (name: string, value: string | number | boolean) => {
     job.current?.abort();
     setPhase('');
@@ -210,6 +216,7 @@ export default function ParametricControls({ entry, available, onCompiled }: {
       <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
       <pre>{result.output.replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
     </details>}
+    {hasCutList && result?.output && <p className="cad-compile-status"><a href="#cut-list-title">View cut list ↓</a></p>}
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">
       {canDownload ? <>
