@@ -101,7 +101,7 @@
 .cad-cut-list :is(th, td) { border: 1px solid var(--cad-border); padding: 8px 6px; vertical-align: middle; }
 .cad-cut-list thead th { background: #213c4a; color: #fff; border-color: #91a8b5; text-align: center; font-weight: 500; line-height: 1.7; }
 .dark .cad-cut-list thead th { background: #334651; border-color: #a2b9c6; color: #e9f2f7; }
-.cad-cut-table { min-width: 940px; }
+.cad-cut-table { min-width: 1020px; }
 .cad-cut-table tbody th { min-width: 155px; font-weight: 500; }
 .cad-blank-swatches { display: inline-flex; gap: 3px; margin-right: 8px; vertical-align: middle; }
 .cad-cut-table td { text-align: right; white-space: nowrap; }

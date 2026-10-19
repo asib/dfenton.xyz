@@ -3,6 +3,9 @@ import type { PartColor } from '../../misc';
 import { boardFeet, csvCell, groupCutList, inches, milledThickness, parseCutList, parseStockPreparation, roughDimensions, standardThickness, stockLabel, stockThicknesses, type CutListOutput, type CutPart, type StockPreparation } from './cutList';
 
 const number = (text: string) => text.trim() === '' ? NaN : Number(text);
+const feetFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Remove floating-point residue at rounding boundaries for display only.
+const feetText = (feet: number | null) => feet === null ? '—' : feetFormat.format(Number(feet.toPrecision(15)));
 
 export default function CutListTable({ output, palette = [] }: { output: CutListOutput; palette?: PartColor[] }) {
   const parsed = useMemo(() => {
@@ -13,6 +16,7 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
   const [thicknessExtra, setThicknessExtra] = useState('0.25');
   const [widthExtra, setWidthExtra] = useState('0.5');
   const [lengthExtra, setLengthExtra] = useState('1');
+  const [extraPercent, setExtraPercent] = useState('20');
   const [preparationEdits, setPreparationEdits] = useState<Partial<Record<keyof StockPreparation, string>>>({});
   if (parsed.error) return <p className="cad-error" role="alert">{parsed.error}</p>;
   if (!parsed.parts.length) return null;
@@ -37,21 +41,32 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
   const rows = blanks.map((part) => {
     return { part, rough: roughDimensions(part, stockThickness(part), number(widthExtra), number(lengthExtra), preparation, allowance) };
   });
-  const valid = rows.every((row) => row.rough);
-  const totalBoardFeet = valid ? rows.reduce((total, { rough }) => total + (rough ? boardFeet(rough) : 0), 0) : null;
+  const stockValid = rows.every((row) => row.rough);
+  const totalBoardFeet = stockValid ? rows.reduce((total, { rough }) => total + (rough ? boardFeet(rough) : 0), 0) : null;
+  const percentage = number(extraPercent);
+  const percentageValid = Number.isFinite(percentage) && percentage >= 0;
+  const withExtra = (feet: number | null) => {
+    if (feet === null || !percentageValid) return null;
+    const total = feet * (1 + percentage / 100);
+    return Number.isFinite(total) ? total : null;
+  };
+  const totalWithExtra = withExtra(totalBoardFeet);
+  const valid = stockValid && totalWithExtra !== null;
+  const extraHeading = percentageValid ? `With ${String(percentage)}% extra` : 'With extra';
   const editThickness = (ids: string[], value: string) => {
     setThicknesses((previous) => ({ ...previous, ...Object.fromEntries(ids.map((id) => [id, value])) }));
   };
   const download = () => {
     const csv: (string | number)[][] = [
       ['Tool tote cut list — dimensions in inches'],
-      ['Part name', 'Finish qty', 'Finish thickness', 'Finish width', 'Finish length', 'Rough qty', 'Rough thickness', 'Rough width', 'Rough length', 'Board feet', 'Stock size'],
+      ['Part name', 'Finish qty', 'Finish thickness', 'Finish width', 'Finish length', 'Rough qty', 'Rough thickness', 'Rough width', 'Rough length', 'Board feet', `Board feet ${extraHeading.toLowerCase()}`, 'Stock size'],
       ...rows.map(({ part, rough }) => [part.name, part.quantity, part.thickness, part.width, part.length,
-        rough?.quantity ?? '', rough?.thickness ?? '', rough?.width ?? '', rough?.length ?? '', rough ? boardFeet(rough) : '', rough ? stockLabel(rough.thickness) : '']),
-      ['Total', '', '', '', '', '', '', '', '', totalBoardFeet ?? '', ''],
+        rough?.quantity ?? '', rough?.thickness ?? '', rough?.width ?? '', rough?.length ?? '', rough ? boardFeet(rough) : '', rough ? withExtra(boardFeet(rough)) ?? '' : '', rough ? stockLabel(rough.thickness) : '']),
+      ['Total', '', '', '', '', '', '', '', '', totalBoardFeet ?? '', totalWithExtra ?? '', ''],
+      [], ['Extra board feet allowance (%)', percentage],
       [], ['Rough-stock allowances — inches'], ['Total thickness for jointing/planing', allowance],
       ['Extra width', number(widthExtra)], ['Extra length', number(lengthExtra)],
-      ['Board feet = rough quantity × nominal stock thickness × rough width × rough length / 144. Includes listed machining allowances; excludes board layout and defects.'],
+      ['Board feet = rough quantity × nominal stock thickness × rough width × rough length / 144. Includes listed machining allowances. The extra percentage is added for board layout and defects.'],
     ];
     if (preparation) {
       csv.push([], ['Stock-preparation notes — inches'],
@@ -81,6 +96,7 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
       <label>Jointing/planing thickness (in, total)<input type="number" min="0" step="any" required value={thicknessExtra} onChange={(event) => { setThicknessExtra(event.target.value); }} /></label>
       <label>Extra width (in)<input type="number" min="0" step="any" required value={widthExtra} onChange={(event) => { setWidthExtra(event.target.value); }} /></label>
       <label>Extra length (in)<input type="number" min="0" step="any" required value={lengthExtra} onChange={(event) => { setLengthExtra(event.target.value); }} /></label>
+      <label>Extra board feet (%)<input type="number" min="0" step="any" required value={extraPercent} onChange={(event) => { setExtraPercent(event.target.value); }} /></label>
     </fieldset>
     {parsed.preparation && <fieldset className="cad-stock-allowances">
       <legend>Machine limits &amp; resaw allowances</legend>
@@ -102,9 +118,9 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
     </p>)}
     <div className="cad-table-scroll" tabIndex={0} role="region" aria-label="Cut list table, scroll horizontally for all columns">
       <table className="cad-cut-table" aria-describedby="stock-help">
-        <caption className="sr-only">Part quantities, finished and rough dimensions in inches, and rough board feet</caption>
+        <caption className="sr-only">Part quantities, finished and rough dimensions in inches, and board feet before and after the extra allowance</caption>
         <thead>
-          <tr><th rowSpan={2} scope="col">Part name</th><th colSpan={4} scope="colgroup">Finished parts · in</th><th colSpan={4} scope="colgroup">Rough stock · in</th><th rowSpan={2} scope="col">Board feet</th></tr>
+          <tr><th rowSpan={2} scope="col">Part name</th><th colSpan={4} scope="colgroup">Finished parts · in</th><th colSpan={4} scope="colgroup">Rough stock · in</th><th rowSpan={2} scope="col">Board feet</th><th rowSpan={2} scope="col">{extraHeading}</th></tr>
           <tr>{['Finish', 'Rough'].flatMap((group) => ['Qty', 'Thickness', 'Width', 'Length'].map((dimension) => <th key={`${group}-${dimension}`} scope="col">{dimension}</th>))}</tr>
         </thead>
         <tbody>{rows.map(({ part, rough }) => {
@@ -120,13 +136,15 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
               {stockThicknesses.map((thickness) => <option key={thickness} value={thickness} disabled={!preparationValid || !Number.isFinite(allowance) || allowance < 0 || thickness < minimumStock(part)}>{stockLabel(thickness)} · {inches(thickness)}″</option>)}
             </select></td>
             <td className="cad-size-cell">{rough ? inches(rough.width) : '—'}</td><td className="cad-size-cell">{rough ? inches(rough.length) : '—'}</td>
-            <td>{rough ? boardFeet(rough).toFixed(2) : '—'}</td>
+            <td>{feetText(rough ? boardFeet(rough) : null)}</td>
+            <td>{feetText(rough ? withExtra(boardFeet(rough)) : null)}</td>
           </tr>;
         })}</tbody>
-        <tfoot><tr><th colSpan={9} scope="row">Total rough board feet</th><td>{totalBoardFeet?.toFixed(2) ?? '—'}</td></tr></tfoot>
+        <tfoot><tr><th colSpan={9} scope="row">Total board feet</th><td>{feetText(totalBoardFeet)}</td><td>{feetText(totalWithExtra)}</td></tr></tfoot>
       </table>
     </div>
-    <p className="cad-worksheet-help">Board feet = rough quantity × nominal stock thickness × rough width × rough length ÷ 144. The bottom counts as one parent board. Totals include the listed machining allowances; board layout and defects may require extra stock.</p>
-    {!valid && <p className="cad-error" role="alert">Choose stock thick enough for the milled blank plus the jointing/planing allowance, or return its thickness to Auto. Requirements above 16/4 exceed the listed stock sizes. Machine minimums, kerf and cleanup must be positive; machining allowances cannot be negative or blank. CSV export is unavailable until corrected.</p>}
+    <p className="cad-worksheet-help">Board feet = rough quantity × nominal stock thickness × rough width × rough length ÷ 144. The bottom counts as one parent board. “With extra” includes the additional percentage for board layout and defects, on top of the listed machining allowances.</p>
+    {!stockValid && <p className="cad-error" role="alert">Choose stock thick enough for the milled blank plus the jointing/planing allowance, or return its thickness to Auto. Requirements above 16/4 exceed the listed stock sizes. Machine minimums, kerf and cleanup must be positive; machining allowances cannot be negative or blank. CSV export is unavailable until corrected.</p>}
+    {(!percentageValid || (stockValid && totalWithExtra === null)) && <p className="cad-error" role="alert">Enter a valid extra-board-feet percentage of 0 or greater. CSV export is unavailable until corrected.</p>}
   </section>;
 }
