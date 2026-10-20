@@ -3,7 +3,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls from './ParametricControls';
-import { coloredGeometry, parseDisplayMesh } from './displayMesh';
+import { coloredGeometry, parseDisplayMesh, visiblePartColors } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
 import type { CutListOutput } from './cutList';
@@ -31,6 +31,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
   const palette = entry.customizer?.parts;
+  const [visibleParts, setVisibleParts] = useState(palette);
   const hasParameters = !!(entry.customizer && entry.source);
   const hasLegend = !!palette?.length;
   const hasPanels = hasLegend || hasParameters;
@@ -56,10 +57,12 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         // show a monochrome STL while the parametric engine initializes.
         const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
         if (!response.ok) throw new Error('Model request failed.');
-        const geometry = displayUrl
-          ? coloredGeometry(parseDisplayMesh(await response.json()), palette)
+        const display = displayUrl ? parseDisplayMesh(await response.json()) : undefined;
+        const geometry = display
+          ? coloredGeometry(display, palette)
           : new STLLoader().parse(await response.arrayBuffer());
         if (controller.signal.aborted) { geometry.dispose(); return; }
+        setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
         try {
           active = createScene(element, geometry);
         } catch (error) {
@@ -102,6 +105,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     const geometry = model.display ? coloredGeometry(model.display, entry.customizer?.parts) : new STLLoader().parse(model.stl);
     try { viewer.replaceGeometry(geometry); }
     catch (error) { geometry.dispose(); throw error; }
+    setVisibleParts(model.display && entry.customizer?.parts ? visiblePartColors(model.display, entry.customizer.parts) : entry.customizer?.parts);
     setRevision((revision) => revision + 1);
   }, [viewer, entry.customizer?.parts]);
 
@@ -171,7 +175,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
           {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
             <summary>Part legend</summary>
             <ul className="cad-part-key" aria-label="Part colors">
-              {palette.map((part) => <li key={part.id}>
+              {visibleParts?.map((part) => <li key={part.id}>
                 <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />{part.label}
               </li>)}
             </ul>

@@ -62,3 +62,12 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   geometry.setAttribute('color', geometry.getAttribute('colorLight'));
   return geometry;
 }
+
+// The source may expose parts used only by some joint configurations. Keep the
+// legend aligned with the mesh actually on screen, including individual exports.
+export function visiblePartColors(display: DisplayMesh, palette: PartColor[]) {
+  return palette.filter(part => {
+    const rgb = part.color.slice(1).match(/../g)?.map(n => parseInt(n, 16) / 255);
+    return rgb && display.groups.some(group => rgb.every((n, i) => Math.abs(n - group.color[i]) < 0.00001));
+  });
+}

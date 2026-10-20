@@ -4,7 +4,7 @@ import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
 import type { DrawingOutput, DrawingSheet } from './drawings';
-import { conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
+import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
@@ -109,6 +109,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     const next = { ...draftValues.current, [name]: value };
     for (const parameter of source?.parameters ?? []) {
       const condition = entry.customizer?.conditions?.[parameter.name];
+      const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], next);
+      if (options?.length && !options.some(option => option.value === next[parameter.name])) next[parameter.name] = options[0].value;
       // An empty field must not prevent switching to a mode that ignores it.
       if (condition && !conditionMatches(condition, next) && typeof next[parameter.name] !== parameter.type) {
         next[parameter.name] = parameter.value;
@@ -190,7 +192,10 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       onSubmit={(event) => { event.preventDefault(); commit(event.currentTarget); }}>
       <fieldset disabled={!available}>
         <legend className="sr-only">Model parameters</legend>
-        {groups.map((group, index) => <details key={group} open={index === 0}>
+        {groups.filter(group => source.parameters.some(parameter => {
+          const condition = entry.customizer?.conditions?.[parameter.name];
+          return parameter.group === group && (!condition?.hide || conditionMatches(condition, draft));
+        })).map((group, index) => <details key={group} open={index === 0}>
           <summary>{group}</summary>
           {source.parameters.filter((parameter) => parameter.group === group).map((parameter) => {
             const id = `parameter-${parameter.name}`;
@@ -198,7 +203,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
             const disabled = !!condition && !conditionMatches(condition, draft);
             if (disabled && condition.hide) return null;
             const value = draft[parameter.name];
-            const { options, min, max, step } = parameter.control;
+            const { min, max, step } = parameter.control;
+            const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], draft);
             const changeNumber = (raw: string) => { edit(parameter.name, raw === '' ? '' : Number(raw)); };
             return <div key={parameter.name} className="cad-parameter" data-inactive={disabled || undefined}>
               <label htmlFor={id}>{parameterLabel(parameter.name)}</label>

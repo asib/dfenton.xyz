@@ -87,3 +87,12 @@ export function configuredSource(source: string, parameters: Parameter[], values
   }
   return result;
 }
+
+// A mode change can remove an enum choice (for example an insert-only export).
+// Reset that selection to the first available source option before compiling.
+export function availableOptions(parameter: Parameter, conditions: Record<string, ParameterCondition> | undefined, values: Values) {
+  return parameter.control.options?.filter(option => {
+    const condition = conditions?.[String(option.value)];
+    return !condition || conditionMatches(condition, values);
+  });
+}

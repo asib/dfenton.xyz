@@ -28,6 +28,7 @@ export interface CadEntry extends EntryBase {
     drawings?: boolean;
     parts?: PartColor[];
     conditions?: Record<string, ParameterCondition>;
+    optionConditions?: Record<string, Record<string, ParameterCondition>>;
   };
   attribution?: { text: string; url: string };
 }
@@ -51,15 +52,22 @@ function validCustomizer(value: unknown): boolean {
         'label' in part && typeof part.label === 'string' && !!part.label.trim() &&
         'color' in part && typeof part.color === 'string' && /^#[0-9a-f]{6}$/i.test(part.color) &&
         'darkColor' in part && typeof part.darkColor === 'string' && /^#[0-9a-f]{6}$/i.test(part.darkColor)))) return false;
-  if (!('conditions' in value) || value.conditions === undefined) return true;
-  if (typeof value.conditions !== 'object' || value.conditions === null) return false;
-  return Object.entries(value.conditions).every(([name, condition]: [string, unknown]) =>
-    /^[a-zA-Z_]\w*$/.test(name) && typeof condition === 'object' && condition !== null &&
+  const validCondition = (condition: unknown): boolean => typeof condition === 'object' && condition !== null &&
     'parameter' in condition && typeof condition.parameter === 'string' &&
     (!('hide' in condition) || typeof condition.hide === 'boolean') &&
     (('value' in condition && !('values' in condition) && ['string', 'number', 'boolean'].includes(typeof condition.value)) ||
       ('values' in condition && !('value' in condition) && Array.isArray(condition.values) && condition.values.length > 0 &&
-        condition.values.every((value: unknown) => ['string', 'number', 'boolean'].includes(typeof value)))));
+        condition.values.every((value: unknown) => ['string', 'number', 'boolean'].includes(typeof value))));
+  if ('conditions' in value && value.conditions !== undefined &&
+      (typeof value.conditions !== 'object' || value.conditions === null || Array.isArray(value.conditions) ||
+       !Object.entries(value.conditions).every(([name, condition]: [string, unknown]) =>
+         /^[a-zA-Z_]\w*$/.test(name) && validCondition(condition)))) return false;
+  if ('optionConditions' in value && value.optionConditions !== undefined &&
+      (typeof value.optionConditions !== 'object' || value.optionConditions === null || Array.isArray(value.optionConditions) ||
+       !Object.entries(value.optionConditions).every(([name, options]: [string, unknown]) =>
+         /^[a-zA-Z_]\w*$/.test(name) && typeof options === 'object' && options !== null && !Array.isArray(options) &&
+         Object.values(options).every(validCondition)))) return false;
+  return true;
 }
 
 const metadata = import.meta.glob<MiscEntry>('../public/misc/*/meta.json', {
