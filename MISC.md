@@ -2,6 +2,8 @@
 
 For an interactive diagram, add `public/misc/<slug>/diagram.html`, a preview image, and `meta.json`. For CAD entries, use the model format below. The folder name is the URL slug (lowercase letters, digits, and hyphens), and the page is served at `/misc/<slug>/`.
 
+Before adding or changing dependencies, follow the [Cloudflare Pages toolchain instructions in README.md](README.md#cloudflare-pages). Check the actual `bun --version` against the pinned version before any command that writes `bun.lockb`; `packageManager` does not switch an already-installed Bun runtime. Validate dependency changes with a clean frozen install and production build using the same Bun version as Pages.
+
 ```json
 {
   "title": "Two surfaces, one cutting edge",
