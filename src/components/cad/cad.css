@@ -3,7 +3,8 @@
   --cad-edge: #123c50;
   --cad-section: #b63e4a;
   --cad-border: rgb(12 34 49 / 20%);
-  --cad-control: #efe6ee;
+  /* The theme-toggle shadow should follow control borders and text, not filled boxes. */
+  --cad-control: transparent;
   --cad-surface: #efe6ee;
   font-size: 14px;
 }
@@ -12,9 +13,9 @@
   --cad-edge: #22566d;
   --cad-section: #ff8c99;
   --cad-border: rgb(244 164 96 / 25%);
-  --cad-control: #1f1f1f;
   --cad-surface: #1f1f1f;
 }
+.cad select option { background: var(--cad-surface); color: inherit; }
 .cad-description { line-height: 1.7; max-width: 70ch; }
 .cad-stage { position: relative; margin: 20px 0 12px; }
 .cad-canvas { width: 100%; height: clamp(320px, 60vw, 480px); }
@@ -117,8 +118,7 @@
 .cad-parameter-actions { display: grid; gap: 8px; border-top: 1px solid var(--cad-border); padding-top: 16px; }
 .cad-parameters button { cursor: pointer; }
 .cad-parameters button:disabled { opacity: .5; cursor: default; }
-.cad-parameter-actions button[type=submit] { background: var(--cad-body); color: white; border-color: transparent; }
-.dark .cad-parameter-actions button[type=submit] { color: #1f1f1f; }
+.cad-parameter-actions button[type=submit] { color: var(--cad-body); border-color: currentColor; }
 .cad-compile-status { font-size: 12px; line-height: 1.7; margin-top: 12px; overflow-wrap: anywhere; }
 .cad-error { color: var(--cad-section); }
 .cad-parameters .cad-downloads { font-size: 12px; line-height: 1.8; gap: 12px; flex-direction: column; margin: 16px 0; }
