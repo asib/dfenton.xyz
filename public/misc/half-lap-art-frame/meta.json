@@ -1,0 +1,25 @@
+{
+  "type": "cad",
+  "title": "Half-lap art frame",
+  "description": "Four frame members with complementary half-laps and a rear artwork rabbet. Adjust the artwork size, overlap and joinery, or separate the parts to inspect the joints.",
+  "date": "2026-10-20",
+  "preview": "preview.webp",
+  "previewDark": "preview-dark.webp",
+  "model": "half-lap-art-frame.stl",
+  "displayModel": "half-lap-art-frame-display.json",
+  "source": "half-lap-art-frame.scad",
+  "notes": "Converted from the supplied Onshape FeatureScript. Dimensions are in inches; displayed bounds and STL exports are in millimetres. Defaults fit 30⅜ × 21⁵⁄₁₆ inch artwork with ¼ inch overlap at each edge. The rails retain the front half of each lap; the stiles retain the back half. The rear rabbet starts at Z=0. Clearance enlarges the rear pocket without changing the visible opening. Each physical member has its own color; select a single part for a separate STL. The dimension summary gives two identical rail blanks and two identical stile blanks before machining.",
+  "customizer": {
+    "units": "inches",
+    "outputLabel": "Frame dimensions and blanks",
+    "conditions": {
+      "Exploded": { "parameter": "Part", "value": "all" }
+    },
+    "parts": [
+      { "id": "top", "label": "Top rail · +Y", "color": "#b87924", "darkColor": "#e7b44f" },
+      { "id": "bottom", "label": "Bottom rail · −Y", "color": "#b6483b", "darkColor": "#ef8a7a" },
+      { "id": "left", "label": "Left stile · −X", "color": "#2c78b5", "darkColor": "#65b0e5" },
+      { "id": "right", "label": "Right stile · +X", "color": "#3998a5", "darkColor": "#65cbd0" }
+    ]
+  }
+}

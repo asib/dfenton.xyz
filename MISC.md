@@ -85,6 +85,21 @@ The CAD toolbar provides a **Fullscreen** button with an expand/contract icon. L
 Fullscreen uses an explicit themed background and an independently scrolling sidebar. On narrow screens, the panels become a bounded scrolling area below the viewer. Existing canvas resize handling adjusts the projection/render size without resetting the camera. Browser acceptance includes native and denied-API paths, exact camera preservation over an enter/exit round trip, compilation while fullscreen, collapsing/reopening panels, keyboard/focus cleanup, cut-list navigation, light/dark palettes, mobile portrait/landscape, and static CAD entries without a customizer.
 
 
+### Half-lap art frame
+
+The **Half-lap art frame** entry at `/misc/half-lap-art-frame/` is converted from
+the unchanged FeatureScript stored beside its SCAD. It preserves the original
+defaults, parameter bounds, rear rabbet, complementary front-rail/back-stile
+laps, and exploded offsets. Inch inputs become millimetre boxes **before**
+boolean operations, so the engine also resolves small permitted frames and
+overlaps correctly. Four colors identify physical members; an added `Part`
+selector supports individual exports. The **Frame dimensions and blanks**
+output panel replaces the FeatureScript's read-only blank-length fields with
+evaluated dimensions and quantities. The entry README records default sizes
+and reproduction commands; `tests/art-frame.test.mjs` checks the original
+volume formula, lap contact, pocket/opening behavior, boundaries, and saved
+assets against live compilation.
+
 ### SCAD drawings
 
 Optional `customizer.drawings: true` enables a **Drawings** section between the viewer and cut list. It supplies front, top, and right-end assembly views in third-angle arrangement, enlarged longitudinal and transverse sections of the tote's handle/riser joint, and selectable dimensioned part sheets. All sheets have source-authored dimensions, light/dark palettes, and zoom/pan. The assembly sheet gives overall dimensions; the joint sheet defines the mating relationship. Part sheets cover the finished sizes and machining geometry of all ten physical pieces: sides, ends, risers, handle laminations, and bookmatched bottom halves. A **Download drawings PDF** button exports every sheet using the current valid dimensions. STL-only entries keep their existing viewer and do not gain dimensioned drawings.
