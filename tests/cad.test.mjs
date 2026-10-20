@@ -120,8 +120,8 @@ describe('tool tote customization', () => {
     } finally { result.free(); }
   }
   test('keeps inch defaults and matches the committed initial mesh in millimetres', () => {
-    expect(toteSchema).toHaveLength(30);
-    expect(toteDefaults).toMatchObject({ Riser_length: 10.75, Handle_width: 1.125, Handle_notch_depth: 0.5, Riser_dado_depth: 0.25 });
+    expect(toteSchema).toHaveLength(31);
+    expect(toteDefaults).toMatchObject({ Riser_length: 10.75, Handle_width: 1.125, Handle_notch_depth: 0.75, Riser_dado_depth: 0.25 });
     expect(configuredSource(toteSource, toteSchema, toteDefaults)).toBe(toteSource);
     const actual = tote();
     expect(actual.ok).toBe(true);
@@ -130,7 +130,7 @@ describe('tool tote customization', () => {
     const file = readFileSync(new URL('../public/misc/tool-tote/tool-tote.stl', import.meta.url));
     const expected = meshStats(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength));
     expect(actual.stats.volume).toBeCloseTo(expected.volume, 4);
-    for (const [axis, size] of [508, 228.6, 292.1].entries()) {
+    for (const [axis, size] of [508, 228.6, 285.75].entries()) {
       expect(actual.stats.max[axis] - actual.stats.min[axis]).toBeCloseTo(size, 3);
     }
   });

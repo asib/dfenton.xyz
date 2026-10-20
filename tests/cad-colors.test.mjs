@@ -13,7 +13,9 @@ test('saved colored initial model matches freshly compiled default geometry and 
   const result = render(source);
   try {
     expect(saved.positions).toEqual(result.preview_positions);
-    expect(saved.normals).toEqual(result.preview_normals);
+    // JSON serializes -0 as 0. Bun 1.1.26 compares typed-array sign bits;
+    // canonicalize only zero while retaining exact equality for every normal.
+    expect(saved.normals).toEqual(result.preview_normals.map(value => value === 0 ? 0 : value));
     expect(saved.groups).toEqual(JSON.parse(result.groups));
     expect(saved.groups).toHaveLength(10);
   } finally { result.free(); }

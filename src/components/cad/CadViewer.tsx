@@ -8,6 +8,8 @@ import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
 import type { CutListOutput } from './cutList';
 import { useFullscreen } from './useFullscreen';
+import DrawingSheets from './DrawingSheets';
+import type { DrawingOutput } from './drawings';
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
@@ -25,6 +27,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [flipped, setFlipped] = useState(false);
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
+  const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
   const palette = entry.customizer?.parts;
@@ -105,6 +108,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   return (
     <section className="cad" aria-label="CAD model">
       <p className="cad-description">{entry.description}</p>
+      {entry.customizer?.drawings && <p className="cad-drawing-jump"><a href="#cad-drawings-title">View drawings ↓</a></p>}
       <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined}
         role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? `${entry.title} fullscreen viewer` : undefined}>
         <div className="cad-workspace-toolbar">
@@ -174,11 +178,12 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>
-            <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onViewCutList={fullscreen ? viewCutList : undefined} />
+            <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onDrawings={setDrawings} onViewCutList={fullscreen ? viewCutList : undefined} />
           </details>}
         </div>
         </div>
       </div>
+      {entry.customizer?.drawings && <DrawingSheets output={drawings} title={entry.title} />}
       {entry.customizer?.cutList && <CutListTable output={cutList} palette={entry.customizer.parts} />}
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}

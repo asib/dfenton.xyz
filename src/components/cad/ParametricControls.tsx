@@ -3,16 +3,18 @@ import type { CadEntry } from '../../misc';
 import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
+import type { DrawingOutput, DrawingSheet } from './drawings';
 import { configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
-interface Result { values: Values; stl: string; source: string; output: string }
+interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet }
 
-export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList }: {
+export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList, onDrawings }: {
   entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
   onOutput: (output: CutListOutput) => void;
   onViewCutList?: () => void;
+  onDrawings?: (output: DrawingOutput) => void;
 }) {
   const [source, setSource] = useState<Source | null>(null);
   const [draft, setDraft] = useState<Values>({});
@@ -29,6 +31,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const outputLabel = entry.customizer?.outputLabel;
   const hasParts = !!entry.customizer?.parts?.length;
   const hasCutList = !!entry.customizer?.cutList;
+  const hasDrawings = !!entry.customizer?.drawings;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,18 +50,20 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         // Entries with textual output also compute their default cut list in the
         // worker. The committed fallback mesh stays visible while this runs.
         let output = '';
-        if (outputLabel || hasParts || hasCutList) {
-          const compiled = await compileJob({ kind: 'compile', source: text }, controller.signal);
+        let drawings: DrawingSheet | undefined;
+        if (outputLabel || hasParts || hasCutList || hasDrawings) {
+          const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal);
           controller.signal.throwIfAborted();
           if (compiled.kind !== 'model') return;
           output = compiled.output;
+          drawings = compiled.drawings;
           setInitialModel(compiled);
         }
         setSource({ text, parameters });
         draftValues.current = values;
         edited.current = false;
         setDraft(values);
-        setResult({ values, stl: modelUrl, source: sourceUrl, output });
+        setResult({ values, stl: modelUrl, source: sourceUrl, output, drawings });
         setPhase('');
       } catch (failure) {
         if (controller.signal.aborted) return;
@@ -68,7 +73,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); };
-  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, retry]);
+  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasDrawings, retry]);
 
   useEffect(() => {
     if (!available || !initialModel) return;
@@ -87,6 +92,9 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   useEffect(() => {
     onOutput({ text: result?.output ?? '', stale: !canDownload });
   }, [result?.output, canDownload, onOutput]);
+  useEffect(() => {
+    onDrawings?.({ sheet: result?.drawings, stale: !canDownload });
+  }, [result?.drawings, canDownload, onDrawings]);
   const edit = (name: string, value: string | number | boolean) => {
     job.current?.abort();
     setPhase('');
@@ -113,7 +121,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setPhase('Loading geometry engine…');
     try {
       const text = configuredSource(source.text, source.parameters, values);
-      const compiled = await compileJob({ kind: 'compile', source: text }, controller.signal, () => {
+      const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal, () => {
         if (!controller.signal.aborted) setPhase('Updating model…');
       });
       if (controller.signal.aborted || compiled.kind !== 'model') return;
@@ -122,6 +130,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         stl: URL.createObjectURL(new Blob([compiled.stl], { type: 'model/stl' })),
         source: URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
         output: compiled.output,
+        drawings: compiled.drawings,
       });
       setPhase('');
     } catch (failure) {
