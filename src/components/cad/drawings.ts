@@ -42,15 +42,16 @@ const point = (p: unknown): p is Point => Array.isArray(p) && p.length === 3 &&
 
 // SCAD echo rounds floating-point values to six significant digits. Sources
 // can preserve fractional dimensions as [whole mm, millionths].
+function preciseNumber(n: unknown): number {
+  if (typeof n === 'number' && Number.isFinite(n)) return n;
+  if (Array.isArray(n) && n.length === 2 && Number.isSafeInteger(n[0]) && Number.isInteger(n[1]) && n[1] >= 0 && n[1] <= 1000000) {
+    return (n[0] as number) + (n[1] as number) / 1000000;
+  }
+  return NaN;
+}
 function witness(value: unknown): Point | undefined {
   if (!Array.isArray(value) || value.length !== 3) return;
-  const coordinates = (value as unknown[]).map(n => {
-    if (typeof n === 'number' && Number.isFinite(n)) return n;
-    if (Array.isArray(n) && n.length === 2 && Number.isSafeInteger(n[0]) && Number.isInteger(n[1]) && n[1] >= 0 && n[1] <= 1000000) {
-      return (n[0] as number) + (n[1] as number) / 1000000;
-    }
-    return NaN;
-  });
+  const coordinates = (value as unknown[]).map(preciseNumber);
   return point(coordinates) ? coordinates : undefined;
 }
 
@@ -89,16 +90,16 @@ function parseView(row: unknown): DrawingView {
   let section: DrawingSection | undefined;
   if (row.length >= 5 && !(Array.isArray(row[4]) && row[4].length === 0)) {
     const value: unknown = row[4];
-    if (!Array.isArray(value) || value.length !== 5 || typeof value[0] !== 'number' || !Number.isFinite(value[0]) ||
-        !Array.isArray(value[1]) || value[1].length !== 4 || !value[1].every((n: unknown) => typeof n === 'number' && Number.isFinite(n)) ||
-        value[1][2] <= value[1][0] || value[1][3] <= value[1][1] ||
+    if (!Array.isArray(value) || value.length !== 5 || !Number.isFinite(preciseNumber(value[0])) ||
+        !Array.isArray(value[1]) || value[1].length !== 4 || !value[1].every((n: unknown) => Number.isFinite(preciseNumber(n))) ||
+        preciseNumber(value[1][2]) <= preciseNumber(value[1][0]) || preciseNumber(value[1][3]) <= preciseNumber(value[1][1]) ||
         !Array.isArray(value[2]) || !value[2].every((edge: unknown) => typeof edge === 'string' && ['left', 'right', 'top', 'bottom'].includes(edge)) ||
         !Array.isArray(value[3]) || !value[3].every((note: unknown) => typeof note === 'string') ||
         !Array.isArray(value[4])) {
       throw new Error('Invalid drawing section.');
     }
     const [depth, crop, breaks, notes] = value as [number, DrawingSection['crop'], DrawingSection['breaks'], string[], unknown];
-    section = { depth, crop, breaks, notes, contacts: referenceLines(value[4]) };
+    section = { depth: preciseNumber(depth), crop: crop.map(preciseNumber) as DrawingSection['crop'], breaks, notes, contacts: referenceLines(value[4]) };
   }
   let guides: [Point, Point][] | undefined;
   if (row.length === 6) {

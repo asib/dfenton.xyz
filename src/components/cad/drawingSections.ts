@@ -8,18 +8,23 @@ const cross = (a: Point2, b: Point2, c: Point2) => (b[0] - a[0]) * (c[1] - b[1])
 function simplify(points: Point2[]) {
   let loop = points;
   for (;;) {
-    const next = loop.filter((p, i) => Math.abs(cross(loop[(i + loop.length - 1) % loop.length], p, loop[(i + 1) % loop.length])) > 1e-5);
+    const next = loop.filter((p, i) => {
+      const a = loop[(i + loop.length - 1) % loop.length], b = loop[(i + 1) % loop.length];
+      // Compare angle, not triangle area: a genuine corner may have very
+      // short adjacent segments when the plane cuts close to a mesh face.
+      return Math.abs(cross(a, p, b)) > 1e-6 * distance(a, p) * distance(p, b);
+    });
     if (next.length === loop.length || next.length < 3) return loop;
     loop = next;
   }
 }
 
-function joinSegments(segments: [Point2, Point2][]): Point2[][] {
+function joinSegments(segments: [Point2, Point2][], tolerance = 0.0001): Point2[][] {
   const vertices = new Map<string, Point2>(), neighbors = new Map<string, Set<string>>();
   // Intersections of Float32 triangles can land on opposite sides of a
   // decimal rounding boundary. Weld by distance, not by a rounded string.
   const vertexKey = (p: Point2) => {
-    const existing = [...vertices].find(([, q]) => distance(p, q) < 0.0001);
+    const existing = [...vertices].find(([, q]) => distance(p, q) < tolerance);
     if (existing) return existing[0];
     const id = String(vertices.size);
     vertices.set(id, p);
@@ -77,17 +82,27 @@ export function sectionDrawing(mesh: DrawingMesh, view: DrawingView): ProjectedV
   const section = view.section;
   if (!section) throw new Error('Missing drawing section.');
   const profiles: Point2[][][] = [];
+  // Float32 coordinates lose precision on large models. Account for that
+  // representation error when classifying and welding section intersections.
+  let magnitude = 1;
+  for (const group of mesh.groups) for (let i = group.start * 3; i < (group.start + group.count) * 3; i++) {
+    magnitude = Math.max(magnitude, Math.abs(mesh.positions[i]));
+  }
+  const epsilon = Math.max(0.00001, magnitude * 2 ** -23);
+  const weldTolerance = Math.max(0.0001, epsilon * 2);
   for (const group of mesh.groups) {
     const segments: [Point2, Point2][] = [];
     for (let offset = group.start * 3; offset < (group.start + group.count) * 3; offset += 9) {
       const triangle = [0, 3, 6].map(i => project(Array.from(mesh.positions.slice(offset + i, offset + i + 3)) as Point, view.axes));
-      const depths = triangle.map(p => p[2] - section.depth);
-      if (depths.every(d => Math.abs(d) < 1e-5)) continue;
+      const depths = triangle.map(p => Math.abs(p[2] - section.depth) < epsilon ? 0 : p[2] - section.depth);
+      // Half-open classification takes the material just behind the plane.
+      // Counting every on-plane vertex would include both sides of a stepped
+      // face (for example a section exactly on the rabbet floor), causing forks.
+      if (depths.every(d => d >= 0) || depths.every(d => d < 0)) continue;
       const intersections: Point2[] = [];
       for (let i = 0; i < 3; i++) {
         const j = (i + 1) % 3, a = triangle[i], b = triangle[j], da = depths[i], db = depths[j];
-        if (Math.abs(da) < 1e-5) intersections.push([a[0], a[1]]);
-        if ((da < -1e-5 && db > 1e-5) || (da > 1e-5 && db < -1e-5)) {
+        if ((da < 0) !== (db < 0)) {
           const t = da / (da - db);
           intersections.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
         }
@@ -95,7 +110,7 @@ export function sectionDrawing(mesh: DrawingMesh, view: DrawingView): ProjectedV
       const unique = [...new Map(intersections.map(p => [key(p), p])).values()];
       if (unique.length === 2) segments.push([unique[0], unique[1]]);
     }
-    const loops = joinSegments(segments).map(loop => cropLoop(loop, section.crop)).filter(loop => loop.length >= 3);
+    const loops = joinSegments(segments, weldTolerance).map(loop => cropLoop(loop, section.crop)).filter(loop => loop.length >= 3);
     if (loops.length) profiles.push(loops);
   }
   if (!profiles.length) throw new Error('The drawing section does not intersect any parts.');
