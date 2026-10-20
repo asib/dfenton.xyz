@@ -4,7 +4,7 @@ import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
 import type { DrawingOutput, DrawingSheet } from './drawings';
-import { configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
+import { conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
@@ -110,7 +110,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     for (const parameter of source?.parameters ?? []) {
       const condition = entry.customizer?.conditions?.[parameter.name];
       // An empty field must not prevent switching to a mode that ignores it.
-      if (condition && next[condition.parameter] !== condition.value && typeof next[parameter.name] !== parameter.type) {
+      if (condition && !conditionMatches(condition, next) && typeof next[parameter.name] !== parameter.type) {
         next[parameter.name] = parameter.value;
       }
     }
@@ -195,7 +195,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
           {source.parameters.filter((parameter) => parameter.group === group).map((parameter) => {
             const id = `parameter-${parameter.name}`;
             const condition = entry.customizer?.conditions?.[parameter.name];
-            const disabled = !!condition && draft[condition.parameter] !== condition.value;
+            const disabled = !!condition && !conditionMatches(condition, draft);
+            if (disabled && condition.hide) return null;
             const value = draft[parameter.name];
             const { options, min, max, step } = parameter.control;
             const changeNumber = (raw: string) => { edit(parameter.name, raw === '' ? '' : Number(raw)); };

@@ -1,5 +1,9 @@
+import type { ParameterCondition } from '../../misc';
+
 export type ParameterValue = string | number | boolean;
 export type Values = Record<string, ParameterValue>;
+export const conditionMatches = (condition: ParameterCondition, values: Values) =>
+  condition.values ? condition.values.includes(values[condition.parameter]) : values[condition.parameter] === condition.value;
 export interface Parameter {
   name: string;
   group: string;

@@ -11,6 +11,8 @@ interface DiagramEntry extends EntryBase {
 }
 
 export interface PartColor { id: string; label: string; color: string; darkColor: string }
+export type ParameterCondition = { parameter: string; hide?: boolean } &
+  ({ value: string | number | boolean; values?: never } | { values: (string | number | boolean)[]; value?: never });
 
 export interface CadEntry extends EntryBase {
   type: 'cad';
@@ -25,7 +27,7 @@ export interface CadEntry extends EntryBase {
     cutList?: boolean;
     drawings?: boolean;
     parts?: PartColor[];
-    conditions?: Record<string, { parameter: string; value: string | number | boolean }>;
+    conditions?: Record<string, ParameterCondition>;
   };
   attribution?: { text: string; url: string };
 }
@@ -54,7 +56,10 @@ function validCustomizer(value: unknown): boolean {
   return Object.entries(value.conditions).every(([name, condition]: [string, unknown]) =>
     /^[a-zA-Z_]\w*$/.test(name) && typeof condition === 'object' && condition !== null &&
     'parameter' in condition && typeof condition.parameter === 'string' &&
-    'value' in condition && ['string', 'number', 'boolean'].includes(typeof condition.value));
+    (!('hide' in condition) || typeof condition.hide === 'boolean') &&
+    (('value' in condition && !('values' in condition) && ['string', 'number', 'boolean'].includes(typeof condition.value)) ||
+      ('values' in condition && !('value' in condition) && Array.isArray(condition.values) && condition.values.length > 0 &&
+        condition.values.every((value: unknown) => ['string', 'number', 'boolean'].includes(typeof value)))));
 }
 
 const metadata = import.meta.glob<MiscEntry>('../public/misc/*/meta.json', {
