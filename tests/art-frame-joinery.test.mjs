@@ -102,7 +102,7 @@ test('custom lap and bridle dimensions are reported by the manufacturing sheets'
     }
     const blanks=groupCutList(parseCutList(compile({Joinery}).echo));
     expect(blanks.map(p=>[p.quantity,p.length,p.width,p.thickness])).toEqual([[2,34.875,2.5,.75],[2,25.8125,2.5,.75]]);
-    expect(compileDrawings(configured({Joinery,Part:'left',Exploded:true}),render)).toEqual(compileDrawings(configured({Joinery}),render));
+    expect(compileDrawings(configured({Joinery,Part:'left',Explosion_percent:200}),render)).toEqual(compileDrawings(configured({Joinery}),render));
   }
 });
 

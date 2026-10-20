@@ -67,7 +67,7 @@ test('retains original defaults, bounds, overlap semantics and derived blank len
     Member_width: 2.5, Thickness: 0.75, Rabbet_depth: 0.25, Clearance: 0.03125,
     Spline_thickness: 0, Spline_depth: 0, Spline_count: 1, Loose_tenon_depth: 0, Loose_tenon_width: 0,
     Key_depth: 0, Key_thickness: 0, Key_angle: 8, Dowel_diameter: 0, Dowel_depth: 0, Dowel_count: 2, Dowel_spacing: 0,
-    Tenon_width: 0, Tenon_inset: 0, Mortise_depth: 0, Exploded: false, Part: 'all' });
+    Tenon_width: 0, Tenon_inset: 0, Mortise_depth: 0, Explosion_percent: 0, Part: 'all' });
   expect(schema.every(field => field.description.length > 0)).toBe(true);
   expect(schema.find(field => field.name === 'Art_height').control).toMatchObject({ min: 1, max: 200 });
   expect(configuredSource(source, schema, initial)).toBe(source);
@@ -127,13 +127,13 @@ test('clearance enlarges only the rear pocket, and zero depth removes the rabbet
 });
 
 test('explosion matches the original offsets; individual exports keep their assembly coordinates', () => {
-  const assembled = compile(), exploded = compile({ Exploded: true });
+  const assembled = compile(), exploded = compile({ Explosion_percent: 100 });
   expect(exploded.volume).toBeCloseTo(assembled.volume, 4);
   const offsets = [[0, 5, 0.75], [0, -5, 0.75], [-5, 0, 0], [5, 0, 0]];
   for (const [i, Part] of ['top', 'bottom', 'left', 'right'].entries()) {
     const part = compile({ Part });
     expect(part.groups).toHaveLength(1);
-    expect(compile({ Part, Exploded: true }).positions).toEqual(part.positions);
+    expect(compile({ Part, Explosion_percent: 100 }).positions).toEqual(part.positions);
     const group = exploded.groups[i];
     const b = bounds(exploded.preview.slice(group.start * 3, (group.start + group.count) * 3));
     const a = bounds(part.positions);
@@ -144,12 +144,43 @@ test('explosion matches the original offsets; individual exports keep their asse
   }
 });
 
+test.each(schema.find(field => field.name === 'Joinery').control.options.map(option => option.value))(
+  'explosion translates every member and insert without resizing or removing parts: %s', Joinery => {
+    const assembled = compile({ Joinery });
+    const pieces = result => result.groups.map(group => result.preview.slice(group.start * 3, (group.start + group.count) * 3));
+    const original = pieces(assembled);
+    const insertCount = (original.length - 4) / 4;
+    for (const Explosion_percent of [0, 50, 200]) {
+      const result = compile({ Joinery, Explosion_percent });
+      expect(result.ok).toBe(true);
+      expect(result.warnings).toBe('');
+      expect(result.degraded).toBe('');
+      expect(result.groups.map(group => group.color)).toEqual(assembled.groups.map(group => group.color));
+      if (Explosion_percent === 0) expect(result.preview).toEqual(assembled.preview);
+      for (const [i, part] of pieces(result).entries()) {
+        const a = bounds(original[i]), b = bounds(part);
+        const corner = Math.floor((i - 4) / insertCount);
+        const offsets = [[0, 5, .75], [0, -5, .75], [-5, 0, 0], [5, 0, 0]];
+        const offset = i < 4 ? offsets[i] : [corner % 2 ? 1.25 : -1.25, corner < 2 ? 1.25 : -1.25, 1.5];
+        for (let axis = 0; axis < 3; axis++) {
+          expect((b.min[axis] - a.min[axis]) / inch).toBeCloseTo(offset[axis] * Explosion_percent / 100, 4);
+          expect(b.size[axis]).toBeCloseTo(a.size[axis], 3);
+        }
+        expect(Math.abs(meshStats(part).volume / meshStats(original[i]).volume - 1)).toBeLessThan(1e-5);
+      }
+    }
+    if (insertCount) expect(compile({ Joinery, Part: 'insert', Explosion_percent: 200 }).preview)
+      .toEqual(compile({ Joinery, Part: 'insert' }).preview);
+  });
+
 test.each([
   [{ Reveal: 1, Art_width: 1 }, 'Overlap leaves no opening'],
   [{ Reveal: 0.25, Clearance: 0.25, Member_width: 0.5 }, 'Overlap plus clearance'],
   [{ Rabbet_depth: 0.75 }, 'Rabbet depth must be less'],
   [{ Art_height: 0.5 }, 'Artwork dimensions'],
   [{ Rabbet_depth: -0.1 }, 'Rabbet depth must be between'],
+  [{ Explosion_percent: -1 }, 'Explosion percent must be between'],
+  [{ Explosion_percent: 201 }, 'Explosion percent must be between'],
 ])('rejects invalid source dimensions for %j', (changes, message) => {
   const result = compile(changes);
   expect(result.ok).toBe(false);

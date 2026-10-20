@@ -131,7 +131,7 @@ test('custom insert counts, offsets and mortises update geometry, drilling, quan
     const r=compile(p),sheet=compileDrawings(configured(p),render);
     const part=sheet.parts.find(p=>p.id==='insert');
     if(part)expect(part.quantity).toBe(4*(p.Spline_count||p.Dowel_count||1));
-    expect(compileDrawings(configured({...p,Part:'left',Exploded:true}),render)).toEqual(sheet);
+    expect(compileDrawings(configured({...p,Part:'left',Explosion_percent:200}),render)).toEqual(sheet);
     if(part) {
       const one=compile({...p,Part:'insert'});expect(one.parts).toHaveLength(1);
       expect(one.parts[0]).toEqual(piece(r,insertColor));

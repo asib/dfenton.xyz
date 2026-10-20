@@ -14,7 +14,7 @@
     "drawings": true,
     "cutList": true,
     "conditions": {
-      "Exploded": {
+      "Explosion_percent": {
         "parameter": "Part",
         "value": "all"
       },

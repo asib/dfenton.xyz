@@ -81,7 +81,7 @@ test('changed dimensions, zero rabbet and inspection controls remain coherent', 
     expect(part.views[0].guides).toEqual([]);
     expect(part.notes.join(' ')).toContain('Rabbet omitted');
   }
-  for (const Part of ['left', 'top', 'all']) expect(drawing({ Part, Exploded: true })).toEqual(drawing());
+  for (const Part of ['left', 'top', 'all']) expect(drawing({ Part, Explosion_percent: 100 })).toEqual(drawing());
   expect(() => drawing({ Rabbet_depth: .75 })).toThrow('Rabbet depth must be less');
 });
 
@@ -95,7 +95,7 @@ test('cut list groups identical blanks, uses standard stock and the tote allowan
   expect(rough.map(p => [p.quantity, p.thickness, p.width, p.length])).toEqual([[2, 1, 3, 35.875], [2, 1, 3, 26.8125]]);
   const base = rough.reduce((sum, p) => sum + boardFeet(p), 0);
   expect(base).toBeCloseTo(2.6119791667, 8); expect(base * 1.2).toBeCloseTo(3.134375, 8);
-  expect(groupCutList(parseCutList(output({ Part: 'left', Exploded: true })))).toEqual(rows);
+  expect(groupCutList(parseCutList(output({ Part: 'left', Explosion_percent: 100 })))).toEqual(rows);
   const square = groupCutList(parseCutList(output({ Art_height: 30.375 })));
   expect(square).toHaveLength(1); expect(square[0].quantity).toBe(4);
   const short = groupCutList(parseCutList(output({ Art_width: 5, Art_height: 6 })));
@@ -103,6 +103,14 @@ test('cut list groups identical blanks, uses standard stock and the tote allowan
     const stock = roughDimensions(part, 1, .5, 1, prep);
     expect(stock.quantity).toBe(1); expect(stock.method).toBe('crosscut');
     expect(stock.length).toBeCloseTo(2 * (part.length + 1) + .125, 6);
+  }
+});
+
+test.each(['half_lap', 'splined_miter', 'dowelled_butt'])('explosion leaves every drawing and cut-list dimension/quantity unchanged: %s', Joinery => {
+  const assembled = drawing({ Joinery }), cutList = parseCutList(output({ Joinery }));
+  for (const Explosion_percent of [0, 50, 200]) {
+    expect(drawing({ Joinery, Explosion_percent })).toEqual(assembled);
+    expect(parseCutList(output({ Joinery, Explosion_percent }))).toEqual(cutList);
   }
 });
 

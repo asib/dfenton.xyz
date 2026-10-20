@@ -64,8 +64,8 @@ Tenon_inset = 0; // [0:8]
 Mortise_depth = 0; // [0:8]
 
 /* [Inspection] */
-// Separate members and inserts to inspect the joints.
-Exploded = false;
+// Separation in percent: 0 assembles the frame, 100 matches the original exploded view, and 200 doubles it. Complete frame only; part sizes stay fixed.
+Explosion_percent = 0; // [0:5:200]
 // Select a member or one representative insert for inspection and a separate STL export.
 Part = "all"; // [all:Complete frame, top:Top rail, bottom:Bottom rail, left:Left stile, right:Right stile, insert:One corner insert]
 
@@ -163,7 +163,8 @@ assert(!is_mt || (Tenon_width >= 0 && Tenon_inset >= 0 && (Joinery == "through_m
        (Joinery == "through_mortise_tenon" || mt_depth < Member_width-eps)),
        "Mortise and tenon must leave face shoulders outside the rabbet and a positive blind end wall. Reduce width, inset or depth.");
 assert(Part != "insert" || has_inserts, "This joint has no separate inserts. Select the complete frame or a member.");
-assert(is_bool(Exploded), "Exploded must be true or false.");
+assert(is_num(Explosion_percent) && Explosion_percent >= 0 && Explosion_percent <= 200,
+       "Explosion percent must be between 0 and 200.");
 assert(Part == "all" || Part == "top" || Part == "bottom" || Part == "left" || Part == "right" || Part == "insert",
        "Choose all members or one of the four named parts.");
 
@@ -323,14 +324,14 @@ module member(i) {
     }
 }
 module frame(assembled = false) union() {
+    separation = !assembled && Part == "all" ? Explosion_percent/100 : 0;
     for (i=[0:3]) if (assembled || Part == "all" || Part == part_ids[i])
         color(part_colors[i])
-            translate((!assembled && Exploded && Part == "all" ? offsets[i] : [0,0,0])*inch) member(i);
+            translate(offsets[i]*separation*inch) member(i);
     if (has_inserts) for(k=[0:3]) for(j=[0:insert_count-1])
         if (assembled || Part == "all" || (Part == "insert" && k == 0 && j == 0))
             color(insert_colors[k*3+j])
-                translate((!assembled && Exploded && Part == "all" ?
-                    [corner_sign(k)[0]*Member_width/2,corner_sign(k)[1]*Member_width/2,2*Thickness] : [0,0,0])*inch)
+                translate([corner_sign(k)[0]*Member_width/2,corner_sign(k)[1]*Member_width/2,2*Thickness]*separation*inch)
                     if (Joinery == "dowelled_butt") dowel(k,j); else miter_insert(k,j);
 }
 

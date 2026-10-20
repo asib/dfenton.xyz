@@ -5,7 +5,8 @@
 rabbet, dimensional bounds and relational validations, and adds other joints.
 No Onshape document or external library is needed to use the SCAD file.
 
-All source parameters use **inches**. Each box and exploded offset is converted
+Dimensional source parameters use **inches**; explosion uses percent and the
+dovetail-key angle uses degrees. Each box and exploded offset is converted
 to **millimetres** before boolean operations, matching the browser engine's
 tolerances, site viewer, and STL downloads. XY is the face;
 Z=0 is the back. By default, rails retain the front half of the laps and stiles
@@ -69,7 +70,7 @@ The page and its **Download drawings PDF** button provide four sheets:
 Part sheets dimension pocket run, equal end insets, width and depth, including
 machining limits within already-removed end material. A zero rabbet depth omits
 those cuts and dimensions. Drawings always use the full assembled frame,
-independently of `Part` and `Exploded`. PDF export includes every sheet with
+independently of `Part` and `Explosion_percent`. PDF export includes every sheet with
 vector linework on white US Letter pages; use written dimensions, not scale.
 
 The cut list and CSV use two rows by default, each quantity two. Square frames
@@ -83,9 +84,13 @@ lumber, and 20% extra board feet. Default rough stock is two 1 × 3 × 35⅞-inc
 boards and two 1 × 3 × 26¹³⁄₁₆-inch boards: 2.61 board feet, or 3.13 with 20% extra.
 There is no resaw operation in this model, so resaw controls are hidden.
 
-The exploded offsets match the original: rails move outward by twice the
-member width and forward by one stock thickness; stiles move sideways by
-twice the member width. An added `Part` selector permits individual-member
+The **Explosion percent** slider runs from 0% (assembled, the default) to 200%,
+with intermediate settings. At 100%, offsets match the original: rails move
+outward by twice the member width and forward by one stock thickness; stiles
+move sideways by twice the member width. Separate inserts move outward from
+their corners and forward; every offset scales with the slider. Only placement
+changes: part sizes, assembly/part drawings, PDF dimensions, cut-list quantities,
+and stock requirements stay fixed. An added `Part` selector permits individual-member
 inspection/download in its original assembly coordinates. Explosion applies
 only to the full frame. The four distinct colors and their dark-theme partners
 are inspection aids; they do not prescribe different wood species.
