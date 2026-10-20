@@ -103,9 +103,131 @@ module member(i) {
     }
 }
 
-union()
+module frame(assembled = false) union()
     for (i = [0:3])
-        if (Part == "all" || Part == part_ids[i])
+        if (assembled || Part == "all" || Part == part_ids[i])
             color(part_colors[i])
-                translate((Exploded && Part == "all" ? offsets[i] : [0, 0, 0]) * inch)
+                translate((!assembled && Exploded && Part == "all" ? offsets[i] : [0, 0, 0]) * inch)
                     member(i);
+
+// Finished blanks before machining. Square frames use four equal blanks even
+// though the rails and stiles still need different machining drawings.
+// Machine minimums apply to parent stock before subdividing it.
+echo("CUTLIST_STOCK_V1", [14, 10, 0.0625, 0.0625]);
+echo("CUTLIST_V1", [for (i = [0:3])
+    [part_ids[i], ["Top rail", "Bottom rail", "Left stile", "Right stile"][i], "Solid wood", 1,
+     Thickness, Member_width, i < 2 ? rail_length : stile_length,
+     rail_length == stile_length ? "Frame member" : i < 2 ? "Rail" : "Stile"]
+]);
+
+// Witness coordinates encode whole mm + millionths to retain inch fractions
+// through OpenSCAD echo's six-significant-digit formatting.
+function dp(p) = [for (n = p * inch) [floor(n), round((n - floor(n)) * 1000000)]];
+function dim(label, a, b, direction, side, tier = 1) = [label, dp(a), dp(b), direction, side, tier];
+function guide(a, b) = [dp(a), dp(b)];
+function section(depth, crop, breaks = [], notes = [], contacts = []) =
+    [depth * inch, crop * inch, breaks, notes, contacts];
+// Local member coordinates: u along its length, v from its inner edge outward.
+function pp(rail, u, v, z) = rail ? [u, opening_height / 2 + v, z] : [-opening_width / 2 - v, u, z];
+function pd(rail, label, a, b, direction, side, tier = 1) =
+    dim(label, pp(rail, a[0], a[1], a[2]), pp(rail, b[0], b[1], b[2]), direction, side, tier);
+function pg(rail, a, b) = guide(pp(rail, a[0], a[1], a[2]), pp(rail, b[0], b[1], b[2]));
+
+function frame_part_sheet(rail) = let(
+    length = rail ? rail_length : stile_length,
+    pocket_run = (rail ? Art_width : Art_height) + 2 * Clearance,
+    inner_offset = (rail ? opening_height : opening_width) / 2,
+    extension = min(Member_width, (length - 2 * Member_width) / 2),
+    section_v = (rabbet_width + Member_width) / 2,
+    lap_floor = rail ? 0 : lap_depth,
+    lap_roof = rail ? lap_depth : Thickness
+) [rail ? "rail" : "stile", rail ? "Rails" : "Stiles", 2, [
+    rail ? "Top and bottom rails match. Cut both laps from the BACK; retain the FRONT half."
+         : "Left and right stiles match. Cut both laps from the FRONT; retain the BACK half.",
+    "Both end laps run across the full member width. Grain runs along the blank length.",
+    Rabbet_depth > 0 ? "Center the rear pocket cut along the length; dashed limits include removed lap material."
+                     : "Rabbet omitted: no rear-pocket machining is required.",
+    "All dimensions are finished sizes. Rough-stock allowances are in the cut list."
+], rail ? [184/255,121/255,36/255] : [44/255,120/255,181/255], [
+    ["face", rail ? "Back face / dashed: pocket cut limits" : "Front face / dashed: rear pocket cut limits",
+     rail ? [[1,0,0],[0,-1,0],[0,0,-1]] : [[0,1,0],[-1,0,0],[0,0,1]], [
+        pd(rail, "Blank length", [-length/2,Member_width,0], [length/2,Member_width,0], "horizontal", 1),
+        pd(rail, "Blank width", [-length/2,0,0], [-length/2,Member_width,0], "vertical", -1),
+        pd(rail, "Each lap", [-length/2,0,0], [-length/2+Member_width,0,0], "horizontal", -1),
+        if (Rabbet_depth > 0)
+            pd(rail, "Pocket end inset", [-length/2,0,0], [-pocket_run/2,0,0], "horizontal", -1, 2),
+        if (Rabbet_depth > 0)
+            pd(rail, "Pocket cut run", [-pocket_run/2,0,0], [pocket_run/2,0,0], "horizontal", 1, 2)
+     ], [], Rabbet_depth > 0 ? [
+        pg(rail, [-pocket_run/2,0,0], [-pocket_run/2,rabbet_width,0]),
+        pg(rail, [-pocket_run/2,rabbet_width,0], [pocket_run/2,rabbet_width,0]),
+        pg(rail, [pocket_run/2,rabbet_width,0], [pocket_run/2,0,0])
+     ] : []],
+    ["lap", "End lap / section outside the rabbet",
+     rail ? [[1,0,0],[0,0,1],[0,-1,0]] : [[0,1,0],[0,0,1],[1,0,0]], [
+        pd(rail, "Lap length", [-length/2,section_v,lap_floor], [-length/2+Member_width,section_v,lap_floor], "horizontal", -1),
+        pd(rail, "Lap depth", [-length/2,section_v,lap_floor], [-length/2,section_v,lap_roof], "vertical", -1),
+        pd(rail, "Thickness", [-length/2+Member_width+extension,section_v,0], [-length/2+Member_width+extension,section_v,Thickness], "vertical", 1)
+     ], section(-(inner_offset+section_v), [-length/2,0,-length/2+Member_width+extension,Thickness], ["right"]), [
+        pg(rail, [-length/2,section_v,rail ? 0 : Thickness], [-length/2+Member_width,section_v,rail ? 0 : Thickness])
+     ]],
+    ["profile", Rabbet_depth > 0 ? "Mid-length section / rear rabbet" : "Mid-length section / rabbet omitted",
+     rail ? [[0,1,0],[0,0,1],[1,0,0]] : [[-1,0,0],[0,0,1],[0,1,0]], [
+        pd(rail, "Width", [0,0,Thickness], [0,Member_width,Thickness], "horizontal", -1),
+        pd(rail, "Stock", [0,Member_width,0], [0,Member_width,Thickness], "vertical", 1),
+        if (Rabbet_depth > 0) pd(rail, "Rabbet width", [0,0,Rabbet_depth], [0,rabbet_width,Rabbet_depth], "horizontal", 1),
+        if (Rabbet_depth > 0) pd(rail, "Rabbet depth", [0,0,0], [0,0,Rabbet_depth], "vertical", -1)
+     ], section(0, [inner_offset,0,inner_offset+Member_width,Thickness])]
+]];
+
+if (!is_undef($misc_drawing) && $misc_drawing) {
+    corner_x = -opening_width / 2;
+    corner_y = opening_height / 2;
+    // The section planes lie outside the pocket, through the mating laps.
+    section_v = (rabbet_width + Member_width) / 2;
+    joint_x = corner_x - section_v;
+    joint_y = corner_y + section_v;
+    extension_x = min(Member_width, opening_width / 2);
+    extension_y = min(Member_width, opening_height / 2);
+    echo("PART_DRAWINGS_V1", [frame_part_sheet(true), frame_part_sheet(false)]);
+    echo("DRAWING_V1", ["inches", [
+        ["front", "Front / dashed: artwork boundary", [[1,0,0],[0,1,0],[0,0,1]], [
+            dim("Outside width", [-rail_length/2,stile_length/2,Thickness], [rail_length/2,stile_length/2,Thickness], "horizontal", 1),
+            dim("Artwork width", [-Art_width/2,Art_height/2,Thickness], [Art_width/2,Art_height/2,Thickness], "horizontal", 1, 2),
+            dim("Opening width", [-opening_width/2,-opening_height/2,Thickness], [opening_width/2,-opening_height/2,Thickness], "horizontal", -1),
+            dim("Outside height", [-rail_length/2,-stile_length/2,Thickness], [-rail_length/2,stile_length/2,Thickness], "vertical", -1),
+            dim("Artwork height", [-Art_width/2,-Art_height/2,Thickness], [-Art_width/2,Art_height/2,Thickness], "vertical", -1, 2),
+            dim("Opening height", [opening_width/2,-opening_height/2,Thickness], [opening_width/2,opening_height/2,Thickness], "vertical", 1)
+        ], [], [
+            guide([-Art_width/2,-Art_height/2,Thickness], [Art_width/2,-Art_height/2,Thickness]),
+            guide([Art_width/2,-Art_height/2,Thickness], [Art_width/2,Art_height/2,Thickness]),
+            guide([Art_width/2,Art_height/2,Thickness], [-Art_width/2,Art_height/2,Thickness]),
+            guide([-Art_width/2,Art_height/2,Thickness], [-Art_width/2,-Art_height/2,Thickness])
+        ]],
+        ["top", "Top edge", [[1,0,0],[0,0,-1],[0,1,0]], []],
+        ["right", "Right edge", [[0,0,-1],[0,1,0],[1,0,0]], [
+            dim("Stock", [rail_length/2,-stile_length/2,0], [rail_length/2,-stile_length/2,Thickness], "horizontal", -1)
+        ]],
+        ["joint-longitudinal", "A-A / Across the rail", [[1,0,0],[0,0,1],[0,-1,0]], [
+            dim("Lap length", [-rail_length/2,joint_y,lap_depth], [corner_x,joint_y,lap_depth], "horizontal", -1),
+            dim("Rail lap depth", [-rail_length/2,joint_y,0], [-rail_length/2,joint_y,lap_depth], "vertical", -1),
+            dim("Stock", [corner_x+extension_x,joint_y,0], [corner_x+extension_x,joint_y,Thickness], "vertical", 1)
+        ], section(-joint_y, [-rail_length/2,0,corner_x+extension_x,Thickness], ["right"], [
+            "Top-left corner, cut outside the rear pocket.",
+            "Rail continues right; stile fills the back half.",
+            str("Artwork overlap: ", Reveal, " in at each edge.")
+        ], [guide([-rail_length/2,joint_y,lap_depth], [corner_x,joint_y,lap_depth])])],
+        ["joint-transverse", "B-B / Along the stile", [[0,1,0],[0,0,1],[1,0,0]], [
+            dim("Lap length", [joint_x,corner_y,lap_depth], [joint_x,stile_length/2,lap_depth], "horizontal", -1),
+            dim("Stile lap depth", [joint_x,stile_length/2,lap_depth], [joint_x,stile_length/2,Thickness], "vertical", 1),
+            dim("Stock", [joint_x,corner_y-extension_y,0], [joint_x,corner_y-extension_y,Thickness], "vertical", -1)
+        ], section(joint_x, [corner_y-extension_y,0,stile_length/2,Thickness], ["left"], [
+            "Stile continues left; rail fills the front half.",
+            "All four corners use complementary half-laps.",
+            Rabbet_depth > 0 ? str("Pocket clearance: ", Clearance, " in per edge.") : "Rear rabbet omitted."
+        ], [guide([joint_x,corner_y,lap_depth], [joint_x,stile_length/2,lap_depth])])]
+    ], ["Half-lap corner detail",
+        "Enlarged sections through the top-left corner, outside the rear pocket. Hatches distinguish rail and stile.",
+        "Bearing surface: rail front half meets stile back half at half the stock thickness."]]);
+    frame(true);
+} else frame();

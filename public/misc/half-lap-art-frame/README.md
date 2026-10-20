@@ -26,10 +26,35 @@ Defaults:
 | Rail blanks (quantity 2) | 34.875 × 2.5 × 0.75 |
 | Stile blanks (quantity 2) | 25.8125 × 2.5 × 0.75 |
 
-The SCAD console and page's **Frame dimensions and blanks** panel calculate
-these dimensions from the current parameters. Blank sizes are finished stock
-before cutting the laps and rabbet; they contain no rough-stock allowances.
-The lengths that were read-only FeatureScript fields remain derived values.
+The SCAD console, dimensioned drawings and cut list calculate sizes from the
+current parameters. The lengths that were read-only FeatureScript fields remain
+derived values. Drawings show finished dimensions; machining allowances affect
+only the worksheet's rough stock.
+
+The page and its **Download drawings PDF** button provide four sheets:
+
+1. Front, top-edge and right-edge assembly views with outside, artwork and
+   opening sizes. The dashed rectangle is the artwork boundary.
+2. Two enlarged sections through the top-left half-lap, with bearing surfaces.
+3. Rails, quantity two: blank, both end laps and the rear rabbet.
+4. Stiles, quantity two: blank, opposite-face laps and the rear rabbet.
+
+Part sheets dimension pocket run, equal end insets, width and depth, including
+machining limits within already-removed lap material. A zero rabbet depth omits
+those cuts and dimensions. Drawings always use the full assembled frame,
+independently of `Part` and `Exploded`. PDF export includes every sheet with
+vector linework on white US Letter pages; use written dimensions, not scale.
+
+The cut list and CSV use two rows by default, each quantity two. Square frames
+combine all four identical blanks into one row while retaining separate rail
+and stile machining sheets. Parent stock uses adjustable 14-inch jointer/planer
+and 10-inch table-saw minimums. Short matching pieces can share one longer
+parent, with trimming and crosscut kerf accounted for before subdivision.
+The worksheet defaults to ¼-inch total surfacing allowance, ½-inch extra width,
+1-inch extra length per blank, ⅛-inch crosscut kerf, standard quarter-size
+lumber, and 20% extra board feet. Default rough stock is two 1 × 3 × 35⅞-inch
+boards and two 1 × 3 × 26¹³⁄₁₆-inch boards: 2.61 board feet, or 3.13 with 20% extra.
+There is no resaw operation in this model, so resaw controls are hidden.
 
 The exploded offsets match the original: rails move outward by twice the
 member width and forward by one stock thickness; stiles move sideways by
@@ -53,6 +78,7 @@ From the repository root, using the pinned Bun version in `README.md`:
 openscad --export-format binstl -o public/misc/half-lap-art-frame/half-lap-art-frame.stl public/misc/half-lap-art-frame/half-lap-art-frame.scad
 bun scripts/export-cad-display.mjs public/misc/half-lap-art-frame/half-lap-art-frame.scad public/misc/half-lap-art-frame/half-lap-art-frame-display.json
 bun test tests/art-frame.test.mjs
+bun test tests/art-frame-drawings.test.mjs
 ```
 
 Regenerate both previews from the actual viewer after changing geometry or
