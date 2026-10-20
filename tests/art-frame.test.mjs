@@ -65,7 +65,9 @@ test('retains original defaults, bounds, overlap semantics and derived blank len
   expect(initial).toEqual({ Art_width: 30.375, Art_height: 21.3125, Reveal: 0.25,
     Joinery: 'half_lap', Lap_depth: 0, Tenon_thickness: 0, Tenon_offset: 0,
     Member_width: 2.5, Thickness: 0.75, Rabbet_depth: 0.25, Clearance: 0.03125,
-    Exploded: false, Part: 'all' });
+    Spline_thickness: 0, Spline_depth: 0, Spline_count: 1, Loose_tenon_depth: 0, Loose_tenon_width: 0,
+    Key_depth: 0, Key_thickness: 0, Key_angle: 8, Dowel_diameter: 0, Dowel_depth: 0, Dowel_count: 2, Dowel_spacing: 0,
+    Tenon_width: 0, Tenon_inset: 0, Mortise_depth: 0, Exploded: false, Part: 'all' });
   expect(schema.every(field => field.description.length > 0)).toBe(true);
   expect(schema.find(field => field.name === 'Art_height').control).toMatchObject({ min: 1, max: 200 });
   expect(configuredSource(source, schema, initial)).toBe(source);

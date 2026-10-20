@@ -8,7 +8,7 @@
   "model": "half-lap-art-frame.stl",
   "displayModel": "half-lap-art-frame-display.json",
   "source": "half-lap-art-frame.scad",
-  "notes": "Extended from the supplied Onshape FeatureScript, with the original half-lap as the default. Dimensions are in inches; displayed bounds and STL exports are in millimetres. Choose half-lap, plain miter, mitered half-lap, corner bridle or mitered bridle. The mitered lap and bridle have 45-degree front faces and square back shoulders. Zero lap depth uses half the stock thickness; zero tongue thickness uses one third. The rear rabbet starts at Z=0. Clearance enlarges the rear pocket without changing the visible opening. Each member has its own color; select a single part for a separate STL. Drawings and the four-sheet PDF describe the selected joint. Matching blanks share cut-list rows with adjustable rough-stock allowances.",
+  "notes": "Extended from the supplied Onshape FeatureScript; half-lap remains the default. Eleven corner constructions preserve the artwork opening and outside size: half-lap, plain miter, mitered half-lap, bridle, mitered bridle, exposed-spline miter, loose-tenon miter, dowelled square corner, dovetail-key miter, blind mortise-and-tenon, and through mortise-and-tenon. Relevant controls appear for each joint. Zero-valued joinery dimensions choose automatic sizes as described beside each input. Loose tenons use rectangular, square-corner mortises. Through tenons finish flush outside. Inserts are separate colored pieces; select One corner insert for an individual STL. Nominal fits have zero clearance; fit to test stock. Drawings, machining sheets, the complete PDF, and grouped cut list follow the selected construction. Dowel cut-list entries are square turning blanks; equivalent round stock can be purchased instead. Dimensions are inches; geometry and STL exports are millimetres. The rear rabbet starts at Z=0; clearance enlarges only the back pocket.",
   "customizer": {
     "units": "inches",
     "drawings": true,
@@ -30,7 +30,10 @@
         "parameter": "Joinery",
         "values": [
           "bridle",
-          "mitered_bridle"
+          "mitered_bridle",
+          "loose_tenon_miter",
+          "blind_mortise_tenon",
+          "through_mortise_tenon"
         ],
         "hide": true
       },
@@ -38,7 +41,117 @@
         "parameter": "Joinery",
         "values": [
           "bridle",
-          "mitered_bridle"
+          "mitered_bridle",
+          "loose_tenon_miter",
+          "blind_mortise_tenon",
+          "through_mortise_tenon"
+        ],
+        "hide": true
+      },
+      "Spline_thickness": {
+        "parameter": "Joinery",
+        "values": [
+          "splined_miter"
+        ],
+        "hide": true
+      },
+      "Spline_depth": {
+        "parameter": "Joinery",
+        "values": [
+          "splined_miter"
+        ],
+        "hide": true
+      },
+      "Spline_count": {
+        "parameter": "Joinery",
+        "values": [
+          "splined_miter"
+        ],
+        "hide": true
+      },
+      "Loose_tenon_depth": {
+        "parameter": "Joinery",
+        "values": [
+          "loose_tenon_miter"
+        ],
+        "hide": true
+      },
+      "Loose_tenon_width": {
+        "parameter": "Joinery",
+        "values": [
+          "loose_tenon_miter"
+        ],
+        "hide": true
+      },
+      "Key_depth": {
+        "parameter": "Joinery",
+        "values": [
+          "dovetail_key_miter"
+        ],
+        "hide": true
+      },
+      "Key_thickness": {
+        "parameter": "Joinery",
+        "values": [
+          "dovetail_key_miter"
+        ],
+        "hide": true
+      },
+      "Key_angle": {
+        "parameter": "Joinery",
+        "values": [
+          "dovetail_key_miter"
+        ],
+        "hide": true
+      },
+      "Dowel_diameter": {
+        "parameter": "Joinery",
+        "values": [
+          "dowelled_butt"
+        ],
+        "hide": true
+      },
+      "Dowel_depth": {
+        "parameter": "Joinery",
+        "values": [
+          "dowelled_butt"
+        ],
+        "hide": true
+      },
+      "Dowel_count": {
+        "parameter": "Joinery",
+        "values": [
+          "dowelled_butt"
+        ],
+        "hide": true
+      },
+      "Dowel_spacing": {
+        "parameter": "Joinery",
+        "values": [
+          "dowelled_butt"
+        ],
+        "hide": true
+      },
+      "Tenon_width": {
+        "parameter": "Joinery",
+        "values": [
+          "blind_mortise_tenon",
+          "through_mortise_tenon"
+        ],
+        "hide": true
+      },
+      "Tenon_inset": {
+        "parameter": "Joinery",
+        "values": [
+          "blind_mortise_tenon",
+          "through_mortise_tenon"
+        ],
+        "hide": true
+      },
+      "Mortise_depth": {
+        "parameter": "Joinery",
+        "values": [
+          "blind_mortise_tenon"
         ],
         "hide": true
       }
@@ -67,7 +180,92 @@
         "label": "Right stile \u00b7 +X",
         "color": "#3998a5",
         "darkColor": "#65cbd0"
+      },
+      {
+        "id": "insert-0-0",
+        "label": "Top-left insert 1",
+        "color": "#8754ad",
+        "darkColor": "#c89bed"
+      },
+      {
+        "id": "insert-0-1",
+        "label": "Top-left insert 2",
+        "color": "#ae689d",
+        "darkColor": "#e7a4d4"
+      },
+      {
+        "id": "insert-0-2",
+        "label": "Top-left insert 3",
+        "color": "#7065af",
+        "darkColor": "#ada4e9"
+      },
+      {
+        "id": "insert-1-0",
+        "label": "Top-right insert 1",
+        "color": "#508549",
+        "darkColor": "#9bc792"
+      },
+      {
+        "id": "insert-1-1",
+        "label": "Top-right insert 2",
+        "color": "#75853c",
+        "darkColor": "#bcc87b"
+      },
+      {
+        "id": "insert-1-2",
+        "label": "Top-right insert 3",
+        "color": "#47856d",
+        "darkColor": "#87c4ab"
+      },
+      {
+        "id": "insert-2-0",
+        "label": "Bottom-left insert 1",
+        "color": "#a67538",
+        "darkColor": "#deb579"
+      },
+      {
+        "id": "insert-2-1",
+        "label": "Bottom-left insert 2",
+        "color": "#a75a55",
+        "darkColor": "#e59b94"
+      },
+      {
+        "id": "insert-2-2",
+        "label": "Bottom-left insert 3",
+        "color": "#956d70",
+        "darkColor": "#cda6ab"
+      },
+      {
+        "id": "insert-3-0",
+        "label": "Bottom-right insert 1",
+        "color": "#476c9c",
+        "darkColor": "#8eafe0"
+      },
+      {
+        "id": "insert-3-1",
+        "label": "Bottom-right insert 2",
+        "color": "#5d7c92",
+        "darkColor": "#9dbacf"
+      },
+      {
+        "id": "insert-3-2",
+        "label": "Bottom-right insert 3",
+        "color": "#687aaf",
+        "darkColor": "#a5b4e8"
       }
-    ]
+    ],
+    "optionConditions": {
+      "Part": {
+        "insert": {
+          "parameter": "Joinery",
+          "values": [
+            "splined_miter",
+            "loose_tenon_miter",
+            "dowelled_butt",
+            "dovetail_key_miter"
+          ]
+        }
+      }
+    }
   }
 }
