@@ -120,7 +120,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setDraft(next);
     updateTimer.current = window.setTimeout(() => {
       if (form.current) commit(form.current);
-    }, 1500);
+    }, 1000);
   };
   const apply = async (values: Values) => {
     if (!source) return;
@@ -177,7 +177,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
 
   return <aside className="cad-parameters" aria-label="Model parameters">
     <h2 className="sr-only">Model parameters</h2>
-    <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model after a 1.5-second pause, or when you leave a field.</p>
+    <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model after a 1-second pause, or when you leave a field.</p>
     {source && <form ref={form}
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
       onBlur={(event) => {
