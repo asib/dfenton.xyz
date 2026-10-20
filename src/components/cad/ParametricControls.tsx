@@ -24,6 +24,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [retry, setRetry] = useState(0);
   const [initialModel, setInitialModel] = useState<CompiledModel | null>(null);
   const job = useRef<AbortController | null>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const updateTimer = useRef<number>();
   const draftValues = useRef<Values>({});
   const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;
@@ -72,7 +74,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       }
     };
     void load();
-    return () => { controller.abort(); job.current?.abort(); };
+    return () => { controller.abort(); job.current?.abort(); window.clearTimeout(updateTimer.current); };
   }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasDrawings, retry]);
 
   useEffect(() => {
@@ -95,7 +97,12 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   useEffect(() => {
     onDrawings?.({ sheet: result?.drawings, stale: !canDownload });
   }, [result?.drawings, canDownload, onDrawings]);
+  const cancelAutoUpdate = () => {
+    window.clearTimeout(updateTimer.current);
+    updateTimer.current = undefined;
+  };
   const edit = (name: string, value: string | number | boolean) => {
+    cancelAutoUpdate();
     job.current?.abort();
     setPhase('');
     setError('');
@@ -111,6 +118,9 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     draftValues.current = next;
     edited.current = true;
     setDraft(next);
+    updateTimer.current = window.setTimeout(() => {
+      if (form.current) commit(form.current);
+    }, 1500);
   };
   const apply = async (values: Values) => {
     if (!source) return;
@@ -140,6 +150,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     }
   };
   const commit = (form: HTMLFormElement) => {
+    cancelAutoUpdate();
     if (!available) return;
     edited.current = false;
     if (!form.checkValidity()) {
@@ -151,6 +162,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     if (JSON.stringify(values) !== JSON.stringify(result?.values)) void apply(values);
   };
   const reset = () => {
+    cancelAutoUpdate();
     if (!source) return;
     job.current?.abort();
     const values = defaults(source.parameters);
@@ -165,8 +177,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
 
   return <aside className="cad-parameters" aria-label="Model parameters">
     <h2 className="sr-only">Model parameters</h2>
-    <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model when you leave a field.</p>
-    {source && <form
+    <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model after a 1.5-second pause, or when you leave a field.</p>
+    {source && <form ref={form}
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
       onBlur={(event) => {
         if (!edited.current || !(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement)) return;
@@ -220,7 +232,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     <div className="cad-compile-status" aria-live="polite" aria-atomic="true">
       {error ? <p className="cad-error">{error.replace(/^evaluation error:\s*/i, '')} {source ? 'The previous valid model is still shown.' : ''}</p> :
         <p>{phase ? `${phase}${source ? ' The previous valid model is still shown.' : ''}` :
-          pending ? 'Finish editing a field to update the model. The previous valid model is still shown.' : source ? 'Model is up to date.' : ''}</p>}
+          pending ? 'Waiting for a pause in editing… The previous valid model is still shown.' : source ? 'Model is up to date.' : ''}</p>}
     </div>
     {outputLabel && result?.output && <details className="cad-model-output">
       <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
