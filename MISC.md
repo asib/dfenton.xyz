@@ -85,17 +85,24 @@ The CAD toolbar provides a **Fullscreen** button with an expand/contract icon. L
 Fullscreen uses an explicit themed background and an independently scrolling sidebar. On narrow screens, the panels become a bounded scrolling area below the viewer. Existing canvas resize handling adjusts the projection/render size without resetting the camera. Browser acceptance includes native and denied-API paths, exact camera preservation over an enter/exit round trip, compilation while fullscreen, collapsing/reopening panels, keyboard/focus cleanup, cut-list navigation, light/dark palettes, mobile portrait/landscape, and static CAD entries without a customizer.
 
 
-### Half-lap art frame
+### Art frame
 
-The **Half-lap art frame** entry at `/misc/half-lap-art-frame/` is converted from
+The **Art frame** entry at `/misc/half-lap-art-frame/` is extended from
 the unchanged FeatureScript stored beside its SCAD. It preserves the original
 defaults, parameter bounds, rear rabbet, complementary front-rail/back-stile
 laps, and exploded offsets. Inch inputs become millimetre boxes **before**
 boolean operations, so the engine also resolves small permitted frames and
 overlaps correctly. Four colors identify physical members; an added `Part`
-selector supports individual exports. Four drawing/PDF sheets cover assembly,
-the half-lap corner, rails, and stiles. Part sheets define blank size, lap length
-and depth, and the rear pocket's cutting run, equal end insets, width and depth.
+selector supports individual exports. `Joinery` currently selects half-lap,
+plain miter, mitered half-lap, corner bridle or mitered bridle. The mitered lap
+and bridle use a 45-degree front face and square back shoulders. Lap depth,
+bridle tongue thickness and tongue offset are configurable; zero depth/thickness
+uses half/one-third of stock thickness respectively. Controls appear only for
+the applicable joints. Source assertions require material on both faces, while
+inactive settings are ignored. Nominal mating clearance is zero.
+Four drawing/PDF sheets cover assembly, the selected corner, rails and stiles.
+Part sheets define blank size, end cuts, tongue/slot/cheek sizes where applicable,
+and the rear pocket's cutting run, equal end insets, width and depth.
 Zero rabbet depth removes pocket machining from the sheets. The cut list groups
 two rails and two stiles; square frames combine four equal blanks into one row,
 while machining sheets remain separate. The shared worksheet provides standard
@@ -139,7 +146,7 @@ Run `bun test tests/drawings.test.mjs` for projected visibility, partial occlusi
 
 Set `customizer` to `{}` to enable controls from the source's OpenSCAD Customizer annotations. The engine reads the public literal assignments, groups, help comments, enum options, and numeric ranges/steps, excluding `[Hidden]` fields. The UI supports scalar numbers, strings, and booleans; unsupported fields fail visibly rather than disappearing. Bounded numbers have both sliders and precise numeric entry. Unannotated numbers use unrestricted numeric entry, leaving the source assertions authoritative. All values and dimensions retain their source precision.
 
-Optional `customizer.conditions` maps a dependent field to `{ "parameter": "controlling_field", "value": "enabled_value" }`. Use this only for dependencies established by the source. The saw guide enables the ratio and angle inputs in their respective modes. These conditions live in metadata; parameter defaults, descriptions, and ranges remain in the SCAD file.
+Optional `customizer.conditions` maps a dependent field to `{ "parameter": "controlling_field", "value": "enabled_value" }`. Alternatively, `values: ["first_mode", "second_mode"]` enables the field for any listed value; supply exactly one of `value` and `values`. Set `hide: true` to hide inactive fields instead of disabling them. Use this only for dependencies established by the source. The saw guide enables the ratio and angle inputs in their respective modes; the art frame shows lap controls for lap joints and tongue controls for bridles. These conditions live in metadata; parameter defaults, descriptions, and ranges remain in the SCAD file. Switching modes resets incomplete inactive numeric fields to their source defaults, so a hidden invalid field cannot block the new mode.
 
 Optional `customizer.units` is `mm` (the default) or `inches` and labels dimensional inputs without converting source values. Displayed mesh bounds, section positions and STL coordinates remain millimetres. The tool tote uses inch inputs and scales its geometry in the SCAD source. It exposes assembly, exploded, bridle-detail and individual-part views through its `Part` parameter, with the explosion distance and optional screw dimensions enabled only when applicable. Its source includes the stopped bottom grooves and confirmed joinery defaults. Each handle underside notch continues from the riser's inner edge through the handle end, giving both laminations one continuous bearing surface on the riser-slot floor. `Handle_notch_depth` (0.75 inches by default) controls that shared shoulder; there is no independently raised tip. The default shoulder and slot floor are both at Z=9 inches, the handle middle underside is Z=8.25 inches, the top is Z=11.25 inches, and the riser top is Z=10.75 inches. Cut-list blanks retain their full 3-inch height. The default assembly STL is generated with the same OpenRSCAD engine as live edits; use individual-part views for fabrication exports because the nominal assembly has touching components. Keep the source synchronized with the authored tote model when revising it.
 

@@ -63,6 +63,7 @@ function rayHits(positions, axis, u, v) {
 
 test('retains original defaults, bounds, overlap semantics and derived blank lengths', () => {
   expect(initial).toEqual({ Art_width: 30.375, Art_height: 21.3125, Reveal: 0.25,
+    Joinery: 'half_lap', Lap_depth: 0, Tenon_thickness: 0, Tenon_offset: 0,
     Member_width: 2.5, Thickness: 0.75, Rabbet_depth: 0.25, Clearance: 0.03125,
     Exploded: false, Part: 'all' });
   expect(schema.every(field => field.description.length > 0)).toBe(true);

@@ -1,16 +1,43 @@
-# Half-lap art frame
+# Art frame with selectable corner joints
 
 `half-lap-art-frame.fs` is the unchanged, user-supplied FeatureScript 3083.
-`half-lap-art-frame.scad` translates its four cuboid members, complementary
-half-lap cuts, back rabbet, dimensional bounds, and relational validations.
+`half-lap-art-frame.scad` preserves its default half-lap construction, back
+rabbet, dimensional bounds and relational validations, and adds other joints.
 No Onshape document or external library is needed to use the SCAD file.
 
 All source parameters use **inches**. Each box and exploded offset is converted
 to **millimetres** before boolean operations, matching the browser engine's
 tolerances, site viewer, and STL downloads. XY is the face;
-Z=0 is the back. The rails retain the front half of the laps, and the stiles
+Z=0 is the back. By default, rails retain the front half of the laps and stiles
 retain the back half. Reveal means overlap at each edge, not exposed artwork.
 Clearance affects the back pocket only. A zero rabbet depth omits that cut.
+
+The `Joinery` selector currently offers:
+
+| Value | Corner construction |
+| --- | --- |
+| `half_lap` | Square shoulders; front rail layer overlaps the back stile layer. |
+| `miter` | Matching 45-degree end faces through the full stock thickness. |
+| `mitered_half_lap` | Front layers have 45-degree miters; back layers retain square rail shoulders and full stile ends. |
+| `bridle` | Rail tongues enter open-ended stile slots between front and back cheeks. |
+| `mitered_bridle` | As above, with 45-degree miters on the front cheeks; back cheeks retain square shoulders. |
+
+`Lap_depth` is the depth removed from the back of the rails; zero derives half
+the stock thickness. The complementary stile cut is `Thickness - lap_depth`.
+For bridles, `Tenon_thickness = 0` derives one third of the stock thickness.
+`Tenon_offset` shifts its center toward the front when positive. Back cheek
+thickness is `(Thickness - tenon_thickness) / 2 + Tenon_offset`; front cheek
+thickness is the remainder. Source assertions require positive material in
+both layers/cheeks. Inactive joint settings are ignored, and the page hides
+their controls. Mating faces use nominal zero clearance; fit them on test stock.
+
+Each option preserves the outside dimensions, artwork opening, back pocket and
+four physical members. Blank sizes are identical across these five types;
+machining geometry and dimensions change with the selected joint. Miters are
+45 degrees in plan, and blank lengths include their outer long points. The
+rabbet is subtracted from the assembled member geometry, including any portions
+that intersect a tongue or cheek near the opening. Section details are taken
+outside that pocket and the part sheets separately specify the pocket cut.
 
 Defaults:
 
@@ -35,12 +62,12 @@ The page and its **Download drawings PDF** button provide four sheets:
 
 1. Front, top-edge and right-edge assembly views with outside, artwork and
    opening sizes. The dashed rectangle is the artwork boundary.
-2. Two enlarged sections through the top-left half-lap, with bearing surfaces.
-3. Rails, quantity two: blank, both end laps and the rear rabbet.
-4. Stiles, quantity two: blank, opposite-face laps and the rear rabbet.
+2. Two enlarged sections through the selected top-left joint, with contact surfaces.
+3. Rails, quantity two: blank, both end joints and the rear rabbet.
+4. Stiles, quantity two: blank, complementary joints and the rear rabbet.
 
 Part sheets dimension pocket run, equal end insets, width and depth, including
-machining limits within already-removed lap material. A zero rabbet depth omits
+machining limits within already-removed end material. A zero rabbet depth omits
 those cuts and dimensions. Drawings always use the full assembled frame,
 independently of `Part` and `Exploded`. PDF export includes every sheet with
 vector linework on white US Letter pages; use written dimensions, not scale.
@@ -79,8 +106,13 @@ openscad --export-format binstl -o public/misc/half-lap-art-frame/half-lap-art-f
 bun scripts/export-cad-display.mjs public/misc/half-lap-art-frame/half-lap-art-frame.scad public/misc/half-lap-art-frame/half-lap-art-frame-display.json
 bun test tests/art-frame.test.mjs
 bun test tests/art-frame-drawings.test.mjs
+bun test tests/art-frame-joinery.test.mjs
 ```
 
 Regenerate both previews from the actual viewer after changing geometry or
 colors. The conversion tests compare mesh volume to the original FeatureScript
-formula and probe the half-lap bearing faces, rabbet, opening, and back pocket.
+formula and probe mating faces at all four corners, rabbet, opening, and back
+pocket. Joinery tests also check custom lap/tongue dimensions, closed contours,
+zero pocket depth, small frames, inactive settings and inspection independence.
+The saved STL/display assets and thumbnails remain the original half-lap
+defaults; tests verify that the current source still matches those assets.
