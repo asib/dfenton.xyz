@@ -1,5 +1,9 @@
+import type { ParameterCondition } from '../../misc';
+
 export type ParameterValue = string | number | boolean;
 export type Values = Record<string, ParameterValue>;
+export const conditionMatches = (condition: ParameterCondition, values: Values) =>
+  condition.values ? condition.values.includes(values[condition.parameter]) : values[condition.parameter] === condition.value;
 export interface Parameter {
   name: string;
   group: string;
@@ -82,4 +86,13 @@ export function configuredSource(source: string, parameters: Parameter[], values
     result = result.replace(assignment, (_match, prefix: string, _literal: string, suffix: string) => `${prefix}${JSON.stringify(value)}${suffix}`);
   }
   return result;
+}
+
+// A mode change can remove an enum choice (for example an insert-only export).
+// Reset that selection to the first available source option before compiling.
+export function availableOptions(parameter: Parameter, conditions: Record<string, ParameterCondition> | undefined, values: Values) {
+  return parameter.control.options?.filter(option => {
+    const condition = conditions?.[String(option.value)];
+    return !condition || conditionMatches(condition, values);
+  });
 }

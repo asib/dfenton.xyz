@@ -27,6 +27,6 @@ export function compileDrawings(source: string, render: (source: string) => Rend
       const geometry = { ...mesh, groups };
       return { ...part, views: part.views.map(view => draw(view, geometry)) };
     });
-    return { units: definition.units, views: definition.views.map(view => draw(view)), parts };
+    return { ...definition, views: definition.views.map(view => draw(view)), parts };
   } finally { result.free(); }
 }

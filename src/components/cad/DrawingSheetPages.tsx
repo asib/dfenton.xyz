@@ -1,5 +1,5 @@
 import { inches } from './cutList';
-import { dimensionValue, project, type DrawingDimension, type DrawingSheet, type PartDrawing, type ProjectedView } from './drawings';
+import { dimensionValue, jointLabels, project, type DrawingDimension, type DrawingSheet, type PartDrawing, type ProjectedView } from './drawings';
 
 interface Placement { view: ProjectedView; x: number; y: number; scale: number }
 const width = (view: ProjectedView) => view.bounds[2] - view.bounds[0];
@@ -34,7 +34,7 @@ function Dimension({ dimension, placement, units }: { dimension: DrawingDimensio
   </g>;
 }
 
-function ViewGeometry({ placement, units, hatchPrefix = 'joint' }: { placement: Placement; units: DrawingSheet['units']; hatchPrefix?: string }) {
+function ViewGeometry({ placement, units, hatchPrefix = 'joint', bearingLabel = 'Bearing surface' }: { placement: Placement; units: DrawingSheet['units']; hatchPrefix?: string; bearingLabel?: string }) {
   const { view, x, y, scale } = placement;
   const px = (n: number) => x + (n - view.bounds[0]) * scale;
   const py = (n: number) => y + (view.bounds[3] - n) * scale;
@@ -58,7 +58,7 @@ function ViewGeometry({ placement, units, hatchPrefix = 'joint' }: { placement: 
     {view.section?.contacts.map(([a, b], i) => {
       const p = project(a, view.axes), q = project(b, view.axes);
       return <line key={i} className="cad-drawing-bearing" x1={px(p[0])} y1={py(p[1])} x2={px(q[0])} y2={py(q[1])}>
-        <title>Handle notch roof bears on the riser-slot floor</title>
+        <title>{bearingLabel}</title>
       </line>;
     })}
     {view.dimensions.map((dimension, i) => <Dimension key={i} dimension={dimension} placement={placement} units={units} />)}
@@ -72,7 +72,7 @@ function Hatches({ prefix }: { prefix: string }) {
   </pattern>)}</defs>;
 }
 
-export function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
+export function AssemblySheet({ sheet, title, id }: { sheet: DrawingSheet; title: string; id?: string }) {
   const front = sheet.views.find(view => view.id === 'front');
   const top = sheet.views.find(view => view.id === 'top');
   const right = sheet.views.find(view => view.id === 'right');
@@ -85,7 +85,7 @@ export function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: st
     { view: right, x: 90 + width(front) * scale + 140, y: frontY, scale },
   ];
   const sheetHeight = frontY + Math.max(height(front), height(right)) * scale + 110;
-  return <svg className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="assembly-sheet-title assembly-sheet-description">
+  return <svg id={id} className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="assembly-sheet-title assembly-sheet-description">
     <title id="assembly-sheet-title">{title} — assembly drawing</title>
     <desc id="assembly-sheet-description">Front, top, and right-end orthographic views in third-angle arrangement. Visible edges only. Dimensions in {sheet.units}, evaluated from the SCAD model. Screen scale varies; use the written dimensions.</desc>
     <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / ASSEMBLY</text>
@@ -102,7 +102,8 @@ export function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: st
   </svg>;
 }
 
-export function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
+export function JointSheet({ sheet, title, id }: { sheet: DrawingSheet; title: string; id?: string }) {
+  const labels = jointLabels(sheet);
   const longitudinal = sheet.views.find(view => view.id === 'joint-longitudinal');
   const transverse = sheet.views.find(view => view.id === 'joint-transverse');
   if (!longitudinal || !transverse) return null;
@@ -110,25 +111,25 @@ export function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: strin
   const placements: Placement[] = [{ view: longitudinal, x: 140, y: 180, scale }, { view: transverse, x: 770, y: 180, scale }];
   const bottom = 180 + Math.max(height(longitudinal), height(transverse)) * scale;
   const sheetHeight = bottom + 270;
-  return <svg className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="joint-sheet-title joint-sheet-description">
-    <title id="joint-sheet-title">{title} — handle/riser joint detail</title>
-    <desc id="joint-sheet-description">Enlarged longitudinal and transverse sections through the assembled handle/riser bridle joint. Hatching distinguishes the wooden pieces. The highlighted bearing surface joins the handle notch roof to the riser-slot floor.</desc>
+  return <svg id={id} className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="joint-sheet-title joint-sheet-description">
+    <title id="joint-sheet-title">{title} — {labels.title}</title>
+    <desc id="joint-sheet-description">{labels.description} {labels.bearingLabel}</desc>
     <Hatches prefix="joint" />
-    <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / HANDLE–RISER JOINT</text>
+    <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / {sheet.joint ? labels.title.toUpperCase() : 'HANDLE–RISER JOINT'}</text>
     <text className="cad-drawing-sheet-meta" x="1170" y="32" textAnchor="end">{sheet.units === 'inches' ? 'INCHES' : 'MILLIMETRES'} · ENLARGED SECTIONS</text>
     {placements.map(placement => <g key={placement.view.id}>
-      <ViewGeometry placement={placement} units={sheet.units} />
+      <ViewGeometry placement={placement} units={sheet.units} bearingLabel={labels.bearingLabel} />
       <text className="cad-drawing-view-title" x={placement.x - 35} y={bottom + 110}>{placement.view.title.toUpperCase()}</text>
       {placement.view.section?.notes.map((note, i) => <text key={i} className="cad-drawing-note" x={placement.x - 35} y={bottom + 140 + i * 22}>{note}</text>)}
     </g>)}
     <line className="cad-drawing-bearing" x1="30" y1={sheetHeight - 48} x2="65" y2={sheetHeight - 48} />
-    <text className="cad-drawing-note" x="78" y={sheetHeight - 44}>Bearing surface: handle notch roof rests on riser-slot floor. Both ends use the same joint.</text>
+    <text className="cad-drawing-note" x="78" y={sheetHeight - 44}>{labels.bearingLabel}</text>
     <text className="cad-drawing-sheet-meta" x="30" y={sheetHeight - 20}>HATCHES DISTINGUISH PARTS · BREAK MARKS INDICATE CONTINUING MATERIAL · USE WRITTEN DIMENSIONS</text>
     <text className="cad-drawing-sheet-meta" x="1170" y={sheetHeight - 20} textAnchor="end">JOINT DETAIL / 02</text>
   </svg>;
 }
 
-export function PartSheet({ part, units, number, title }: { part: PartDrawing; units: DrawingSheet['units']; number: number; title: string }) {
+export function PartSheet({ part, units, number, title, id }: { part: PartDrawing; units: DrawingSheet['units']; number: number; title: string; id?: string }) {
   const [main, ...details] = part.views;
   const bottomMargin = (view: ProjectedView) => 32 * Math.max(0, ...view.dimensions
     .filter(d => d.direction === 'horizontal' && d.side === -1).map(d => d.tier));
@@ -144,7 +145,7 @@ export function PartSheet({ part, units, number, title }: { part: PartDrawing; u
   const detailCaption = Math.max(mainCaption, ...detailPlacements.map(p => p.y + height(p.view) * p.scale + bottomMargin(p.view) + 35));
   const notesY = detailCaption + 50, sheetHeight = notesY + part.notes.length * 23 + 45;
   const prefix = `part-${part.id}`;
-  return <svg className="cad-drawing-sheet" data-part-sheet={part.id} viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby={`${prefix}-title ${prefix}-description`}>
+  return <svg id={id} className="cad-drawing-sheet" data-part-sheet={part.id} viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby={`${prefix}-title ${prefix}-description`}>
     <title id={`${prefix}-title`}>{part.title} — dimensioned part sheet, quantity {part.quantity}</title>
     <desc id={`${prefix}-description`}>Finished part dimensions and joinery. Detail views use independent scales. Dashed lines identify machining references; hatching identifies sectioned material. Use written dimensions.</desc>
     <Hatches prefix={prefix} />

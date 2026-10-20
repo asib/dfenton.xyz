@@ -24,8 +24,16 @@ export interface PartDrawingDefinition {
   id: string; title: string; quantity: number; notes: string[]; color: Point; views: DrawingView[];
 }
 export interface PartDrawing extends Omit<PartDrawingDefinition, 'views'> { views: ProjectedView[] }
-export interface DrawingSheet { units: 'inches' | 'mm'; views: ProjectedView[]; parts?: PartDrawing[] }
+export interface DrawingJoint { title: string; description: string; bearingLabel: string }
+export interface DrawingSheet { units: 'inches' | 'mm'; views: ProjectedView[]; parts?: PartDrawing[]; joint?: DrawingJoint }
 export interface DrawingOutput { sheet?: DrawingSheet; stale: boolean }
+
+// Older tote sources omit the optional source-authored joint captions.
+export const jointLabels = (sheet: Pick<DrawingSheet, 'joint'>): DrawingJoint => sheet.joint ?? {
+  title: 'Handle/riser joint detail',
+  description: 'Enlarged longitudinal and transverse sections through the assembled handle/riser bridle joint. Hatching distinguishes the wooden pieces.',
+  bearingLabel: 'Handle notch roof rests on riser-slot floor. Both ends use the same joint.',
+};
 
 export const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 export const project = (p: Point, axes: DrawingView['axes']): Point => [dot(p, axes[0]), dot(p, axes[1]), dot(p, axes[2])];
@@ -34,15 +42,16 @@ const point = (p: unknown): p is Point => Array.isArray(p) && p.length === 3 &&
 
 // SCAD echo rounds floating-point values to six significant digits. Sources
 // can preserve fractional dimensions as [whole mm, millionths].
+function preciseNumber(n: unknown): number {
+  if (typeof n === 'number' && Number.isFinite(n)) return n;
+  if (Array.isArray(n) && n.length === 2 && Number.isSafeInteger(n[0]) && Number.isInteger(n[1]) && n[1] >= 0 && n[1] <= 1000000) {
+    return (n[0] as number) + (n[1] as number) / 1000000;
+  }
+  return NaN;
+}
 function witness(value: unknown): Point | undefined {
   if (!Array.isArray(value) || value.length !== 3) return;
-  const coordinates = (value as unknown[]).map(n => {
-    if (typeof n === 'number' && Number.isFinite(n)) return n;
-    if (Array.isArray(n) && n.length === 2 && Number.isSafeInteger(n[0]) && Number.isInteger(n[1]) && n[1] >= 0 && n[1] <= 1000000) {
-      return (n[0] as number) + (n[1] as number) / 1000000;
-    }
-    return NaN;
-  });
+  const coordinates = (value as unknown[]).map(preciseNumber);
   return point(coordinates) ? coordinates : undefined;
 }
 
@@ -81,16 +90,16 @@ function parseView(row: unknown): DrawingView {
   let section: DrawingSection | undefined;
   if (row.length >= 5 && !(Array.isArray(row[4]) && row[4].length === 0)) {
     const value: unknown = row[4];
-    if (!Array.isArray(value) || value.length !== 5 || typeof value[0] !== 'number' || !Number.isFinite(value[0]) ||
-        !Array.isArray(value[1]) || value[1].length !== 4 || !value[1].every((n: unknown) => typeof n === 'number' && Number.isFinite(n)) ||
-        value[1][2] <= value[1][0] || value[1][3] <= value[1][1] ||
+    if (!Array.isArray(value) || value.length !== 5 || !Number.isFinite(preciseNumber(value[0])) ||
+        !Array.isArray(value[1]) || value[1].length !== 4 || !value[1].every((n: unknown) => Number.isFinite(preciseNumber(n))) ||
+        preciseNumber(value[1][2]) <= preciseNumber(value[1][0]) || preciseNumber(value[1][3]) <= preciseNumber(value[1][1]) ||
         !Array.isArray(value[2]) || !value[2].every((edge: unknown) => typeof edge === 'string' && ['left', 'right', 'top', 'bottom'].includes(edge)) ||
         !Array.isArray(value[3]) || !value[3].every((note: unknown) => typeof note === 'string') ||
         !Array.isArray(value[4])) {
       throw new Error('Invalid drawing section.');
     }
     const [depth, crop, breaks, notes] = value as [number, DrawingSection['crop'], DrawingSection['breaks'], string[], unknown];
-    section = { depth, crop, breaks, notes, contacts: referenceLines(value[4]) };
+    section = { depth: preciseNumber(depth), crop: crop.map(preciseNumber) as DrawingSection['crop'], breaks, notes, contacts: referenceLines(value[4]) };
   }
   let guides: [Point, Point][] | undefined;
   if (row.length === 6) {
@@ -99,11 +108,11 @@ function parseView(row: unknown): DrawingView {
   return { id, title, axes, dimensions, ...(section ? { section } : {}), ...(guides ? { guides } : {}) };
 }
 
-export function parseDrawingDefinition(output: string): { units: DrawingSheet['units']; views: DrawingView[] } {
+export function parseDrawingDefinition(output: string): { units: DrawingSheet['units']; views: DrawingView[]; joint?: DrawingJoint } {
   const lines = output.split('\n').filter(line => /^ECHO:\s*"DRAWING_V1",/.test(line));
   if (lines.length !== 1) throw new Error('Expected one drawing definition from the model.');
   const data: unknown = JSON.parse(lines[0].replace(/^ECHO:\s*"DRAWING_V1",\s*/, ''));
-  if (!Array.isArray(data) || data.length !== 2 || !['mm', 'inches'].includes(data[0] as string) ||
+  if (!Array.isArray(data) || ![2, 3].includes(data.length) || !['mm', 'inches'].includes(data[0] as string) ||
       !Array.isArray(data[1]) || ![3, 5].includes(data[1].length)) throw new Error('Invalid drawing definition.');
   const views = (data[1] as unknown[]).map(parseView);
   const ids = new Set(views.map(view => view.id));
@@ -114,7 +123,14 @@ export function parseDrawingDefinition(output: string): { units: DrawingSheet['u
   }
   if (!['front', 'top', 'right'].every(id => ids.has(id)) ||
       ids.has('joint-longitudinal') !== ids.has('joint-transverse')) throw new Error('Incomplete drawing views.');
-  return { units: data[0] as DrawingSheet['units'], views };
+  let joint: DrawingJoint | undefined;
+  if (data.length === 3) {
+    if (!ids.has('joint-longitudinal') || !Array.isArray(data[2]) || data[2].length !== 3 ||
+        !data[2].every((value: unknown) => typeof value === 'string' && value.trim())) throw new Error('Invalid joint captions.');
+    const [title, description, bearingLabel] = data[2] as string[];
+    joint = { title, description, bearingLabel };
+  }
+  return { units: data[0] as DrawingSheet['units'], views, ...(joint ? { joint } : {}) };
 }
 
 export function parsePartDrawingDefinitions(output: string): PartDrawingDefinition[] {

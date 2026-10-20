@@ -42,7 +42,7 @@ export default function DarkModeToggle() {
 
     return (
         <div ref={containerRef} className={clsx(
-            "group fixed top-2 right-3",
+            "theme-toggle group fixed top-2 right-3",
             "border rounded-full p-2 z-10",
             "border-light-mode-text dark:border-dark-mode-text",
             "bg-light-mode-bg dark:bg-dark-mode-bg",

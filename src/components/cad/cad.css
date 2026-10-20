@@ -3,7 +3,8 @@
   --cad-edge: #123c50;
   --cad-section: #b63e4a;
   --cad-border: rgb(12 34 49 / 20%);
-  --cad-control: #efe6ee;
+  /* The theme-toggle shadow should follow control borders and text, not filled boxes. */
+  --cad-control: transparent;
   --cad-surface: #efe6ee;
   font-size: 14px;
 }
@@ -12,9 +13,9 @@
   --cad-edge: #22566d;
   --cad-section: #ff8c99;
   --cad-border: rgb(244 164 96 / 25%);
-  --cad-control: #1f1f1f;
   --cad-surface: #1f1f1f;
 }
+.cad select option { background: var(--cad-surface); color: inherit; }
 .cad-description { line-height: 1.7; max-width: 70ch; }
 .cad-stage { position: relative; margin: 20px 0 12px; }
 .cad-canvas { width: 100%; height: clamp(320px, 60vw, 480px); }
@@ -65,7 +66,22 @@
 .cad-drawings select { background: var(--cad-control); color: inherit; border: 1px solid var(--cad-border); border-radius: 3px; padding: 8px; min-height: 36px; }
 .cad-drawing-help, .cad-drawing-status { font-size: 12px; line-height: 1.8; margin: 12px 0; }
 .cad-drawing-help { max-width: 85ch; opacity: .8; }
-.cad-drawing-scroll { width: 100%; overflow: auto; border: 1px solid var(--cad-border); background: var(--drawing-paper); max-height: 85vh; }
+/* Filter the content in separate groups so drawing paper never casts a shadow. */
+main[data-drawing-page] { filter: none !important; transform: none !important; }
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .theme-toggle:hover ~ [data-drawing-page] { --cad-page-shadow: drop-shadow(var(--sun-shadow)); }
+  .dark .theme-toggle:hover ~ [data-drawing-page] { --cad-page-shadow: drop-shadow(var(--sun-shadow-dark)); }
+}
+[data-drawing-page] > :not(.cad),
+[data-drawing-page] > .cad > :not(.cad-drawings),
+[data-drawing-page] .cad-drawings > :not(.cad-drawing-frame),
+[data-drawing-page] .cad-drawing-shadow { filter: var(--cad-page-shadow, none); }
+html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !important; }
+.cad-drawing-frame { position: relative; isolation: isolate; }
+.cad-drawing-shadow { position: absolute; inset: 1px; pointer-events: none; user-select: none; }
+.cad-drawing-shadow-clip { overflow: hidden; }
+.cad-drawing-shadow-copy { display: block; max-width: none; }
+.cad-drawing-scroll { position: relative; width: 100%; overflow: auto; border: 1px solid var(--cad-border); background: var(--drawing-paper); max-height: 85vh; }
 .cad-drawings :is(select, .cad-drawing-scroll):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .cad-drawing-sheet { display: block; width: 100%; color: var(--drawing-ink); font-family: Arial, sans-serif; }
 .cad-drawing-sheet text { fill: currentColor; }
@@ -117,8 +133,7 @@
 .cad-parameter-actions { display: grid; gap: 8px; border-top: 1px solid var(--cad-border); padding-top: 16px; }
 .cad-parameters button { cursor: pointer; }
 .cad-parameters button:disabled { opacity: .5; cursor: default; }
-.cad-parameter-actions button[type=submit] { background: var(--cad-body); color: white; border-color: transparent; }
-.dark .cad-parameter-actions button[type=submit] { color: #1f1f1f; }
+.cad-parameter-actions button[type=submit] { color: var(--cad-body); border-color: currentColor; }
 .cad-compile-status { font-size: 12px; line-height: 1.7; margin-top: 12px; overflow-wrap: anywhere; }
 .cad-error { color: var(--cad-section); }
 .cad-parameters .cad-downloads { font-size: 12px; line-height: 1.8; gap: 12px; flex-direction: column; margin: 16px 0; }

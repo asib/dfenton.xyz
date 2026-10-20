@@ -7,6 +7,8 @@
         color-scheme: light;
         --dark-mode-highlight: #f0e891;
         --light-mode-highlight: #8a4f7d;
+        --sun-shadow: -3rem 2rem 0.15rem rgba(from var(--light-mode-highlight) r g b / 0.5);
+        --sun-shadow-dark: -3rem 2rem 0.15rem rgba(from var(--dark-mode-highlight) r g b / 0.16);
     }
 
     :root.dark {

@@ -44,7 +44,7 @@ export default function MiscPage() {
       {/* Opt in only on Misc pages; the browser keeps ordinary links and history. */}
       <style>{'@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }'}</style>
       <DarkModeToggle />
-      <main className={`mx-auto my-4 px-6 md:px-12 ${entry?.type === 'cad' ? 'max-w-[1180px]' : entry ? 'max-w-[916px]' : 'max-w-[calc(65ch+6rem)]'}`}>
+      <main data-drawing-page={entry?.type === 'cad' && entry.customizer?.drawings ? true : undefined} className={`mx-auto my-4 px-6 md:px-12 ${entry?.type === 'cad' ? 'max-w-[1180px]' : entry ? 'max-w-[916px]' : 'max-w-[calc(65ch+6rem)]'}`}>
         <nav aria-label="Site navigation" className="text-sm mb-8 pr-12" style={{ viewTransitionName: 'misc-navigation' }}>
           <a className="underline underline-offset-4 decoration-dotted hover:decoration-solid" href={isIndex ? '/' : '/misc/'}>
             ← {isIndex ? 'Jacob Fenton' : 'Misc'}
