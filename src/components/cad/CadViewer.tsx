@@ -184,7 +184,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         </div>
       </div>
       {entry.customizer?.drawings && <DrawingSheets output={drawings} title={entry.title} />}
-      {entry.customizer?.cutList && <CutListTable output={cutList} palette={entry.customizer.parts} />}
+      {entry.customizer?.cutList && <CutListTable output={cutList} title={entry.title} filename={entry.model.replace(/\.stl$/, '-cut-list.csv')} palette={entry.customizer.parts} />}
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}
     </section>

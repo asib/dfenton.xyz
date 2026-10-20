@@ -7,7 +7,7 @@ const feetFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, ma
 // Remove floating-point residue at rounding boundaries for display only.
 const feetText = (feet: number | null) => feet === null ? '—' : feetFormat.format(Number(feet.toPrecision(15)));
 
-export default function CutListTable({ output, palette = [] }: { output: CutListOutput; palette?: PartColor[] }) {
+export default function CutListTable({ output, title, filename, palette = [] }: { output: CutListOutput; title: string; filename: string; palette?: PartColor[] }) {
   const parsed = useMemo(() => {
     try { return { parts: parseCutList(output.text), preparation: parseStockPreparation(output.text), error: '' }; }
     catch { return { parts: [], preparation: null, error: 'The model’s cut list could not be read. Update the model to try again.' }; }
@@ -22,6 +22,7 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
   const [preparationEdits, setPreparationEdits] = useState<Partial<Record<keyof StockPreparation, string>>>({});
   if (parsed.error) return <p className="cad-error" role="alert">{parsed.error}</p>;
   if (!parsed.parts.length) return null;
+  const hasResaw = parsed.parts.some(part => part.resawGroup);
 
   const preparation = parsed.preparation && {
     millingMinLength: number(preparationEdits.millingMinLength ?? String(parsed.preparation.millingMinLength)),
@@ -61,7 +62,7 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
   };
   const download = () => {
     const csv: (string | number)[][] = [
-      ['Tool tote cut list — dimensions in inches'],
+      [`${title} cut list — dimensions in inches`],
       ['Part name', 'Finish qty', 'Finish thickness', 'Finish width', 'Finish length', 'Parent qty', 'Parent thickness', 'Parent width', 'Parent length', 'Board feet', `Board feet ${extraHeading.toLowerCase()}`, 'Stock size', 'Stock preparation', 'Finished pieces per parent'],
       ...rows.map(({ part, rough }) => [part.name, part.quantity, part.thickness, part.width, part.length,
         rough?.quantity ?? '', rough?.thickness ?? '', rough?.width ?? '', rough?.length ?? '', rough ? boardFeet(rough) : '', rough ? withExtra(boardFeet(rough)) ?? '' : '', rough ? stockLabel(rough.thickness) : '', rough ? stockPlan(rough) : '', rough?.piecesPerBoard ?? '']),
@@ -75,8 +76,8 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
     if (preparation) {
       csv.push([], ['Stock-preparation notes — inches'],
         ['Minimum stock length through jointer/planer', preparation.millingMinLength],
-        ['Minimum stock length through table saw', preparation.sawMinLength],
-        ['Bandsaw resaw kerf', preparation.resawKerf],
+        ['Minimum stock length through table saw', preparation.sawMinLength]);
+      if (hasResaw) csv.push(['Bandsaw resaw kerf', preparation.resawKerf],
         ['Thickness cleanup per resawn half', preparation.resawCleanup]);
       for (const { part } of rows.filter((row) => row.part.resawGroup)) {
         csv.push([`${part.name}: one parent board yields two finished halves; minimum milled parent thickness before resaw`, milledThickness(part, preparation)]);
@@ -84,7 +85,7 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
     }
     const url = URL.createObjectURL(new Blob([csv.map((row) => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
-    link.href = url; link.download = 'tool-tote-cut-list.csv'; link.click();
+    link.href = url; link.download = filename; link.click();
     window.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
   };
 
@@ -94,7 +95,7 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
       <button type="button" onClick={download} disabled={output.stale || !valid}>Download CSV ↓</button>
     </div>
     {output.stale && <p className="cad-error" role="status">Previous settings — this table will update after the model regenerates successfully.</p>}
-    <p className="cad-worksheet-help">Finished sizes are rectangular blanks before cutting the joinery. Matching blanks share a row; swatches identify their pieces. Rough quantities count parent boards: matching short pieces can share a longer board, and the two bookmatched bottom halves share one resaw parent.</p>
+    <p className="cad-worksheet-help">Finished sizes are rectangular blanks before cutting the joinery. Matching blanks share a row; swatches identify their pieces. Rough quantities count parent boards: matching short pieces can share a longer board.{hasResaw && ' Each bookmatched pair shares one resaw parent.'}</p>
     <fieldset className="cad-stock-allowances">
       <legend>Rough-stock allowances</legend>
       <label>Jointing/planing thickness (in, total)<input type="number" min="0" step="any" required value={thicknessExtra} onChange={(event) => { setThicknessExtra(event.target.value); }} /></label>
@@ -104,18 +105,18 @@ export default function CutListTable({ output, palette = [] }: { output: CutList
       <label>Extra board feet (%)<input type="number" min="0" step="any" required value={extraPercent} onChange={(event) => { setExtraPercent(event.target.value); }} /></label>
     </fieldset>
     {parsed.preparation && <fieldset className="cad-stock-allowances">
-      <legend>Machine limits &amp; resaw allowances</legend>
+      <legend>{hasResaw ? 'Machine limits & resaw allowances' : 'Machine limits'}</legend>
       {([
         ['millingMinLength', 'Jointer/planer minimum length (in)'],
         ['sawMinLength', 'Table saw minimum length (in)'],
         ['resawKerf', 'Bandsaw kerf (in)'],
         ['resawCleanup', 'Cleanup thickness per half (in)'],
-      ] as const).map(([key, label]) => <label key={key}>{label}<input type="number" min="0" step="any" required
+      ] as const).filter(([key]) => hasResaw || !key.startsWith('resaw')).map(([key, label]) => <label key={key}>{label}<input type="number" min="0" step="any" required
         value={preparationEdits[key] ?? parsed.preparation?.[key]}
         onChange={(event) => { setPreparationEdits((previous) => ({ ...previous, [key]: event.target.value })); }} /></label>)}
     </fieldset>}
     <p className="cad-worksheet-help" id="stock-help">Machine minimum lengths apply to parent boards during jointing, planing and ripping. Auto compares separate blanks with one shared parent for each matching row and chooses the shorter total stock length. S3S the parent first, then crosscut it into shorter blanks. Parent length includes the allowance for each blank and a kerf between blanks. Each row also lets you choose separate blanks or one shared board.</p>
-    <p className="cad-worksheet-help">Auto thickness adds the total jointing/planing allowance to the required milled thickness, then rounds up to 4/4, 5/4, 6/4, 8/4, 10/4, 12/4 or 16/4 rough lumber. The allowance covers both faces together and is applied once to a resaw parent. Stock settings stay until you leave or reload this page.</p>
+    <p className="cad-worksheet-help">Auto thickness adds the total jointing/planing allowance to the required milled thickness, then rounds up to 4/4, 5/4, 6/4, 8/4, 10/4, 12/4 or 16/4 rough lumber. The allowance covers both faces together and is applied once to each parent board. Stock settings stay until you leave or reload this page.</p>
     {preparation && preparationValid && rows.filter((row) => row.part.resawGroup).map(({ part }) => <p className="cad-resaw-note" key={part.id}>
       <strong>Bottom parent: at least {inches(milledThickness(part, preparation))}″ thick after milling, before resawing.</strong>{' '}
       2 × {inches(part.thickness)}″ finished thickness + {inches(preparation.resawKerf)}″ kerf + 2 × {inches(preparation.resawCleanup)}″ cleanup.

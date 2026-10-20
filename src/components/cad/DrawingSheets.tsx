@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import type { DrawingOutput } from './drawings';
+import { jointLabels, type DrawingOutput } from './drawings';
 import { AssemblySheet, JointSheet, PartSheet } from './DrawingSheetPages';
 import DrawingPdfDownload from './DrawingPdfDownload';
 
 export default function DrawingSheets({ output, title }: { output: DrawingOutput; title: string }) {
   const [zoom, setZoom] = useState(1);
-  const [partId, setPartId] = useState('side');
+  const [partId, setPartId] = useState('');
+  const hasJoint = output.sheet?.views.some(view => view.id === 'joint-longitudinal');
   const parts = output.sheet?.parts ?? [];
   const partIndex = Math.max(0, parts.findIndex(part => part.id === partId));
   const part = parts.length > 0 ? parts[partIndex] : undefined;
@@ -28,9 +29,9 @@ export default function DrawingSheets({ output, title }: { output: DrawingOutput
       <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Assembly drawing sheet, scroll to pan">
         <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}><AssemblySheet sheet={output.sheet} title={title} /></div>
       </div>
-      {output.sheet.views.some(view => view.section) && <>
-        <h3 id="cad-joint-detail-title" className="cad-drawing-sheet-heading">Handle/riser joint detail</h3>
-        <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Handle/riser joint drawing sheet, scroll to pan">
+      {hasJoint && <>
+        <h3 id="cad-joint-detail-title" className="cad-drawing-sheet-heading">{jointLabels(output.sheet).title}</h3>
+        <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label={`${jointLabels(output.sheet).title} drawing sheet, scroll to pan`}>
           <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}><JointSheet sheet={output.sheet} title={title} /></div>
         </div>
       </>}
@@ -41,10 +42,10 @@ export default function DrawingSheets({ output, title }: { output: DrawingOutput
             {parts.map(p => <option key={p.id} value={p.id}>{p.title} · Qty {p.quantity}</option>)}
           </select></label>
         </div>
-        <p className="cad-drawing-help">Choose a part to see its finished dimensions and joinery. Matching pieces share a sheet; unequal handle laminations get separate sheets. Rough stock and machining allowances are in the cut list.</p>
+        <p className="cad-drawing-help">Choose a part to see its finished dimensions and joinery. Pieces with matching dimensions and machining share a sheet. Rough stock and machining allowances are in the cut list.</p>
         <div className="cad-drawing-scroll" tabIndex={0} role="region" aria-label="Dimensioned part drawing sheet, scroll to pan">
           <div style={{ width: `${String(zoom * 100)}%`, minWidth: 760 * zoom }}>
-            <PartSheet part={part} units={output.sheet.units} number={partIndex + 3} title={title} />
+            <PartSheet part={part} units={output.sheet.units} number={partIndex + (hasJoint ? 3 : 2)} title={title} />
           </div>
         </div>
       </>}

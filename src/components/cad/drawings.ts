@@ -24,8 +24,16 @@ export interface PartDrawingDefinition {
   id: string; title: string; quantity: number; notes: string[]; color: Point; views: DrawingView[];
 }
 export interface PartDrawing extends Omit<PartDrawingDefinition, 'views'> { views: ProjectedView[] }
-export interface DrawingSheet { units: 'inches' | 'mm'; views: ProjectedView[]; parts?: PartDrawing[] }
+export interface DrawingJoint { title: string; description: string; bearingLabel: string }
+export interface DrawingSheet { units: 'inches' | 'mm'; views: ProjectedView[]; parts?: PartDrawing[]; joint?: DrawingJoint }
 export interface DrawingOutput { sheet?: DrawingSheet; stale: boolean }
+
+// Older tote sources omit the optional source-authored joint captions.
+export const jointLabels = (sheet: Pick<DrawingSheet, 'joint'>): DrawingJoint => sheet.joint ?? {
+  title: 'Handle/riser joint detail',
+  description: 'Enlarged longitudinal and transverse sections through the assembled handle/riser bridle joint. Hatching distinguishes the wooden pieces.',
+  bearingLabel: 'Handle notch roof rests on riser-slot floor. Both ends use the same joint.',
+};
 
 export const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 export const project = (p: Point, axes: DrawingView['axes']): Point => [dot(p, axes[0]), dot(p, axes[1]), dot(p, axes[2])];
@@ -99,11 +107,11 @@ function parseView(row: unknown): DrawingView {
   return { id, title, axes, dimensions, ...(section ? { section } : {}), ...(guides ? { guides } : {}) };
 }
 
-export function parseDrawingDefinition(output: string): { units: DrawingSheet['units']; views: DrawingView[] } {
+export function parseDrawingDefinition(output: string): { units: DrawingSheet['units']; views: DrawingView[]; joint?: DrawingJoint } {
   const lines = output.split('\n').filter(line => /^ECHO:\s*"DRAWING_V1",/.test(line));
   if (lines.length !== 1) throw new Error('Expected one drawing definition from the model.');
   const data: unknown = JSON.parse(lines[0].replace(/^ECHO:\s*"DRAWING_V1",\s*/, ''));
-  if (!Array.isArray(data) || data.length !== 2 || !['mm', 'inches'].includes(data[0] as string) ||
+  if (!Array.isArray(data) || ![2, 3].includes(data.length) || !['mm', 'inches'].includes(data[0] as string) ||
       !Array.isArray(data[1]) || ![3, 5].includes(data[1].length)) throw new Error('Invalid drawing definition.');
   const views = (data[1] as unknown[]).map(parseView);
   const ids = new Set(views.map(view => view.id));
@@ -114,7 +122,14 @@ export function parseDrawingDefinition(output: string): { units: DrawingSheet['u
   }
   if (!['front', 'top', 'right'].every(id => ids.has(id)) ||
       ids.has('joint-longitudinal') !== ids.has('joint-transverse')) throw new Error('Incomplete drawing views.');
-  return { units: data[0] as DrawingSheet['units'], views };
+  let joint: DrawingJoint | undefined;
+  if (data.length === 3) {
+    if (!ids.has('joint-longitudinal') || !Array.isArray(data[2]) || data[2].length !== 3 ||
+        !data[2].every((value: unknown) => typeof value === 'string' && value.trim())) throw new Error('Invalid joint captions.');
+    const [title, description, bearingLabel] = data[2] as string[];
+    joint = { title, description, bearingLabel };
+  }
+  return { units: data[0] as DrawingSheet['units'], views, ...(joint ? { joint } : {}) };
 }
 
 export function parsePartDrawingDefinitions(output: string): PartDrawingDefinition[] {

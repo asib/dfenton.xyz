@@ -1,5 +1,5 @@
 import { inches } from './cutList';
-import { dimensionValue, project, type DrawingDimension, type DrawingSheet, type PartDrawing, type ProjectedView } from './drawings';
+import { dimensionValue, jointLabels, project, type DrawingDimension, type DrawingSheet, type PartDrawing, type ProjectedView } from './drawings';
 
 interface Placement { view: ProjectedView; x: number; y: number; scale: number }
 const width = (view: ProjectedView) => view.bounds[2] - view.bounds[0];
@@ -34,7 +34,7 @@ function Dimension({ dimension, placement, units }: { dimension: DrawingDimensio
   </g>;
 }
 
-function ViewGeometry({ placement, units, hatchPrefix = 'joint' }: { placement: Placement; units: DrawingSheet['units']; hatchPrefix?: string }) {
+function ViewGeometry({ placement, units, hatchPrefix = 'joint', bearingLabel = 'Bearing surface' }: { placement: Placement; units: DrawingSheet['units']; hatchPrefix?: string; bearingLabel?: string }) {
   const { view, x, y, scale } = placement;
   const px = (n: number) => x + (n - view.bounds[0]) * scale;
   const py = (n: number) => y + (view.bounds[3] - n) * scale;
@@ -58,7 +58,7 @@ function ViewGeometry({ placement, units, hatchPrefix = 'joint' }: { placement: 
     {view.section?.contacts.map(([a, b], i) => {
       const p = project(a, view.axes), q = project(b, view.axes);
       return <line key={i} className="cad-drawing-bearing" x1={px(p[0])} y1={py(p[1])} x2={px(q[0])} y2={py(q[1])}>
-        <title>Handle notch roof bears on the riser-slot floor</title>
+        <title>{bearingLabel}</title>
       </line>;
     })}
     {view.dimensions.map((dimension, i) => <Dimension key={i} dimension={dimension} placement={placement} units={units} />)}
@@ -103,6 +103,7 @@ export function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: st
 }
 
 export function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
+  const labels = jointLabels(sheet);
   const longitudinal = sheet.views.find(view => view.id === 'joint-longitudinal');
   const transverse = sheet.views.find(view => view.id === 'joint-transverse');
   if (!longitudinal || !transverse) return null;
@@ -111,18 +112,18 @@ export function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: strin
   const bottom = 180 + Math.max(height(longitudinal), height(transverse)) * scale;
   const sheetHeight = bottom + 270;
   return <svg className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="joint-sheet-title joint-sheet-description">
-    <title id="joint-sheet-title">{title} — handle/riser joint detail</title>
-    <desc id="joint-sheet-description">Enlarged longitudinal and transverse sections through the assembled handle/riser bridle joint. Hatching distinguishes the wooden pieces. The highlighted bearing surface joins the handle notch roof to the riser-slot floor.</desc>
+    <title id="joint-sheet-title">{title} — {labels.title}</title>
+    <desc id="joint-sheet-description">{labels.description} {labels.bearingLabel}</desc>
     <Hatches prefix="joint" />
-    <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / HANDLE–RISER JOINT</text>
+    <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / {sheet.joint ? labels.title.toUpperCase() : 'HANDLE–RISER JOINT'}</text>
     <text className="cad-drawing-sheet-meta" x="1170" y="32" textAnchor="end">{sheet.units === 'inches' ? 'INCHES' : 'MILLIMETRES'} · ENLARGED SECTIONS</text>
     {placements.map(placement => <g key={placement.view.id}>
-      <ViewGeometry placement={placement} units={sheet.units} />
+      <ViewGeometry placement={placement} units={sheet.units} bearingLabel={labels.bearingLabel} />
       <text className="cad-drawing-view-title" x={placement.x - 35} y={bottom + 110}>{placement.view.title.toUpperCase()}</text>
       {placement.view.section?.notes.map((note, i) => <text key={i} className="cad-drawing-note" x={placement.x - 35} y={bottom + 140 + i * 22}>{note}</text>)}
     </g>)}
     <line className="cad-drawing-bearing" x1="30" y1={sheetHeight - 48} x2="65" y2={sheetHeight - 48} />
-    <text className="cad-drawing-note" x="78" y={sheetHeight - 44}>Bearing surface: handle notch roof rests on riser-slot floor. Both ends use the same joint.</text>
+    <text className="cad-drawing-note" x="78" y={sheetHeight - 44}>{labels.bearingLabel}</text>
     <text className="cad-drawing-sheet-meta" x="30" y={sheetHeight - 20}>HATCHES DISTINGUISH PARTS · BREAK MARKS INDICATE CONTINUING MATERIAL · USE WRITTEN DIMENSIONS</text>
     <text className="cad-drawing-sheet-meta" x="1170" y={sheetHeight - 20} textAnchor="end">JOINT DETAIL / 02</text>
   </svg>;
