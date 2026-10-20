@@ -72,7 +72,7 @@ function Hatches({ prefix }: { prefix: string }) {
   </pattern>)}</defs>;
 }
 
-export function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
+export function AssemblySheet({ sheet, title, id }: { sheet: DrawingSheet; title: string; id?: string }) {
   const front = sheet.views.find(view => view.id === 'front');
   const top = sheet.views.find(view => view.id === 'top');
   const right = sheet.views.find(view => view.id === 'right');
@@ -85,7 +85,7 @@ export function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: st
     { view: right, x: 90 + width(front) * scale + 140, y: frontY, scale },
   ];
   const sheetHeight = frontY + Math.max(height(front), height(right)) * scale + 110;
-  return <svg className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="assembly-sheet-title assembly-sheet-description">
+  return <svg id={id} className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="assembly-sheet-title assembly-sheet-description">
     <title id="assembly-sheet-title">{title} — assembly drawing</title>
     <desc id="assembly-sheet-description">Front, top, and right-end orthographic views in third-angle arrangement. Visible edges only. Dimensions in {sheet.units}, evaluated from the SCAD model. Screen scale varies; use the written dimensions.</desc>
     <text className="cad-drawing-sheet-title" x="30" y="32">{title.toUpperCase()} / ASSEMBLY</text>
@@ -102,7 +102,7 @@ export function AssemblySheet({ sheet, title }: { sheet: DrawingSheet; title: st
   </svg>;
 }
 
-export function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: string }) {
+export function JointSheet({ sheet, title, id }: { sheet: DrawingSheet; title: string; id?: string }) {
   const labels = jointLabels(sheet);
   const longitudinal = sheet.views.find(view => view.id === 'joint-longitudinal');
   const transverse = sheet.views.find(view => view.id === 'joint-transverse');
@@ -111,7 +111,7 @@ export function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: strin
   const placements: Placement[] = [{ view: longitudinal, x: 140, y: 180, scale }, { view: transverse, x: 770, y: 180, scale }];
   const bottom = 180 + Math.max(height(longitudinal), height(transverse)) * scale;
   const sheetHeight = bottom + 270;
-  return <svg className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="joint-sheet-title joint-sheet-description">
+  return <svg id={id} className="cad-drawing-sheet" viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby="joint-sheet-title joint-sheet-description">
     <title id="joint-sheet-title">{title} — {labels.title}</title>
     <desc id="joint-sheet-description">{labels.description} {labels.bearingLabel}</desc>
     <Hatches prefix="joint" />
@@ -129,7 +129,7 @@ export function JointSheet({ sheet, title }: { sheet: DrawingSheet; title: strin
   </svg>;
 }
 
-export function PartSheet({ part, units, number, title }: { part: PartDrawing; units: DrawingSheet['units']; number: number; title: string }) {
+export function PartSheet({ part, units, number, title, id }: { part: PartDrawing; units: DrawingSheet['units']; number: number; title: string; id?: string }) {
   const [main, ...details] = part.views;
   const bottomMargin = (view: ProjectedView) => 32 * Math.max(0, ...view.dimensions
     .filter(d => d.direction === 'horizontal' && d.side === -1).map(d => d.tier));
@@ -145,7 +145,7 @@ export function PartSheet({ part, units, number, title }: { part: PartDrawing; u
   const detailCaption = Math.max(mainCaption, ...detailPlacements.map(p => p.y + height(p.view) * p.scale + bottomMargin(p.view) + 35));
   const notesY = detailCaption + 50, sheetHeight = notesY + part.notes.length * 23 + 45;
   const prefix = `part-${part.id}`;
-  return <svg className="cad-drawing-sheet" data-part-sheet={part.id} viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby={`${prefix}-title ${prefix}-description`}>
+  return <svg id={id} className="cad-drawing-sheet" data-part-sheet={part.id} viewBox={`0 0 1200 ${String(sheetHeight)}`} role="img" aria-labelledby={`${prefix}-title ${prefix}-description`}>
     <title id={`${prefix}-title`}>{part.title} — dimensioned part sheet, quantity {part.quantity}</title>
     <desc id={`${prefix}-description`}>Finished part dimensions and joinery. Detail views use independent scales. Dashed lines identify machining references; hatching identifies sectioned material. Use written dimensions.</desc>
     <Hatches prefix={prefix} />

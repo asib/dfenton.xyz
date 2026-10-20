@@ -50,8 +50,8 @@
 .cad-notes { line-height: 1.8; }
 .cad-attribution { margin-top: 24px; font-size: 12px; opacity: .7; line-height: 1.8; }
 .cad-drawing-jump { margin: 12px 0; font-size: 12px; }
-.cad-drawings { --drawing-paper: var(--cad-surface); --drawing-ink: #233641; --drawing-dim: #4e626f; border-top: 1px solid var(--cad-border); margin: 32px 0; padding-top: 20px; }
-.dark .cad-drawings { --drawing-ink: #edf0f2; --drawing-dim: #c1ced7; }
+.cad-drawings { --drawing-paper: #fbf8fb; --drawing-ink: #233641; --drawing-dim: #4e626f; border-top: 1px solid var(--cad-border); margin: 32px 0; padding-top: 20px; }
+.dark .cad-drawings { --drawing-paper: #25282b; --drawing-ink: #edf0f2; --drawing-dim: #c1ced7; }
 .cad-drawings-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
 .cad-drawings h2 { font-size: 20px; font-weight: 600; scroll-margin-top: 24px; }
 .cad-drawings-heading label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
@@ -66,9 +66,22 @@
 .cad-drawings select { background: var(--cad-control); color: inherit; border: 1px solid var(--cad-border); border-radius: 3px; padding: 8px; min-height: 36px; }
 .cad-drawing-help, .cad-drawing-status { font-size: 12px; line-height: 1.8; margin: 12px 0; }
 .cad-drawing-help { max-width: 85ch; opacity: .8; }
-/* Transparent sheets let the page shadow follow linework and labels. The paper
-   token only masks lines immediately behind dimension text; PDFs style their own paper. */
-.cad-drawing-scroll { width: 100%; overflow: auto; border: 1px solid var(--cad-border); background: transparent; max-height: 85vh; }
+/* Filter the content in separate groups so drawing paper never casts a shadow. */
+main[data-drawing-page] { filter: none !important; transform: none !important; }
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .theme-toggle:hover ~ [data-drawing-page] { --cad-page-shadow: drop-shadow(var(--sun-shadow)); }
+  .dark .theme-toggle:hover ~ [data-drawing-page] { --cad-page-shadow: drop-shadow(var(--sun-shadow-dark)); }
+}
+[data-drawing-page] > :not(.cad),
+[data-drawing-page] > .cad > :not(.cad-drawings),
+[data-drawing-page] .cad-drawings > :not(.cad-drawing-frame),
+[data-drawing-page] .cad-drawing-shadow { filter: var(--cad-page-shadow, none); }
+html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !important; }
+.cad-drawing-frame { position: relative; isolation: isolate; }
+.cad-drawing-shadow { position: absolute; inset: 1px; pointer-events: none; user-select: none; }
+.cad-drawing-shadow-clip { overflow: hidden; }
+.cad-drawing-shadow-copy { display: block; max-width: none; }
+.cad-drawing-scroll { position: relative; width: 100%; overflow: auto; border: 1px solid var(--cad-border); background: var(--drawing-paper); max-height: 85vh; }
 .cad-drawings :is(select, .cad-drawing-scroll):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .cad-drawing-sheet { display: block; width: 100%; color: var(--drawing-ink); font-family: Arial, sans-serif; }
 .cad-drawing-sheet text { fill: currentColor; }
