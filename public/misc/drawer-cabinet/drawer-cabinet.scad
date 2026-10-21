@@ -543,7 +543,7 @@ function runs(v, i = 0) = i >= len(v) ? "" : let(j = run_end(v, i))
 function drawers_title(name, set) = str(name, len(set) == 1 ? " · drawer " : " · drawers ", runs([for (j = set) j + 1]));
 function lo_of(i, k) = drawer_origin(i) + drawer_members(i)[k][1];
 function hi_of(i, k) = drawer_origin(i) + drawer_members(i)[k][2];
-box_material = "Solid wood or plywood; butt joints glued with screws, pocket screws or brads.";
+box_material = "Plywood; butt joints glued with screws, pocket screws or brads.";
 
 function front_sheet(i) = let(set = matching(i, 1), lo = lo_of(i, 1), hi = hi_of(i, 1), xm = (lo[0] + hi[0]) / 2,
     g = Groove_depth, o = Groove_offset, tb = Bottom_thickness, top = min(hi[2], lo[2] + 2))
@@ -622,7 +622,7 @@ function back_member_sheet(i) = let(set = matching(i, 4), lo = lo_of(i, 4), hi =
 
 function bottom_sheet(i) = let(set = matching(i, 0), lo = lo_of(i, 0), hi = hi_of(i, 0), xm = (lo[0] + hi[0]) / 2)
     [str("bottom-", i + 1), drawers_title("Drawer bottom", set), len(set), [
-        str(frac(Bottom_thickness), " plywood or hardboard."),
+        str(frac(Bottom_thickness), " plywood."),
         under_bottom ? "Glue and brad it under the sides, front and back." :
             str("Slides into the ", frac(Groove_depth), "-deep grooves in the sides and front; nail it up into the back.")],
      pc(member_piece(i, 0)), [
@@ -632,6 +632,35 @@ function bottom_sheet(i) = let(set = matching(i, 0), lo = lo_of(i, 0), hi = hi_o
         ["edge", "L-L / Section at the front edge", RIGHT, [
             dim("Thickness", [xm, lo[1], lo[2]], [xm, lo[1], hi[2]], "vertical", -1)],
          section(xm, [lo[1] - 0.25, lo[2] - 0.25, lo[1] + 1.5, hi[2] + 0.25], ["right"])]]];
+
+// ---------------------------------------------------------------------------
+// Stock. Every case and drawer part is plywood, laid out on sheets at finished
+// size: SHEET_PARTS_V1 rows are [id, name, material, quantity, thickness, width,
+// length, grain, legend ids]. "length" grain keeps visible face grain along the
+// part length; hidden parts may turn. Only the hardwood runners use the
+// board-feet cut list. Defaults: 48 x 96 sheets, 1/8 kerf, no edge trim.
+function plywood(th) = str(frac(th), " plywood");
+function parity_ids(name, set) = [for (k = [0, 1]) if (len([for (j = set) if (j % 2 == k) 1]) > 0) str(name, k == 0 ? "-odd" : "-even")];
+function member_size(i, k) = hi_of(i, k) - lo_of(i, k);
+sheet_parts = concat([
+    ["case-sides", "Case sides", plywood(t), 2, t, Depth, Height, "length", ["case-left", "case-right"]],
+    let(o = Case_joinery == "rabbet" ? end_rabbet : 0)
+    ["case-panels", "Case top and bottom", plywood(t), 2, t, inner_d, inner_w + 2 * o, "length", ["case-top", "case-bottom"]],
+    ["back-panel", "Back panel", plywood(Back_thickness), 1, Back_thickness, inner_w + 2 * Back_rabbet_width, Height, "any", ["case-back"]]],
+    [for (i = representatives(1)) let(set = matching(i, 1), z = member_size(i, 1))
+        [str("front-", i + 1), drawers_title("Drawer front", set), plywood(Front_thickness), len(set), Front_thickness, z[2], z[0], "length", parity_ids("front", set)]],
+    [for (i = representatives(2)) let(set = matching(i, 2), z = member_size(i, 2))
+        [str("side-", i + 1), drawers_title("Drawer sides", set), plywood(Side_thickness), 2 * len(set), Side_thickness, z[2], z[1], "any", parity_ids("side", set)]],
+    [for (i = representatives(4)) let(set = matching(i, 4), z = member_size(i, 4))
+        [str("back-", i + 1), drawers_title("Drawer back", set), plywood(Box_back_thickness), len(set), Box_back_thickness, z[2], z[0], "any", parity_ids("back", set)]],
+    [for (i = representatives(0)) let(set = matching(i, 0), z = member_size(i, 0))
+        [str("bottom-", i + 1), drawers_title("Drawer bottom", set), plywood(Bottom_thickness), len(set), Bottom_thickness, z[1], z[0], "any", parity_ids("bottom", set)]]);
+echo("SHEET_STOCK_V1", [96, 48, 0.125, 0]);
+echo("SHEET_PARTS_V1", sheet_parts);
+runner_section = [Runner_height, supported ? Runner_width + dado_depth : runner_reach];
+echo("CUTLIST_STOCK_V1", [14, 10, 0.0625, 0.0625]);
+if (len(runner_drawers) > 0) echo("CUTLIST_V1", [["runners", "Runner strip", "Hardwood", 2 * len(runner_drawers),
+    min(runner_section), max(runner_section), inner_d - Front_thickness, "Runner strip"]]);
 
 if (!is_undef($misc_drawing) && $misc_drawing) {
     echo("DRAWING_V1", ["inches", concat(assembly_views, joint_views), joint_caption]);

@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { parameters, render } from 'openrscad-engine/node';
 import { conditionMatches, configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
 import { parseDisplayMesh } from '../src/components/cad/displayMesh';
+import { parseCutList } from '../src/components/cad/cutList';
+import { layoutSheets, parseSheetParts, parseSheetStock } from '../src/components/cad/sheetLayout';
 
 const folder = new URL('../public/misc/drawer-cabinet/', import.meta.url);
 const source = readFileSync(new URL('drawer-cabinet.scad', folder), 'utf8');
@@ -213,4 +215,39 @@ test('saved colored first load and STL agree with live defaults', () => {
   expect(stats.closed).toBe(true);
   expect(Math.abs(stats.volume / result.volume - 1)).toBeLessThan(1e-6);
   expect(positions).toEqual(result.positions);
+});
+
+test('plywood parts feed sheet layouts and hardwood runners feed the cut list', () => {
+  const sheetParts = changes => parseSheetParts(compile(changes).echo);
+  const parts = sheetParts();
+  expect(parts.map(p => [p.id, p.material, p.quantity, p.width, p.length, p.grain])).toEqual([
+    ['case-sides', '3/4″ plywood', 2, 18, 30, 'length'], ['case-panels', '3/4″ plywood', 2, 17.75, 23.25, 'length'],
+    ['back-panel', '1/4″ plywood', 1, 23.25, 30, 'any'],
+    ['front-1', '3/4″ plywood', 1, 4.75, 22.375, 'length'], ['front-2', '3/4″ plywood', 1, 5.75, 22.375, 'length'],
+    ['front-3', '3/4″ plywood', 2, 8.375, 22.375, 'length'],
+    ['side-1', '1/2″ plywood', 2, 4.75, 16.5, 'any'], ['side-2', '1/2″ plywood', 2, 5.03125, 16.5, 'any'],
+    ['side-3', '1/2″ plywood', 4, 7.65625, 16.5, 'any'],
+    ['back-1', '1/2″ plywood', 1, 4.75, 22.375, 'any'], ['back-2', '1/2″ plywood', 1, 5.03125, 22.375, 'any'],
+    ['back-3', '1/2″ plywood', 2, 7.65625, 22.375, 'any'], ['bottom-1', '1/4″ plywood', 4, 17.75, 22.375, 'any']]);
+  expect(parts.find(p => p.id === 'front-3').swatches).toEqual(['front-odd', 'front-even']);
+  for (const swatch of parts.flatMap(p => p.swatches)) expect(colors[swatch]).toBeDefined();
+  expect(parseSheetStock(compile().echo)).toEqual({ sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0 });
+  // Every physical piece is counted once.
+  for (const changes of [{}, { Drawer_count: 8, Height: 48, Drawer_1_height: 0 }, { Runner_style: 'side_hung', Box_construction: 'sides_overlap_groove' }]) {
+    const n = changes.Drawer_count ?? 4, count = prefix => sheetParts(changes).filter(p => new RegExp(`^${prefix}\\d`).test(p.id)).reduce((s, p) => s + p.quantity, 0);
+    expect([count('front-'), count('side-'), count('back-'), count('bottom-')]).toEqual([n, 2 * n, n, n]);
+  }
+  // Each thickness fits one 4 x 8 sheet by either method and grain setting.
+  for (const method of ['densest', 'rip']) for (const grain of ['visible', 'any', 'aligned']) {
+    const layout = layoutSheets(parts, { sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0, method, grain });
+    expect(layout.materials.map(m => [m.material, m.sheets.length])).toEqual([['3/4″ plywood', 1], ['1/2″ plywood', 1], ['1/4″ plywood', 1]]);
+  }
+  expect(parseCutList(compile().echo)).toEqual([{ id: 'runners', name: 'Runner strip', material: 'Hardwood', quantity: 6,
+    thickness: 0.75, width: 0.75, length: 17, blank: 'Runner strip', resawGroup: undefined }]);
+  expect(parseCutList(compile({ Runner_style: 'dado' }).echo)[0]).toMatchObject({ thickness: 0.75, width: 1 });
+  expect(parseCutList(compile({ Drawer_count: 1, Drawer_1_height: 0 }).echo)).toEqual([]);
+  // A part that cannot fit is reported rather than silently dropped.
+  const tall = sheetParts({ Height: 96, Drawer_count: 1, Drawer_1_height: 0 });
+  expect(layoutSheets(tall, { sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0.5, method: 'densest', grain: 'visible' }))
+    .toEqual({ ok: false, error: 'Case sides does not fit on the usable 47 × 95 in sheet with its grain along the sheet.' });
 });

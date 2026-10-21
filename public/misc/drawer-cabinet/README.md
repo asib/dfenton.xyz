@@ -88,6 +88,17 @@ whose blanks and machining match, with titles such as `drawers 3–8`. Grooves
 are dimensioned on the face where they show. Drawings ignore `Part` and
 `Explosion_percent`.
 
+## Stock
+
+Every case and drawer part is plywood: 3/4 inch for the case and fronts,
+1/2 inch for drawer sides and backs, and 1/4 inch for the back and drawer
+bottoms, following the thickness parameters. The model emits these as
+`SHEET_PARTS_V1` rows grouped like the drawings. The case sides, top/bottom and
+drawer fronts keep their face grain along the part; hidden parts may turn.
+The page lays them out on 48 × 96 inch sheets by densest nesting or rip-first
+strips, with a diagram per sheet and a CSV. The defaults fit one sheet of each
+thickness. The hardwood runner strips are the only board-feet cut-list row.
+
 ## Inspection
 
 `Explosion_percent` is sequenced so that no part passes through another: up to
@@ -107,6 +118,7 @@ bun scripts/export-cad-stl.mjs public/misc/drawer-cabinet/drawer-cabinet.scad pu
 bun scripts/export-cad-display.mjs public/misc/drawer-cabinet/drawer-cabinet.scad public/misc/drawer-cabinet/drawer-cabinet-display.json
 bun test tests/drawer-cabinet.test.mjs
 bun test tests/drawer-cabinet-drawings.test.mjs
+bun test tests/sheet-layout.test.mjs
 ```
 
 The tests cover every runner, box and case-joint combination for closed,
@@ -115,4 +127,6 @@ kicker clearance; side-hung groove clearance; dado depth; per-drawer heights
 and depths; assertion messages; and saved/live asset agreement. The drawing
 tests check assembly, joint and part dimensions, bearing and clearance in the
 actual section contours, member grouping and quantities, and independence
-from the inspection controls.
+from the inspection controls. Stock tests check the emitted plywood rows,
+piece totals, one-sheet-per-thickness layouts by both methods and every
+grain setting, the runner row, and the error for parts too large for a sheet.
