@@ -281,7 +281,6 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
   const onKey = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && selected) { onPick?.(null); return; }
     const offset = camera.position.clone().sub(controls.target);
     if (event.key === '+' || event.key === '=') offset.multiplyScalar(0.9);
     else if (event.key === '-') offset.multiplyScalar(1.1);

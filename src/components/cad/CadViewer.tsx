@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type PartAppearances, type RenderMode, type SectionAxis } from './scene';
@@ -139,6 +139,26 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     setAppearances(next);
   };
   const changedParts = visibleParts?.filter(part => changed(part.id) || partPieces(part.id).some(piece => changed(piece.key))).length ?? 0;
+  const toggleHidden = () => {
+    if (selection) setLook(selection.key, { hidden: !look(selection.key).hidden, opacity: look(selection.key).opacity || 1 });
+  };
+  // Blender-style shortcuts from the 3D view or the part legend, never while typing in a field:
+  // H hides or shows the selection, Shift+H isolates it, Alt+H shows all parts, Escape deselects.
+  const onShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (!hasLegend || event.ctrlKey || event.metaKey || !(target.tagName === 'CANVAS' || target.closest('#cad-legend')) ||
+        target.matches('input:not([type=range]), select, textarea')) return;
+    // event.code: Alt+H types another character on macOS.
+    const h = event.code === 'KeyH';
+    if (event.key === 'Escape' && selection) setSelected(null);
+    else if (h && event.altKey && changedParts > 0) setAppearances({});
+    else if (h && event.shiftKey && !event.altKey && selection) isolate();
+    else if (h && !event.shiftKey && !event.altKey && selection) toggleHidden();
+    else return;
+    // Consumed keys don't also reach the fullscreen workspace, so Escape deselects before it exits.
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   const coordinate = viewer && axis !== 'off'
     ? viewer.sourceMin[axis] + viewer.size[axis] * position / 100
@@ -164,7 +184,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     <section className="cad" aria-label="CAD model">
       <p className="cad-description">{entry.description}</p>
       {entry.customizer?.drawings && <p className="cad-drawing-jump"><a href="#cad-drawings-title">View drawings ↓</a></p>}
-      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined}
+      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined} onKeyDown={onShortcut}
         role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? `${entry.title} fullscreen viewer` : undefined}>
         <div className="cad-workspace-toolbar">
           <span className="cad-workspace-title">{entry.title}</span>
@@ -186,7 +206,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.</p>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click a part to select it: H hides or shows it, Shift+H isolates it, Alt+H shows all parts and Esc deselects.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -243,11 +263,11 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   onChange={(event) => { setLook(selection.key, { opacity: Number(event.target.value) / 100, hidden: false }); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={() => { setLook(selection.key, { hidden: !look(selection.key).hidden, opacity: look(selection.key).opacity || 1 }); }}>
+                <button type="button" onClick={toggleHidden} title="Hide or show (H)" aria-keyshortcuts="H">
                   {look(selection.key).hidden ? 'Show' : 'Hide'}
                 </button>
-                <button type="button" onClick={isolate}>Isolate</button>
-                <button type="button" onClick={() => { setSelected(null); }}>Deselect</button>
+                <button type="button" onClick={isolate} title="Isolate (Shift+H)" aria-keyshortcuts="Shift+H">Isolate</button>
+                <button type="button" onClick={() => { setSelected(null); }} title="Deselect (Esc)" aria-keyshortcuts="Escape">Deselect</button>
               </div>
               {selection.piece ? <button type="button" className="cad-piece-up" onClick={() => { setSelected(selection.part.id); }}>Select all {selection.part.label}</button> :
                 partPieces(selection.part.id).length > 1 && <ul className="cad-piece-list" aria-label={`Pieces of ${selection.part.label}`}>
@@ -258,7 +278,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   </li>)}
                 </ul>}
             </div>}
-            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }}>Show all parts ({changedParts} changed)</button>}
+            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts (Alt+H)" aria-keyshortcuts="Alt+H">Show all parts ({changedParts} changed)</button>}
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>
