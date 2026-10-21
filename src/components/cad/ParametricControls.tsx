@@ -13,7 +13,7 @@ interface Result { values: Values; stl: string; source: string; output: string; 
 export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList, onDrawings }: {
   entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
   onOutput: (output: CutListOutput) => void;
-  onViewCutList?: () => void;
+  onViewCutList?: (headingId: string) => void;
   onDrawings?: (output: DrawingOutput) => void;
 }) {
   const [source, setSource] = useState<Source | null>(null);
@@ -33,6 +33,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const outputLabel = entry.customizer?.outputLabel;
   const hasParts = !!entry.customizer?.parts?.length;
   const hasCutList = !!entry.customizer?.cutList;
+  const hasSheetLayout = !!entry.customizer?.sheetLayout;
   const hasDrawings = !!entry.customizer?.drawings;
 
   useEffect(() => {
@@ -53,7 +54,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         // worker. The committed fallback mesh stays visible while this runs.
         let output = '';
         let drawings: DrawingSheet | undefined;
-        if (outputLabel || hasParts || hasCutList || hasDrawings) {
+        if (outputLabel || hasParts || hasCutList || hasSheetLayout || hasDrawings) {
           const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal);
           controller.signal.throwIfAborted();
           if (compiled.kind !== 'model') return;
@@ -75,7 +76,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); window.clearTimeout(updateTimer.current); };
-  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasDrawings, retry]);
+  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasSheetLayout, hasDrawings, retry]);
 
   useEffect(() => {
     if (!available || !initialModel) return;
@@ -245,8 +246,11 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
       <pre>{result.output.replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
     </details>}
+    {hasSheetLayout && result?.output && <p className="cad-compile-status"><a href="#sheet-layout-title" onClick={(event) => {
+      if (onViewCutList) { event.preventDefault(); onViewCutList('sheet-layout-title'); }
+    }}>View sheet layout ↓</a></p>}
     {hasCutList && result?.output && <p className="cad-compile-status"><a href="#cut-list-title" onClick={(event) => {
-      if (onViewCutList) { event.preventDefault(); onViewCutList(); }
+      if (onViewCutList) { event.preventDefault(); onViewCutList('cut-list-title'); }
     }}>View cut list ↓</a></p>}
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">

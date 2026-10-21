@@ -6,6 +6,7 @@ import ParametricControls from './ParametricControls';
 import { coloredGeometry, parseDisplayMesh, visiblePartColors } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
+import SheetLayoutTable from './SheetLayoutTable';
 import type { CutListOutput } from './cutList';
 import { useFullscreen } from './useFullscreen';
 import DrawingSheets from './DrawingSheets';
@@ -36,10 +37,10 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const hasParameters = !!(entry.customizer && entry.source);
   const hasLegend = !!palette?.length;
   const hasPanels = hasLegend || hasParameters;
-  const viewCutList = () => {
+  const viewCutList = (headingId: string) => {
     void leave().then(() => {
       requestAnimationFrame(() => {
-        const heading = document.getElementById('cut-list-title');
+        const heading = document.getElementById(headingId);
         heading?.scrollIntoView({ block: 'start' });
         if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
       });
@@ -189,6 +190,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         </div>
       </div>
       {entry.customizer?.drawings && <DrawingSheets output={drawings} title={entry.title} />}
+      {entry.customizer?.sheetLayout && <SheetLayoutTable output={cutList} title={entry.title} filename={entry.model.replace(/\.stl$/, '-sheet-layout.csv')} palette={entry.customizer.parts} />}
       {entry.customizer?.cutList && <CutListTable output={cutList} title={entry.title} filename={entry.model.replace(/\.stl$/, '-cut-list.csv')} palette={entry.customizer.parts} />}
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}

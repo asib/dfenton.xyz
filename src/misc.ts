@@ -27,6 +27,7 @@ export interface CadEntry extends EntryBase {
     units?: 'mm' | 'inches';
     outputLabel?: string;
     cutList?: boolean;
+    sheetLayout?: boolean;
     drawings?: boolean;
     parts?: PartColor[];
     conditions?: Record<string, ParameterCondition>;
@@ -47,6 +48,8 @@ function validCustomizer(value: unknown): boolean {
   if ('drawings' in value && value.drawings !== undefined && typeof value.drawings !== 'boolean') return false;
   if ('cutList' in value && value.cutList !== undefined &&
       (typeof value.cutList !== 'boolean' || (value.cutList && (!('units' in value) || value.units !== 'inches')))) return false;
+  if ('sheetLayout' in value && value.sheetLayout !== undefined &&
+      (typeof value.sheetLayout !== 'boolean' || (value.sheetLayout && (!('units' in value) || value.units !== 'inches')))) return false;
   if ('parts' in value && value.parts !== undefined &&
       (!Array.isArray(value.parts) || !value.parts.every((part: unknown) =>
         typeof part === 'object' && part !== null &&

@@ -179,6 +179,28 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .dark .cad-cut-table .cad-size-cell { background: rgb(255 255 255 / 4%); }
 .cad-cut-table input { width: 70px; font-size: 11px; padding: 6px; }
 .cad-cut-table select { min-width: 120px; max-width: 170px; font-size: 11px; padding: 6px; }
+.cad-sheet-layout { --cad-sheet-stock: #f1e7cf; --cad-sheet-offcut: rgb(34 60 74 / 12%); }
+.dark .cad-sheet-layout { --cad-sheet-stock: #3b352a; --cad-sheet-offcut: rgb(255 255 255 / 10%); }
+.cad-sheet-parts { min-width: 640px; }
+.cad-sheet-options label { grid-template-columns: auto minmax(0, 240px); }
+.cad-sheet-options select { width: 100%; }
+.cad-sheet-parts td { text-align: right; white-space: nowrap; }
+.cad-sheet-parts td:first-child { text-align: center; font-weight: 600; }
+.cad-sheet-parts tbody th { font-weight: 500; }
+.cad-sheet-summary { margin: 16px 0; padding-left: 18px; list-style: square; font-size: 13px; line-height: 1.9; }
+.cad-sheet-figure { margin: 24px 0; }
+.cad-sheet-figure figcaption { font-size: 13px; margin-bottom: 8px; }
+.cad-sheet-scroll { margin: 0; }
+.cad-sheet-diagram { display: block; width: 100%; min-width: 640px; height: auto; font-family: inherit; }
+.cad-sheet-diagram text { fill: currentColor; }
+.cad-sheet-stock { fill: var(--cad-sheet-stock); stroke: currentColor; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.cad-sheet-trim { fill: none; stroke: currentColor; stroke-dasharray: 2 3; opacity: .5; vector-effect: non-scaling-stroke; }
+.cad-sheet-rip { stroke: currentColor; stroke-dasharray: 6 4; opacity: .6; vector-effect: non-scaling-stroke; }
+.cad-sheet-part rect { fill: var(--part-color, currentColor); fill-opacity: .28; stroke: var(--part-color, currentColor); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.dark .cad-sheet-part rect { fill: var(--part-dark-color, currentColor); stroke: var(--part-dark-color, currentColor); }
+.cad-sheet-turned > rect:first-child { stroke-dasharray: 5 3; }
+.cad-sheet-part .cad-sheet-trim-off { fill: var(--cad-sheet-offcut); fill-opacity: 1; stroke: none; }
+.cad-sheet-steps { margin: 10px 0 0; padding-left: 22px; font-size: 12px; line-height: 1.8; }
 .cad-cut-table .cad-stock-layout { display: block; margin-top: 8px; }
 .cad-stock-plan { display: block; max-width: 26ch; margin-top: 6px; font-size: 10px; line-height: 1.6; }
 .cad-cut-table tfoot { font-weight: 600; background: rgb(34 60 74 / 8%); }
