@@ -31,6 +31,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
   const palette = entry.customizer?.parts;
+  const camera = entry.camera;
   const [visibleParts, setVisibleParts] = useState(palette);
   const hasParameters = !!(entry.customizer && entry.source);
   const hasLegend = !!palette?.length;
@@ -64,7 +65,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         if (controller.signal.aborted) { geometry.dispose(); return; }
         setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
         try {
-          active = createScene(element, geometry);
+          active = createScene(element, geometry, camera);
         } catch (error) {
           geometry.dispose();
           throw error;
@@ -84,7 +85,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [modelUrl, displayUrl, palette]);
+  }, [modelUrl, displayUrl, palette, camera]);
 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });

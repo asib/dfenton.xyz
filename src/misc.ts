@@ -21,6 +21,8 @@ export interface CadEntry extends EntryBase {
   source?: string;
   sourceUrl?: string;
   notes?: string;
+  // Direction from the model's center to the default camera; Z is up.
+  camera?: [number, number, number];
   customizer?: {
     units?: 'mm' | 'inches';
     outputLabel?: string;
@@ -94,6 +96,8 @@ export const miscEntries = Object.entries(metadata).map(([path, entry]) => {
     (entry.source !== undefined && (typeof entry.source !== 'string' || !/^[a-z0-9][a-z0-9-]*\.scad$/.test(entry.source))) ||
     (entry.sourceUrl !== undefined && (typeof entry.sourceUrl !== 'string' || !entry.sourceUrl.startsWith('https://'))) ||
     (entry.notes !== undefined && typeof entry.notes !== 'string') ||
+    (entry.camera !== undefined && (!Array.isArray(entry.camera) || (entry.camera as unknown[]).length !== 3 ||
+      !entry.camera.every(Number.isFinite) || entry.camera.every(n => n === 0))) ||
     (entry.customizer !== undefined && (!entry.source || !validCustomizer(entry.customizer))) ||
     (entry.attribution !== undefined && (
       typeof entry.attribution.text !== 'string' ||

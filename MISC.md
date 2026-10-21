@@ -60,6 +60,8 @@ CAD entries use the same list, local page URLs, and theme-aware previews. Set `t
 }
 ```
 
+Optional `camera` is a three-number direction from the model's center to the default camera, in model coordinates with Z up; it defaults to `[1.35, 1.8, 1.1]`. Reset view returns to it. Use it when the model's front faces another way, for example `[1.35, -1.8, 1.1]` for a front at −Y.
+
 Keep the STL and previews in the entry folder, along with the original OpenSCAD file when supplied. `model` must be a local lowercase `.stl` filename. Optional `source` is a local lowercase `.scad` filename and is required when `customizer` is present. Optional `sourceUrl` links to an editable CAD document over HTTPS, such as an Onshape document. `notes` and `attribution` are optional. Preserve source comments and attribution. There are no third-party runtime requests: Three.js is bundled with the site and model files are served locally.
 
 The viewer assumes STL coordinates are millimeters with Z up, matching OpenSCAD. It provides orbit/pan/zoom, keyboard rotation/zoom, solid/edge/wireframe modes, and one movable X/Y/Z clipping plane with a flip control. Colored stencil caps show cut material while preserving cavities; these require closed, consistently wound meshes. The first entry is a single solid, so part visibility controls are not shown. View controls do not affect the downloadable solid. Models with `customizer` also expose editable source parameters and regenerate the geometry in the browser.

@@ -11,7 +11,9 @@ export interface ViewSettings {
 }
 
 // Models retain the OpenSCAD convention: millimeters, Z up. Center only for orbiting.
-export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
+const defaultCamera: [number, number, number] = [1.35, 1.8, 1.1];
+
+export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, cameraDirection = defaultCamera) {
   geometry.computeBoundingBox();
   const bounds = geometry.boundingBox;
   if (!bounds || bounds.isEmpty()) throw new Error('The model has no geometry.');
@@ -132,7 +134,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry) {
     const vertical = THREE.MathUtils.degToRad(camera.fov / 2);
     const halfFov = Math.atan(Math.tan(vertical) * Math.min(camera.aspect, 1));
     const distance = radius / Math.sin(halfFov) * 1.12;
-    camera.position.copy(new THREE.Vector3(1.35, 1.8, 1.1).normalize().multiplyScalar(distance));
+    camera.position.copy(new THREE.Vector3(...cameraDirection).normalize().multiplyScalar(distance));
     controls.target.set(0, 0, 0);
     controls.update();
     render();
