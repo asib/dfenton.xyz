@@ -116,6 +116,12 @@ The README records default sizes and reproduction commands. The frame tests
 cover original volume, contact/pocket geometry, drawing dimensions, stock
 quantities, and saved/live asset agreement.
 
+### Drawer cabinet
+
+The **Drawer cabinet** at `/misc/drawer-cabinet/` is an original self-contained SCAD model: a frameless plywood case with one column of up to eight inset drawers on wooden runners. Its origin is the front-bottom-left case corner with the front face at Y=0, so its metadata sets `camera` to view the front. Drawer 1 is the top drawer. Each drawer has its own `[Drawer N]` group with height and depth; `customizer.conditions` hide drawer N's group unless `Drawer_count` is at least N, using numeric `values`. Zero height shares the remaining opening between those drawers; zero depth fills the case less the back clearance. Assertions require set heights to total the opening when none is zero.
+
+`Runner_style` selects screwed strips, strips housed in stopped case-side dados, or side-hung strips in drawer-side grooves. Supported boxes bear on the strip whose top is level with their front bottom and stop `Runner_clearance` below the strip above, which keeps them from tipping; the bottom drawer runs on the case bottom with no lower reveal. `Box_construction` selects butt-jointed boxes with full-length sides or full-width front/back and a bottom nailed under, or full-length sides with a grooved bottom. The fronts are integral and inset. Fourteen legend colors identify case members, runners and drawer roles, alternating between odd and even drawers so neighbors stay distinct. `Drawer schedule` output lists fronts and boxes to the nearest 1/64 inch, marking rounded values with ≈. The explosion is sequenced: to 100 percent the case opens and drawers slide out whole until clear; to 200 the drawers spread vertically and come apart. Drawings and a cut list are planned follow-ups; plywood parts will need sheet-goods handling in the worksheet. Run `bun test tests/drawer-cabinet.test.mjs`.
+
 ### SCAD drawings
 
 For new SCAD imports, include dimensioned assembly and part/joinery sheets, an all-sheets PDF, and a cut-list worksheet/CSV for woodworking by default unless the user narrows the scope. STEP entries should receive equivalent drawings once an importer is available; STEP import is not implemented yet. STL-only entries retain viewing without invented design dimensions.
