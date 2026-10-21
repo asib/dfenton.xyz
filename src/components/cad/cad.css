@@ -6,6 +6,7 @@
   /* The theme-toggle shadow should follow control borders and text, not filled boxes. */
   --cad-control: transparent;
   --cad-surface: #efe6ee;
+  --cad-selected: #c2006b;
   font-size: 14px;
 }
 .dark .cad {
@@ -14,6 +15,7 @@
   --cad-section: #ff8c99;
   --cad-border: rgb(244 164 96 / 25%);
   --cad-surface: #1f1f1f;
+  --cad-selected: #ff6cc0;
 }
 .cad select option { background: var(--cad-surface); color: inherit; }
 .cad-description { line-height: 1.7; max-width: 70ch; }
@@ -148,7 +150,19 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
   .cad-sidebar { border-left: 0; padding-left: 0; }
 }
 .cad-part-key { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 20px 0; font-size: 11px; }
-.cad-part-key li { display: flex; gap: 8px; align-items: center; }
+.cad-part-key li { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.cad-part-hint { font-size: 11px; opacity: .75; margin: 12px 0 0; }
+.cad-part-select { display: flex; gap: 8px; align-items: center; width: 100%; padding: 4px 6px; margin: -4px -6px; text-align: left; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 3px; cursor: pointer; }
+.cad-part-select:hover { border-color: var(--cad-border); }
+.cad-part-select[aria-pressed=true] { border-color: var(--cad-selected); }
+.cad-part-select[data-hidden] span { opacity: .55; text-decoration: line-through; }
+.cad-part-select:focus-visible, .cad-part-controls :is(button, input):focus-visible, .cad-part-reset:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.cad-part-controls { display: grid; gap: 10px; margin: 0 0 16px; padding: 12px; border: 1px solid var(--cad-selected); border-radius: 3px; font-size: 12px; }
+.cad-part-controls p { margin: 0; }
+.cad-part-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cad-part-controls button, .cad-part-reset { padding: 6px 10px; min-height: 32px; font: inherit; font-size: 12px; color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 3px; cursor: pointer; }
+.cad-part-controls button:hover, .cad-part-reset:hover { border-color: currentColor; }
+.cad-part-reset { margin: 0 0 16px; }
 .cad-part-swatch { display: inline-block; flex-shrink: 0; width: 12px; height: 12px; border: 1px solid rgb(0 0 0 / 20%); background: var(--part-color); }
 .dark .cad-part-swatch { background: var(--part-dark-color); }
 .cad-cut-list { margin: 40px 0; padding-top: 24px; border-top: 1px solid var(--cad-border); min-width: 0; }

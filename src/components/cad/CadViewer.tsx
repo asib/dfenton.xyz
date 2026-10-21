@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
-import { createScene, type RenderMode, type SectionAxis } from './scene';
+import { createScene, type PartAppearances, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls from './ParametricControls';
 import { coloredGeometry, parseDisplayMesh, visiblePartColors } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
@@ -29,6 +29,9 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
+  // View-only part appearance survives regeneration and theme changes; it never changes downloads.
+  const [appearances, setAppearances] = useState<PartAppearances>({});
+  const [selected, setSelected] = useState<string | null>(null);
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
   const palette = entry.customizer?.parts;
@@ -66,7 +69,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         if (controller.signal.aborted) { geometry.dispose(); return; }
         setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
         try {
-          active = createScene(element, geometry, camera);
+          active = createScene(element, geometry, camera, setSelected);
         } catch (error) {
           geometry.dispose();
           throw error;
@@ -91,6 +94,16 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });
   }, [viewer, mode, axis, position, flipped]);
+
+  const selectedPart = visibleParts?.find(part => part.id === selected);
+  useEffect(() => {
+    viewer?.setAppearance(appearances, selectedPart?.id ?? null);
+  }, [viewer, appearances, selectedPart?.id]);
+  const look = (id: string) => ({ hidden: !!appearances[id]?.hidden, opacity: appearances[id]?.opacity ?? 1 });
+  const setLook = (id: string, change: { hidden?: boolean; opacity?: number }) => {
+    setAppearances(previous => ({ ...previous, [id]: { ...previous[id], ...change } }));
+  };
+  const changedParts = visibleParts?.filter(part => look(part.id).hidden || look(part.id).opacity < 1).length ?? 0;
 
   const coordinate = viewer && axis !== 'off'
     ? viewer.sourceMin[axis] + viewer.size[axis] * position / 100
@@ -176,11 +189,33 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         <div className="cad-sidebar" hidden={!hasPanels}>
           {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
             <summary>Part legend</summary>
+            <p className="cad-part-hint">Click a part in the model or below to fade or hide it.</p>
             <ul className="cad-part-key" aria-label="Part colors">
-              {visibleParts?.map((part) => <li key={part.id}>
-                <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />{part.label}
-              </li>)}
+              {visibleParts?.map((part) => {
+                const { hidden, opacity } = look(part.id);
+                return <li key={part.id}>
+                  <button type="button" className="cad-part-select" aria-pressed={part.id === selectedPart?.id} data-hidden={hidden || undefined}
+                    onClick={() => { setSelected(part.id === selectedPart?.id ? null : part.id); }}>
+                    <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />
+                    <span>{part.label}{hidden ? ' · hidden' : opacity < 1 ? ` · ${String(Math.round(opacity * 100))}%` : ''}</span>
+                  </button>
+                </li>;
+              })}
             </ul>
+            {selectedPart && <div className="cad-part-controls" role="group" aria-label={`${selectedPart.label} appearance`}>
+              <p>Selected: <strong>{selectedPart.label}</strong></p>
+              <label className="cad-slider">Opacity <output>{Math.round(look(selectedPart.id).opacity * 100)}%</output>
+                <input type="range" min="0" max="100" step="5" value={Math.round(look(selectedPart.id).opacity * 100)}
+                  onChange={(event) => { setLook(selectedPart.id, { opacity: Number(event.target.value) / 100, hidden: false }); }} />
+              </label>
+              <div className="cad-part-actions">
+                <button type="button" onClick={() => { setLook(selectedPart.id, { hidden: !look(selectedPart.id).hidden, opacity: look(selectedPart.id).opacity || 1 }); }}>
+                  {look(selectedPart.id).hidden ? 'Show part' : 'Hide part'}
+                </button>
+                <button type="button" onClick={() => { setSelected(null); }}>Deselect</button>
+              </div>
+            </div>}
+            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }}>Show all parts ({changedParts} changed)</button>}
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>

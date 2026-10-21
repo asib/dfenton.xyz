@@ -44,7 +44,9 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   geometry.setAttribute('normal', new BufferAttribute(display.normals, 3));
   const light = new Float32Array(display.positions.length);
   const dark = new Float32Array(display.positions.length);
-  for (const group of display.groups) {
+  // One geometry group per colored part lets the viewer fade, hide or select it.
+  const partIds: (string | null)[] = [];
+  for (const [index, group] of display.groups.entries()) {
     const base = new Color().setRGB(group.color[0], group.color[1], group.color[2], SRGBColorSpace);
     // Match source RGB after the engine's float conversion.
     const part = palette.find(({ color }) => {
@@ -52,6 +54,8 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
       return Math.abs(candidate.r - base.r) + Math.abs(candidate.g - base.g) + Math.abs(candidate.b - base.b) < 0.0001;
     });
     const night = part ? new Color(part.darkColor) : base;
+    geometry.addGroup(group.start, group.count, index);
+    partIds.push(part?.id ?? null);
     for (let vertex = group.start; vertex < group.start + group.count; vertex++) {
       base.toArray(light, vertex * 3);
       night.toArray(dark, vertex * 3);
@@ -60,6 +64,7 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   geometry.setAttribute('colorLight', new BufferAttribute(light, 3));
   geometry.setAttribute('colorDark', new BufferAttribute(dark, 3));
   geometry.setAttribute('color', geometry.getAttribute('colorLight'));
+  geometry.userData.partIds = partIds;
   return geometry;
 }
 
