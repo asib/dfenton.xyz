@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { parameters, render } from 'openrscad-engine/node';
 import { conditionMatches, configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
-import { parseDisplayMesh } from '../src/components/cad/displayMesh';
+import { Color } from 'three';
+import { coloredGeometry, geometryPieces, legendPart, parseDisplayMesh, parsePieceLabels, pieceKey, visiblePartColors } from '../src/components/cad/displayMesh';
 import { parseCutList } from '../src/components/cad/cutList';
 import { layoutSheets, parseSheetParts, parseSheetStock } from '../src/components/cad/sheetLayout';
 
@@ -64,11 +65,14 @@ function rayHits(positions, axis, u, v) {
   return [...new Set(hits.map(n => Number(n.toFixed(5))))].sort((a, b) => a - b);
 }
 
-// Preview triangles of the physical pieces drawn in one legend color.
+// Preview triangles of every physical piece shown in one legend color; pieces
+// carry their own source colors within 3/255 of it.
 function piece(result, id) {
-  const rgb = colors[id].match(/\w\w/g).map(n => parseInt(n, 16) / 255);
-  const group = result.groups.find(g => rgb.every((n, i) => Math.abs(n - g.color[i]) < 1e-6));
-  return group ? result.preview.slice(group.start * 3, (group.start + group.count) * 3) : new Float32Array();
+  const groups = result.groups.filter(g => legendPart(g.color, metadata.customizer.parts)?.id === id);
+  const out = new Float32Array(groups.reduce((n, g) => n + g.count * 3, 0));
+  let offset = 0;
+  for (const g of groups) { out.set(result.preview.slice(g.start * 3, (g.start + g.count) * 3), offset); offset += g.count * 3; }
+  return out;
 }
 const near = (values, expected) => {
   expect(values).toHaveLength(expected.length);
@@ -181,7 +185,7 @@ test('explosion moves parts without changing them', () => {
     else expect(bounds(result.positions).size[1]).toBeGreaterThan(bounds(assembled.positions).size[1]);
   }
   const carcass = compile({ Part: 'carcass' });
-  expect(carcass.groups).toHaveLength(6);
+  expect(carcass.groups).toHaveLength(11); // Five case panels and six runner strips.
 });
 
 test.each([
@@ -250,4 +254,38 @@ test('plywood parts feed sheet layouts and hardwood runners feed the cut list', 
   const tall = sheetParts({ Height: 96, Drawer_count: 1, Drawer_1_height: 0 });
   expect(layoutSheets(tall, { sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0.5, method: 'densest', grain: 'visible' }))
     .toEqual({ ok: false, error: 'Case sides does not fit on the usable 47 × 95 in sheet with its grain along the sheet.' });
+});
+
+test('every physical piece is individually selectable and labeled in its legend color', () => {
+  for (const changes of [{}, { Drawer_count: 8, Height: 48, Drawer_1_height: 0 }, { Runner_style: 'side_hung' }]) {
+    const result = compile(changes);
+    const n = changes.Drawer_count ?? 4, runners = changes.Runner_style === 'side_hung' ? 2 * n : 2 * (n - 1);
+    expect(result.groups).toHaveLength(5 + runners + 5 * n);
+    const keys = result.groups.map(g => pieceKey(g.color));
+    expect(new Set(keys).size).toBe(keys.length);
+    const display = { positions: result.preview, normals: result.normals, groups: result.groups };
+    const geometry = coloredGeometry(display, metadata.customizer.parts);
+    const pieces = geometryPieces(geometry);
+    expect(pieces).toHaveLength(result.groups.length);
+    expect(visiblePartColors(display, metadata.customizer.parts).map(p => p.id).sort())
+      .toEqual(metadata.customizer.parts.map(p => p.id).filter(id => n > 1 || !id.endsWith('-even')).sort());
+    // Pieces display exactly in their legend color in both themes.
+    const light = geometry.getAttribute('colorLight'), dark = geometry.getAttribute('colorDark');
+    for (const [i, group] of result.groups.entries()) {
+      const part = metadata.customizer.parts.find(p => p.id === pieces[i].part);
+      for (const [attribute, hex] of [[light, part.color], [dark, part.darkColor]]) {
+        const expected = new Color(hex);
+        expect(attribute.getX(group.start)).toBeCloseTo(expected.r, 6);
+        expect(attribute.getZ(group.start)).toBeCloseTo(expected.b, 6);
+      }
+    }
+    geometry.dispose();
+    // Shared-color pieces are named; the five case panels have their own legend entries.
+    const labels = parsePieceLabels(result.echo);
+    expect(labels.size).toBe(runners + 5 * n);
+    for (const key of keys.slice(5)) expect(labels.has(key)).toBe(true);
+  }
+  const labels = parsePieceLabels(compile().echo);
+  expect([...labels.values()].slice(0, 2)).toEqual(['Runner R1 · left', 'Runner R1 · right']);
+  expect([...labels.values()]).toContain('Drawer 3 front');
 });

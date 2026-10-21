@@ -99,6 +99,14 @@ The page lays them out on 48 × 96 inch sheets by densest nesting or rip-first
 strips, with a diagram per sheet and a CSV. The defaults fit one sheet of each
 thickness. The hardwood runner strips are the only board-feet cut-list row.
 
+## Viewer pieces
+
+Drawer members and runner strips share legend colors, alternating between
+odd and even drawers. Each physical piece is colored within 3/255 of its
+legend color, nudged by its index, so the viewer can select, fade, hide or
+isolate it on its own. `PIECES_V1` names them, for example `Drawer 3 front`
+or `Runner R2 · left`.
+
 ## Inspection
 
 `Explosion_percent` is sequenced so that no part passes through another: up to

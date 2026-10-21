@@ -217,11 +217,19 @@ assert(Part != "drawer" || (Inspect_drawer >= 1 && Inspect_drawer <= N && floor(
 // Colors identify physical members; alternate drawers use paired hues so
 // adjacent drawers stay distinguishable.
 case_colors = ["#2c78b5", "#3998a5", "#5d6b7c", "#7a6f4e", "#9a8f80"]; // left, right, top, bottom, back
-runner_color = "#2f7a4f";
-front_colors = ["#b87924", "#b6483b"];
-side_colors = ["#ae689d", "#7065af"];
-back_colors = ["#956d70", "#5d7c92"];
-bottom_colors = ["#8a8a3a", "#47856d"];
+// Legend colors as 0-255 RGB. Pieces sharing a legend color get their own
+// source color within 3/255 of it, so the viewer can select each one while
+// showing the legend color.
+runner_rgb = [47, 122, 79];
+front_rgb = [[184, 121, 36], [182, 72, 59]];
+side_rgb = [[174, 104, 157], [112, 101, 175]];
+back_rgb = [[149, 109, 112], [93, 124, 146]];
+bottom_rgb = [[138, 138, 58], [71, 133, 109]];
+// Piece k of a legend color: base-4 digits of k nudge red, green and blue.
+function shade(base, k) = [for (c = [0:2]) let(d = floor(k / pow(4, c)) % 4) base[c] + (base[c] > 250 ? -d : d)];
+function hex2(n) = str("0123456789abcdef"[floor(n / 16)], "0123456789abcdef"[n % 16]);
+function hex_color(c) = str("#", hex2(c[0]), hex2(c[1]), hex2(c[2]));
+function runner_rgb_of(i, right) = shade(runner_rgb, 2 * i + (right ? 1 : 0));
 
 echo(str("Case: ", frac(Width), " wide x ", frac(Height), " tall x ", frac(Depth), " deep"));
 echo(str("Opening: ", frac(inner_w), " x ", frac(inner_h), "; ", frac(inner_d), " to the back panel"));
@@ -295,9 +303,10 @@ function drawer_members(i) = let(
         ["right", [w - ts, 0, 0], [w, d, h]],
         ["back", [ts, d - tk, o + tb], [w - ts, d, h]]];
 
-function member_color(name, i) = let(k = i % 2)
-    name == "front" ? front_colors[k] : name == "back" ? back_colors[k] :
-    name == "bottom" ? bottom_colors[k] : side_colors[k];
+// Alternate drawers alternate legend colors; drawers sharing one are distinct pieces.
+function member_rgb(name, i) = let(k = i % 2, n = floor(i / 2))
+    name == "front" ? shade(front_rgb[k], n) : name == "back" ? shade(back_rgb[k], n) :
+    name == "bottom" ? shade(bottom_rgb[k], n) : shade(side_rgb[k], 2 * n + (name == "right" ? 1 : 0));
 
 module drawer_member(i, m) {
     w = box_w; d = box_d[i]; tf = Front_thickness; ts = Side_thickness;
@@ -319,7 +328,7 @@ function member_offset(name) =
 
 module drawer(i, e) {
     for (m = drawer_members(i))
-        color(member_color(m[0], i)) translate(member_offset(m[0]) * e * inch) drawer_member(i, m);
+        color(member_rgb(m[0], i) / 255) translate(member_offset(m[0]) * e * inch) drawer_member(i, m);
 }
 module carcass(e) {
     color(case_colors[0]) translate(case_offsets[0] * e * inch) case_side(false);
@@ -328,7 +337,7 @@ module carcass(e) {
     color(case_colors[3]) translate(case_offsets[3] * e * inch) case_panel(false);
     color(case_colors[4]) translate(case_offsets[4] * e * inch) case_back();
     // Runners move half as far as their side, exposing the seat or dado.
-    color(runner_color) for (i = runner_drawers) for (right = [false, true])
+    for (i = runner_drawers) for (right = [false, true]) color(runner_rgb_of(i, right) / 255)
         translate(case_offsets[right ? 1 : 0] * e / 2 * inch) runner(i, right);
 }
 module cabinet(e) {
@@ -661,6 +670,13 @@ runner_section = [Runner_height, supported ? Runner_width + dado_depth : runner_
 echo("CUTLIST_STOCK_V1", [14, 10, 0.0625, 0.0625]);
 if (len(runner_drawers) > 0) echo("CUTLIST_V1", [["runners", "Runner strip", "Hardwood", 2 * len(runner_drawers),
     min(runner_section), max(runner_section), inner_d - Front_thickness, "Runner strip"]]);
+
+// Names for the viewer's individually selectable pieces, keyed by source color.
+member_names = [["front", "front"], ["left", "left side"], ["right", "right side"], ["back", "back"], ["bottom", "bottom"]];
+echo("PIECES_V1", concat(
+    [for (i = runner_drawers) for (right = [false, true])
+        [hex_color(runner_rgb_of(i, right)), str("Runner R", i + 1, right ? " · right" : " · left")]],
+    [for (i = [0:N-1]) for (m = member_names) [hex_color(member_rgb(m[0], i)), str("Drawer ", i + 1, " ", m[1])]]));
 
 if (!is_undef($misc_drawing) && $misc_drawing) {
     echo("DRAWING_V1", ["inches", concat(assembly_views, joint_views), joint_caption]);
