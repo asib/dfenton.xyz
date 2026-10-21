@@ -296,40 +296,54 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     controls.update();
   };
 
-  // A click (not an orbit or pan drag) selects the nearest visible, unclipped part.
+  // The nearest visible, unclipped piece (or legend part) at a client position.
   const raycaster = new THREE.Raycaster();
-  let pressed: { x: number; y: number } | null = null;
-  const onPointerDown = (event: PointerEvent) => { pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null; };
-  const onPointerUp = (event: PointerEvent) => {
-    if (!onPick || !pressed || event.button !== 0 || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) return;
-    pressed = null;
+  const pickAt = (x: number, y: number): string | null => {
     const rect = renderer.domElement.getBoundingClientRect();
-    raycaster.setFromCamera(new THREE.Vector2(
-      (event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
+    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
     const clipping = settings.axis !== 'off';
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
       if (!layer || visible(layer).hidden || (clipping && plane.distanceToPoint(hit.point) < 0)) continue;
-      onPick(layer.piece ?? layer.part);
-      return;
+      return layer.piece ?? layer.part;
     }
-    onPick(null);
+    return null;
   };
+  // A click (not an orbit or pan drag) selects. The last pointer position over
+  // the canvas lets keyboard shortcuts act on the part under the cursor; it is
+  // picked only when asked, so moving the pointer costs nothing.
+  let pressed: { x: number; y: number } | null = null;
+  let pointer: { x: number; y: number } | null = null;
+  const onPointerDown = (event: PointerEvent) => { pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null; };
+  const onPointerUp = (event: PointerEvent) => {
+    if (!onPick || !pressed || event.button !== 0 || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) return;
+    pressed = null;
+    onPick(pickAt(event.clientX, event.clientY));
+  };
+  const onPointerMove = (event: PointerEvent) => { pointer = { x: event.clientX, y: event.clientY }; };
+  const onPointerLeave = () => { pointer = null; };
   renderer.domElement.addEventListener('keydown', onKey);
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
   renderer.domElement.addEventListener('pointerup', onPointerUp);
+  renderer.domElement.addEventListener('pointermove', onPointerMove);
+  renderer.domElement.addEventListener('pointerleave', onPointerLeave);
   setTheme();
   setSettings({ mode: 'edges', axis: 'off', position: 50, flipped: false });
   resize();
 
   return {
     size, sourceMin, setSettings, setAppearance, reset, replaceGeometry,
+    // The piece or part under the pointer, if it is over the canvas.
+    hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
+    pointerInside: () => !!pointer,
     dispose() {
       observer.disconnect();
       themeObserver.disconnect();
       renderer.domElement.removeEventListener('keydown', onKey);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
       controls.removeEventListener('change', render);
       controls.dispose();
       geometry.dispose();

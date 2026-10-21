@@ -102,15 +102,17 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const partPieces = (id: string) => pieces.filter(piece => piece.part === id);
   const pieceLabel = (piece: { key: string; part: string }) => pieceLabels.get(piece.key) ??
     `${visibleParts?.find(part => part.id === piece.part)?.label ?? 'Piece'} · ${String(partPieces(piece.part).indexOf(piece) + 1)}`;
-  // Picking a piece of a single-piece part selects the part itself.
-  const selection = (() => {
-    if (!selected) return null;
-    const direct = visibleParts?.find(part => part.id === selected);
-    const piece = direct ? undefined : pieces.find(candidate => candidate.key === selected);
+  // A legend part ID or piece key as a target; a piece of a single-piece part is the part itself.
+  const resolve = (key: string | null) => {
+    if (!key) return null;
+    const direct = visibleParts?.find(part => part.id === key);
+    const piece = direct ? undefined : pieces.find(candidate => candidate.key === key);
     const part = direct ?? visibleParts?.find(candidate => candidate.id === piece?.part);
     if (!part) return null;
     return piece && partPieces(part.id).length > 1 ? { key: piece.key, part, piece, label: pieceLabel(piece) } : { key: part.id, part, piece: undefined, label: part.label };
-  })();
+  };
+  type Target = NonNullable<ReturnType<typeof resolve>>;
+  const selection = resolve(selected);
   useEffect(() => {
     viewer?.setAppearance(appearances, selection?.key ?? null);
   }, [viewer, appearances, selection?.key]);
@@ -133,46 +135,68 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     });
   };
   // Isolate hides everything else; ghosting (Onshape's isolate) leaves it faint.
-  const isolate = (others: { hidden: true } | { opacity: number } = { hidden: true }) => {
-    if (!selection || !visibleParts) return;
-    const next: PartAppearances = Object.fromEntries(visibleParts.filter(part => part.id !== selection.part.id).map(part => [part.id, others]));
-    if (selection.piece) for (const piece of partPieces(selection.part.id)) if (piece.key !== selection.key) next[piece.key] = others;
+  // Isolate hides everything else; ghosting (Onshape's isolate) leaves it faint.
+  const isolate = (target: Target, others: { hidden: true } | { opacity: number } = { hidden: true }) => {
+    if (!visibleParts) return;
+    const next: PartAppearances = Object.fromEntries(visibleParts.filter(part => part.id !== target.part.id).map(part => [part.id, others]));
+    if (target.piece) for (const piece of partPieces(target.part.id)) if (piece.key !== target.key) next[piece.key] = others;
     setAppearances(next);
   };
   const changedParts = visibleParts?.filter(part => changed(part.id) || partPieces(part.id).some(piece => changed(piece.key))).length ?? 0;
-  const toggleHidden = () => {
-    if (selection) setLook(selection.key, { hidden: !look(selection.key).hidden, opacity: look(selection.key).opacity || 1 });
+  const toggleHidden = (target: Target) => {
+    setLook(target.key, { hidden: !look(target.key).hidden, opacity: look(target.key).opacity || 1 });
   };
-  // Shows the selection if hidden, otherwise every hidden part and piece; fades are kept.
-  const showHidden = () => {
-    if (selection && look(selection.key).hidden) { toggleHidden(); return; }
+  // Shows the target if hidden, otherwise every hidden part and piece; fades are kept.
+  const showHidden = (target: Target | null) => {
+    if (target && look(target.key).hidden) { toggleHidden(target); return; }
     setAppearances(previous => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, hidden: false }])));
   };
   const anyHidden = Object.values(appearances).some(value => value?.hidden);
   const ghost = { opacity: 0.15 };
-  // Shortcuts from the 3D view or the part legend, never while typing in a field. Blender-style:
-  // H hides or shows the selection, Shift+H isolates it, Alt+H shows all parts, Escape deselects.
+  // Blender-style: H hides or shows, Shift+H isolates, Alt+H shows all parts, Escape deselects.
   // Onshape-style aliases: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
-  // transparency, and Space deselects (from the 3D view only, so it still presses focused buttons).
+  // transparency, and Space deselects from the 3D view. Actions apply to the selection or, with
+  // nothing selected, to the part under the cursor. Returns whether the key was used.
+  const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
+    // event.code: Alt+H types another character on macOS.
+    const { code, shiftKey: shift, altKey: alt } = event, plain = !shift && !alt;
+    const acting = ['KeyH', 'KeyY', 'KeyI', 'KeyT'].includes(code) && !alt;
+    const target = acting ? selection ?? resolve(viewer?.hovered() ?? null) : null;
+    if ((event.key === 'Escape' || (code === 'Space' && fromCanvas)) && selection) setSelected(null);
+    else if (code === 'KeyH' && alt && !shift && changedParts > 0) setAppearances({});
+    else if (code === 'KeyH' && shift && target) isolate(target);
+    else if (code === 'KeyH' && plain && target) toggleHidden(target);
+    else if (code === 'KeyY' && plain && target && !look(target.key).hidden) toggleHidden(target);
+    else if (code === 'KeyY' && shift && !alt && (anyHidden || (target && look(target.key).hidden))) showHidden(target);
+    else if (code === 'KeyI' && shift && target) isolate(target, ghost);
+    else if (code === 'KeyT' && shift && target) setLook(target.key, { hidden: false, opacity: look(target.key).opacity < 1 ? 1 : 0.3 });
+    else return false;
+    return true;
+  };
+  // From the 3D view or the part legend, never while typing in a field.
   const onShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (!hasLegend || event.ctrlKey || event.metaKey || !(target.tagName === 'CANVAS' || target.closest('#cad-legend')) ||
         target.matches('input:not([type=range]), select, textarea')) return;
-    // event.code: Alt+H types another character on macOS.
-    const { code, shiftKey: shift, altKey: alt } = event, plain = !shift && !alt;
-    if ((event.key === 'Escape' || (code === 'Space' && target.tagName === 'CANVAS')) && selection) setSelected(null);
-    else if (code === 'KeyH' && alt && !shift && changedParts > 0) setAppearances({});
-    else if (code === 'KeyH' && shift && !alt && selection) isolate();
-    else if (code === 'KeyH' && plain && selection) toggleHidden();
-    else if (code === 'KeyY' && plain && selection && !look(selection.key).hidden) toggleHidden();
-    else if (code === 'KeyY' && shift && !alt && (anyHidden || (selection && look(selection.key).hidden))) showHidden();
-    else if (code === 'KeyI' && shift && !alt && selection) isolate(ghost);
-    else if (code === 'KeyT' && shift && !alt && selection) setLook(selection.key, { hidden: false, opacity: look(selection.key).opacity < 1 ? 1 : 0.3 });
-    else return;
+    if (!runShortcut(event, target.tagName === 'CANVAS')) return;
     // Consumed keys don't also reach the fullscreen workspace, so Escape deselects before it exits.
     event.preventDefault();
     event.stopPropagation();
   };
+  // With nothing focused, shortcuts still work while the pointer is over the model.
+  const latestShortcut = useRef(runShortcut);
+  latestShortcut.current = runShortcut;
+  useEffect(() => {
+    if (!hasLegend || !viewer) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      const active = document.activeElement;
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.key === 'Escape' ||
+          (active && active !== document.body) || !viewer.pointerInside()) return;
+      if (latestShortcut.current(event, true)) event.preventDefault();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('keydown', onKey); };
+  }, [hasLegend, viewer]);
 
   const coordinate = viewer && axis !== 'off'
     ? viewer.sourceMin[axis] + viewer.size[axis] * position / 100
@@ -220,7 +244,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click a part to select it. H or Y hides it and H or Shift+Y shows it; Shift+H isolates it and Shift+I fades everything else; Shift+T toggles transparency; Alt+H shows all parts; Esc or Space deselects.'}</p>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click a part to select it. Shortcuts act on the selection, or on the part under the cursor when nothing is selected: H or Y hides and H or Shift+Y shows; Shift+H isolates and Shift+I fades everything else; Shift+T toggles transparency; Alt+H shows all parts; Esc or Space deselects.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -277,12 +301,12 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   onChange={(event) => { setLook(selection.key, { opacity: Number(event.target.value) / 100, hidden: false }); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={toggleHidden} title={look(selection.key).hidden ? 'Show (H or Shift+Y)' : 'Hide (H or Y)'}
+                <button type="button" onClick={() => { toggleHidden(selection); }} title={look(selection.key).hidden ? 'Show (H or Shift+Y)' : 'Hide (H or Y)'}
                   aria-keyshortcuts={look(selection.key).hidden ? 'H Shift+Y' : 'H Y'}>
                   {look(selection.key).hidden ? 'Show' : 'Hide'}
                 </button>
-                <button type="button" onClick={() => { isolate(); }} title="Hide everything else (Shift+H)" aria-keyshortcuts="Shift+H">Isolate</button>
-                <button type="button" onClick={() => { isolate(ghost); }} title="Fade everything else (Shift+I)" aria-keyshortcuts="Shift+I">Ghost others</button>
+                <button type="button" onClick={() => { isolate(selection); }} title="Hide everything else (Shift+H)" aria-keyshortcuts="Shift+H">Isolate</button>
+                <button type="button" onClick={() => { isolate(selection, ghost); }} title="Fade everything else (Shift+I)" aria-keyshortcuts="Shift+I">Ghost others</button>
                 <button type="button" onClick={() => { setSelected(null); }} title="Deselect (Esc or Space)" aria-keyshortcuts="Escape Space">Deselect</button>
               </div>
               {selection.piece ? <button type="button" className="cad-piece-up" onClick={() => { setSelected(selection.part.id); }}>Select all {selection.part.label}</button> :
