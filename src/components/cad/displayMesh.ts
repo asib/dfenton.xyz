@@ -38,6 +38,34 @@ export function displayMesh(positions: Float32Array, normals: Float32Array, json
   return { positions, normals, groups: groups as Group[] };
 }
 
+// A model may give each physical piece its own source color within a few
+// 1/255 steps of its legend color: the piece displays in the legend's colors
+// and can still be selected on its own.
+const pieceTolerance = 3.5 / 255;
+const hexRgb = (hex: string) => (hex.slice(1).match(/../g) ?? []).map(n => parseInt(n, 16) / 255);
+export function legendPart(color: number[], palette: PartColor[] = []): PartColor | undefined {
+  let best: PartColor | undefined, distance = pieceTolerance;
+  for (const part of palette) {
+    const rgb = hexRgb(part.color);
+    const d = Math.max(...rgb.map((n, i) => Math.abs(n - color[i])));
+    if (d <= distance) { best = part; distance = d; }
+  }
+  return best;
+}
+export const pieceKey = (color: number[]) => `#${color.slice(0, 3).map(n => Math.round(n * 255).toString(16).padStart(2, '0')).join('')}`;
+
+// Optional echo("PIECES_V1", [["#rrggbb", label], ...]) names pieces by source color.
+export function parsePieceLabels(output: string): Map<string, string> {
+  const line = output.split('\n').find(text => /^ECHO:\s*"PIECES_V1",/.test(text));
+  if (!line) return new Map();
+  try {
+    const rows: unknown = JSON.parse(line.replace(/^ECHO:\s*"PIECES_V1",\s*/, ''));
+    if (!Array.isArray(rows)) return new Map();
+    return new Map(rows.filter((row: unknown): row is [string, string] => Array.isArray(row) && row.length === 2 &&
+      typeof row[0] === 'string' && /^#[0-9a-f]{6}$/.test(row[0]) && typeof row[1] === 'string' && !!row[1].trim()));
+  } catch { return new Map(); }
+}
+
 export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = []) {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(display.positions, 3));
@@ -45,17 +73,14 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   const light = new Float32Array(display.positions.length);
   const dark = new Float32Array(display.positions.length);
   // One geometry group per colored part lets the viewer fade, hide or select it.
-  const partIds: (string | null)[] = [];
+  const partIds: (string | null)[] = [], pieceKeys: string[] = [];
   for (const [index, group] of display.groups.entries()) {
-    const base = new Color().setRGB(group.color[0], group.color[1], group.color[2], SRGBColorSpace);
-    // Match source RGB after the engine's float conversion.
-    const part = palette.find(({ color }) => {
-      const candidate = new Color(color);
-      return Math.abs(candidate.r - base.r) + Math.abs(candidate.g - base.g) + Math.abs(candidate.b - base.b) < 0.0001;
-    });
+    const part = legendPart(group.color, palette);
+    const base = part ? new Color(part.color) : new Color().setRGB(group.color[0], group.color[1], group.color[2], SRGBColorSpace);
     const night = part ? new Color(part.darkColor) : base;
     geometry.addGroup(group.start, group.count, index);
     partIds.push(part?.id ?? null);
+    pieceKeys.push(pieceKey(group.color));
     for (let vertex = group.start; vertex < group.start + group.count; vertex++) {
       base.toArray(light, vertex * 3);
       night.toArray(dark, vertex * 3);
@@ -65,14 +90,22 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   geometry.setAttribute('colorDark', new BufferAttribute(dark, 3));
   geometry.setAttribute('color', geometry.getAttribute('colorLight'));
   geometry.userData.partIds = partIds;
+  geometry.userData.pieceKeys = pieceKeys;
   return geometry;
+}
+
+// Selectable pieces of a colored geometry, in display order, with their legend part.
+export function geometryPieces(geometry: BufferGeometry): { key: string; part: string }[] {
+  const parts = (geometry.userData.partIds ?? []) as (string | null)[];
+  const keys = (geometry.userData.pieceKeys ?? []) as string[];
+  return keys.flatMap((key, i) => {
+    const part = parts[i];
+    return part ? [{ key, part }] : [];
+  });
 }
 
 // The source may expose parts used only by some joint configurations. Keep the
 // legend aligned with the mesh actually on screen, including individual exports.
 export function visiblePartColors(display: DisplayMesh, palette: PartColor[]) {
-  return palette.filter(part => {
-    const rgb = part.color.slice(1).match(/../g)?.map(n => parseInt(n, 16) / 255);
-    return rgb && display.groups.some(group => rgb.every((n, i) => Math.abs(n - group.color[i]) < 0.00001));
-  });
+  return palette.filter(part => display.groups.some(group => legendPart(group.color, palette) === part));
 }

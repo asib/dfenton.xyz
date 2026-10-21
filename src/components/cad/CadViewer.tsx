@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type PartAppearances, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls from './ParametricControls';
-import { coloredGeometry, parseDisplayMesh, visiblePartColors } from './displayMesh';
+import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
 import SheetLayoutTable from './SheetLayoutTable';
@@ -31,7 +31,9 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
   // View-only part appearance survives regeneration and theme changes; it never changes downloads.
   const [appearances, setAppearances] = useState<PartAppearances>({});
+  // A legend part ID, or a piece key when one piece of a multi-piece part is picked.
   const [selected, setSelected] = useState<string | null>(null);
+  const [pieces, setPieces] = useState<{ key: string; part: string }[]>([]);
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
   const palette = entry.customizer?.parts;
@@ -68,6 +70,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
           : new STLLoader().parse(await response.arrayBuffer());
         if (controller.signal.aborted) { geometry.dispose(); return; }
         setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
+        setPieces(geometryPieces(geometry));
         try {
           active = createScene(element, geometry, camera, setSelected);
         } catch (error) {
@@ -95,15 +98,47 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     viewer?.setSettings({ mode, axis, position, flipped });
   }, [viewer, mode, axis, position, flipped]);
 
-  const selectedPart = visibleParts?.find(part => part.id === selected);
+  const pieceLabels = useMemo(() => parsePieceLabels(cutList.text), [cutList.text]);
+  const partPieces = (id: string) => pieces.filter(piece => piece.part === id);
+  const pieceLabel = (piece: { key: string; part: string }) => pieceLabels.get(piece.key) ??
+    `${visibleParts?.find(part => part.id === piece.part)?.label ?? 'Piece'} · ${String(partPieces(piece.part).indexOf(piece) + 1)}`;
+  // Picking a piece of a single-piece part selects the part itself.
+  const selection = (() => {
+    if (!selected) return null;
+    const direct = visibleParts?.find(part => part.id === selected);
+    const piece = direct ? undefined : pieces.find(candidate => candidate.key === selected);
+    const part = direct ?? visibleParts?.find(candidate => candidate.id === piece?.part);
+    if (!part) return null;
+    return piece && partPieces(part.id).length > 1 ? { key: piece.key, part, piece, label: pieceLabel(piece) } : { key: part.id, part, piece: undefined, label: part.label };
+  })();
   useEffect(() => {
-    viewer?.setAppearance(appearances, selectedPart?.id ?? null);
-  }, [viewer, appearances, selectedPart?.id]);
-  const look = (id: string) => ({ hidden: !!appearances[id]?.hidden, opacity: appearances[id]?.opacity ?? 1 });
-  const setLook = (id: string, change: { hidden?: boolean; opacity?: number }) => {
-    setAppearances(previous => ({ ...previous, [id]: { ...previous[id], ...change } }));
+    viewer?.setAppearance(appearances, selection?.key ?? null);
+  }, [viewer, appearances, selection?.key]);
+  // A piece's own setting overrides its legend part's.
+  const look = (key: string) => {
+    const piece = pieces.find(candidate => candidate.key === key);
+    const value = appearances[key] ?? (piece ? appearances[piece.part] : undefined);
+    return { hidden: !!value?.hidden, opacity: value?.opacity ?? 1 };
   };
-  const changedParts = visibleParts?.filter(part => look(part.id).hidden || look(part.id).opacity < 1).length ?? 0;
+  const changed = (key: string) => look(key).hidden || look(key).opacity < 1;
+  const lookLabel = (key: string) => look(key).hidden ? ' · hidden' : look(key).opacity < 1 ? ` · ${String(Math.round(look(key).opacity * 100))}%` : '';
+  const setLook = (key: string, change: { hidden?: boolean; opacity?: number }) => {
+    const isPiece = pieces.some(piece => piece.key === key);
+    const current = look(key);
+    setAppearances(previous => {
+      if (isPiece) return { ...previous, [key]: { ...current, ...change } };
+      // A part-wide change replaces its pieces' own settings.
+      const keep = Object.entries(previous).filter(([id]) => !partPieces(key).some(piece => piece.key === id));
+      return { ...Object.fromEntries(keep), [key]: { ...previous[key], ...change } };
+    });
+  };
+  const isolate = () => {
+    if (!selection || !visibleParts) return;
+    const next: PartAppearances = Object.fromEntries(visibleParts.filter(part => part.id !== selection.part.id).map(part => [part.id, { hidden: true }]));
+    if (selection.piece) for (const piece of partPieces(selection.part.id)) if (piece.key !== selection.key) next[piece.key] = { hidden: true };
+    setAppearances(next);
+  };
+  const changedParts = visibleParts?.filter(part => changed(part.id) || partPieces(part.id).some(piece => changed(piece.key))).length ?? 0;
 
   const coordinate = viewer && axis !== 'off'
     ? viewer.sourceMin[axis] + viewer.size[axis] * position / 100
@@ -121,6 +156,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     try { viewer.replaceGeometry(geometry); }
     catch (error) { geometry.dispose(); throw error; }
     setVisibleParts(model.display && entry.customizer?.parts ? visiblePartColors(model.display, entry.customizer.parts) : entry.customizer?.parts);
+    setPieces(geometryPieces(geometry));
     setRevision((revision) => revision + 1);
   }, [viewer, entry.customizer?.parts]);
 
@@ -189,31 +225,38 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         <div className="cad-sidebar" hidden={!hasPanels}>
           {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
             <summary>Part legend</summary>
-            <p className="cad-part-hint">Click a part in the model or below to fade or hide it.</p>
+            <p className="cad-part-hint">Click a part in the model or below to fade, hide or isolate it.</p>
             <ul className="cad-part-key" aria-label="Part colors">
-              {visibleParts?.map((part) => {
-                const { hidden, opacity } = look(part.id);
-                return <li key={part.id}>
-                  <button type="button" className="cad-part-select" aria-pressed={part.id === selectedPart?.id} data-hidden={hidden || undefined}
-                    onClick={() => { setSelected(part.id === selectedPart?.id ? null : part.id); }}>
-                    <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />
-                    <span>{part.label}{hidden ? ' · hidden' : opacity < 1 ? ` · ${String(Math.round(opacity * 100))}%` : ''}</span>
-                  </button>
-                </li>;
-              })}
+              {visibleParts?.map((part) => <li key={part.id}>
+                <button type="button" className="cad-part-select" aria-pressed={selection?.key === part.id}
+                  data-hidden={look(part.id).hidden || undefined} data-piece-selected={selection?.piece && selection.part.id === part.id ? true : undefined}
+                  onClick={() => { setSelected(selection?.key === part.id ? null : part.id); }}>
+                  <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />
+                  <span>{part.label}{changed(part.id) ? lookLabel(part.id) : partPieces(part.id).some(piece => changed(piece.key)) ? ' · pieces changed' : ''}</span>
+                </button>
+              </li>)}
             </ul>
-            {selectedPart && <div className="cad-part-controls" role="group" aria-label={`${selectedPart.label} appearance`}>
-              <p>Selected: <strong>{selectedPart.label}</strong></p>
-              <label className="cad-slider">Opacity <output>{Math.round(look(selectedPart.id).opacity * 100)}%</output>
-                <input type="range" min="0" max="100" step="5" value={Math.round(look(selectedPart.id).opacity * 100)}
-                  onChange={(event) => { setLook(selectedPart.id, { opacity: Number(event.target.value) / 100, hidden: false }); }} />
+            {selection && <div className="cad-part-controls" role="group" aria-label={`${selection.label} appearance`}>
+              <p>Selected: <strong>{selection.label}</strong>{selection.piece && <> · in {selection.part.label}</>}</p>
+              <label className="cad-slider">Opacity <output>{Math.round(look(selection.key).opacity * 100)}%</output>
+                <input type="range" min="0" max="100" step="5" value={Math.round(look(selection.key).opacity * 100)}
+                  onChange={(event) => { setLook(selection.key, { opacity: Number(event.target.value) / 100, hidden: false }); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={() => { setLook(selectedPart.id, { hidden: !look(selectedPart.id).hidden, opacity: look(selectedPart.id).opacity || 1 }); }}>
-                  {look(selectedPart.id).hidden ? 'Show part' : 'Hide part'}
+                <button type="button" onClick={() => { setLook(selection.key, { hidden: !look(selection.key).hidden, opacity: look(selection.key).opacity || 1 }); }}>
+                  {look(selection.key).hidden ? 'Show' : 'Hide'}
                 </button>
+                <button type="button" onClick={isolate}>Isolate</button>
                 <button type="button" onClick={() => { setSelected(null); }}>Deselect</button>
               </div>
+              {selection.piece ? <button type="button" className="cad-piece-up" onClick={() => { setSelected(selection.part.id); }}>Select all {selection.part.label}</button> :
+                partPieces(selection.part.id).length > 1 && <ul className="cad-piece-list" aria-label={`Pieces of ${selection.part.label}`}>
+                  {partPieces(selection.part.id).map(piece => <li key={piece.key}>
+                    <button type="button" className="cad-part-select" data-hidden={look(piece.key).hidden || undefined} onClick={() => { setSelected(piece.key); }}>
+                      <span>{pieceLabel(piece)}{lookLabel(piece.key)}</span>
+                    </button>
+                  </li>)}
+                </ul>}
             </div>}
             {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }}>Show all parts ({changedParts} changed)</button>}
           </details>}

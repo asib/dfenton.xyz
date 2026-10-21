@@ -9,17 +9,20 @@ export interface ViewSettings {
   position: number;
   flipped: boolean;
 }
-// View-only appearance of one legend part; the downloadable model never changes.
+// View-only appearance, keyed by legend part ID or by piece key (the piece's
+// "#rrggbb" source color). A piece's own entry overrides its legend part's.
+// The downloadable model never changes.
 export interface PartAppearance { hidden?: boolean; opacity?: number }
 export type PartAppearances = Partial<Record<string, PartAppearance>>;
 
 // Models retain the OpenSCAD convention: millimeters, Z up. Center only for orbiting.
 const defaultCamera: [number, number, number] = [1.35, 1.8, 1.1];
 
-// One layer per geometry group (a colored legend part, or the whole STL), so
-// each part can be faded, hidden or highlighted with its own edges and stencil.
+// One layer per geometry group (a colored piece, or the whole STL), so each
+// piece can be faded, hidden or highlighted with its own edges and stencil.
 interface Layer {
-  id: string | null;
+  part: string | null;
+  piece: string | null;
   solid: THREE.MeshStandardMaterial;
   stencil: THREE.MeshBasicMaterial[];
   edges: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>;
@@ -81,17 +84,20 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   };
   const buildLayers = (source: THREE.BufferGeometry): Layer[] => {
     if (!source.groups.length) source.addGroup(0, source.getAttribute('position').count, 0);
-    const ids = (source.userData.partIds ?? []) as (string | null)[];
+    const parts = (source.userData.partIds ?? []) as (string | null)[];
+    const pieces = (source.userData.pieceKeys ?? []) as (string | undefined)[];
     const positions = source.getAttribute('position').array;
     return source.groups.map((group, index) => {
       group.materialIndex = index;
-      const part = new THREE.BufferGeometry();
-      part.setAttribute('position', new THREE.BufferAttribute(positions.slice(group.start * 3, (group.start + group.count) * 3), 3));
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(part, 25), new THREE.LineBasicMaterial());
-      part.dispose();
+      const slice = new THREE.BufferGeometry();
+      slice.setAttribute('position', new THREE.BufferAttribute(positions.slice(group.start * 3, (group.start + group.count) * 3), 3));
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(slice, 25), new THREE.LineBasicMaterial());
+      slice.dispose();
       edges.renderOrder = 4;
+      const part = parts[index] ?? null;
       return {
-        id: ids[index] ?? null,
+        part,
+        piece: part ? pieces[index] ?? null : null,
         solid: new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
         stencil: [stencilMaterial(THREE.BackSide), stencilMaterial(THREE.FrontSide)],
         edges,
@@ -137,7 +143,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   let selected: string | null = null;
   const colors = { body: '', edge: '', selected: '' };
   const visible = (layer: Layer) => {
-    const look = layer.id ? appearances[layer.id] : undefined;
+    const look = (layer.piece ? appearances[layer.piece] : undefined) ?? (layer.part ? appearances[layer.part] : undefined);
     return { hidden: !!look?.hidden || look?.opacity === 0, opacity: look?.opacity ?? 1 };
   };
   // Apply display mode, section, theme colors and per-part appearance to every layer.
@@ -149,7 +155,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (const layer of layers) {
       const { hidden, opacity } = visible(layer);
       const translucent = opacity < 0.999;
-      const highlighted = !!layer.id && layer.id === selected;
+      const highlighted = !!selected && (layer.part === selected || layer.piece === selected);
       layer.solid.visible = !hidden;
       layer.solid.vertexColors = colored;
       layer.solid.color.set(colored ? '#ffffff' : colors.body);
@@ -305,7 +311,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
       if (!layer || visible(layer).hidden || (clipping && plane.distanceToPoint(hit.point) < 0)) continue;
-      onPick(layer.id);
+      onPick(layer.piece ?? layer.part);
       return;
     }
     onPick(null);

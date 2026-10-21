@@ -163,6 +163,10 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .cad-part-controls button, .cad-part-reset { padding: 6px 10px; min-height: 32px; font: inherit; font-size: 12px; color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 3px; cursor: pointer; }
 .cad-part-controls button:hover, .cad-part-reset:hover { border-color: currentColor; }
 .cad-part-reset { margin: 0 0 16px; }
+.cad-part-select[data-piece-selected] { border-style: dashed; border-color: var(--cad-selected); }
+.cad-piece-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.cad-piece-list .cad-part-select { margin: 0; }
+.cad-piece-up { justify-self: start; }
 .cad-part-swatch { display: inline-block; flex-shrink: 0; width: 12px; height: 12px; border: 1px solid rgb(0 0 0 / 20%); background: var(--part-color); }
 .dark .cad-part-swatch { background: var(--part-dark-color); }
 .cad-cut-list { margin: 40px 0; padding-top: 24px; border-top: 1px solid var(--cad-border); min-width: 0; }
