@@ -132,28 +132,42 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
       return { ...Object.fromEntries(keep), [key]: { ...previous[key], ...change } };
     });
   };
-  const isolate = () => {
+  // Isolate hides everything else; ghosting (Onshape's isolate) leaves it faint.
+  const isolate = (others: { hidden: true } | { opacity: number } = { hidden: true }) => {
     if (!selection || !visibleParts) return;
-    const next: PartAppearances = Object.fromEntries(visibleParts.filter(part => part.id !== selection.part.id).map(part => [part.id, { hidden: true }]));
-    if (selection.piece) for (const piece of partPieces(selection.part.id)) if (piece.key !== selection.key) next[piece.key] = { hidden: true };
+    const next: PartAppearances = Object.fromEntries(visibleParts.filter(part => part.id !== selection.part.id).map(part => [part.id, others]));
+    if (selection.piece) for (const piece of partPieces(selection.part.id)) if (piece.key !== selection.key) next[piece.key] = others;
     setAppearances(next);
   };
   const changedParts = visibleParts?.filter(part => changed(part.id) || partPieces(part.id).some(piece => changed(piece.key))).length ?? 0;
   const toggleHidden = () => {
     if (selection) setLook(selection.key, { hidden: !look(selection.key).hidden, opacity: look(selection.key).opacity || 1 });
   };
-  // Blender-style shortcuts from the 3D view or the part legend, never while typing in a field:
+  // Shows the selection if hidden, otherwise every hidden part and piece; fades are kept.
+  const showHidden = () => {
+    if (selection && look(selection.key).hidden) { toggleHidden(); return; }
+    setAppearances(previous => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, hidden: false }])));
+  };
+  const anyHidden = Object.values(appearances).some(value => value?.hidden);
+  const ghost = { opacity: 0.15 };
+  // Shortcuts from the 3D view or the part legend, never while typing in a field. Blender-style:
   // H hides or shows the selection, Shift+H isolates it, Alt+H shows all parts, Escape deselects.
+  // Onshape-style aliases: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
+  // transparency, and Space deselects (from the 3D view only, so it still presses focused buttons).
   const onShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (!hasLegend || event.ctrlKey || event.metaKey || !(target.tagName === 'CANVAS' || target.closest('#cad-legend')) ||
         target.matches('input:not([type=range]), select, textarea')) return;
     // event.code: Alt+H types another character on macOS.
-    const h = event.code === 'KeyH';
-    if (event.key === 'Escape' && selection) setSelected(null);
-    else if (h && event.altKey && changedParts > 0) setAppearances({});
-    else if (h && event.shiftKey && !event.altKey && selection) isolate();
-    else if (h && !event.shiftKey && !event.altKey && selection) toggleHidden();
+    const { code, shiftKey: shift, altKey: alt } = event, plain = !shift && !alt;
+    if ((event.key === 'Escape' || (code === 'Space' && target.tagName === 'CANVAS')) && selection) setSelected(null);
+    else if (code === 'KeyH' && alt && !shift && changedParts > 0) setAppearances({});
+    else if (code === 'KeyH' && shift && !alt && selection) isolate();
+    else if (code === 'KeyH' && plain && selection) toggleHidden();
+    else if (code === 'KeyY' && plain && selection && !look(selection.key).hidden) toggleHidden();
+    else if (code === 'KeyY' && shift && !alt && (anyHidden || (selection && look(selection.key).hidden))) showHidden();
+    else if (code === 'KeyI' && shift && !alt && selection) isolate(ghost);
+    else if (code === 'KeyT' && shift && !alt && selection) setLook(selection.key, { hidden: false, opacity: look(selection.key).opacity < 1 ? 1 : 0.3 });
     else return;
     // Consumed keys don't also reach the fullscreen workspace, so Escape deselects before it exits.
     event.preventDefault();
@@ -206,7 +220,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click a part to select it: H hides or shows it, Shift+H isolates it, Alt+H shows all parts and Esc deselects.'}</p>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click a part to select it. H or Y hides it and H or Shift+Y shows it; Shift+H isolates it and Shift+I fades everything else; Shift+T toggles transparency; Alt+H shows all parts; Esc or Space deselects.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -263,11 +277,13 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   onChange={(event) => { setLook(selection.key, { opacity: Number(event.target.value) / 100, hidden: false }); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={toggleHidden} title="Hide or show (H)" aria-keyshortcuts="H">
+                <button type="button" onClick={toggleHidden} title={look(selection.key).hidden ? 'Show (H or Shift+Y)' : 'Hide (H or Y)'}
+                  aria-keyshortcuts={look(selection.key).hidden ? 'H Shift+Y' : 'H Y'}>
                   {look(selection.key).hidden ? 'Show' : 'Hide'}
                 </button>
-                <button type="button" onClick={isolate} title="Isolate (Shift+H)" aria-keyshortcuts="Shift+H">Isolate</button>
-                <button type="button" onClick={() => { setSelected(null); }} title="Deselect (Esc)" aria-keyshortcuts="Escape">Deselect</button>
+                <button type="button" onClick={() => { isolate(); }} title="Hide everything else (Shift+H)" aria-keyshortcuts="Shift+H">Isolate</button>
+                <button type="button" onClick={() => { isolate(ghost); }} title="Fade everything else (Shift+I)" aria-keyshortcuts="Shift+I">Ghost others</button>
+                <button type="button" onClick={() => { setSelected(null); }} title="Deselect (Esc or Space)" aria-keyshortcuts="Escape Space">Deselect</button>
               </div>
               {selection.piece ? <button type="button" className="cad-piece-up" onClick={() => { setSelected(selection.part.id); }}>Select all {selection.part.label}</button> :
                 partPieces(selection.part.id).length > 1 && <ul className="cad-piece-list" aria-label={`Pieces of ${selection.part.label}`}>
@@ -278,7 +294,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   </li>)}
                 </ul>}
             </div>}
-            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts (Alt+H)" aria-keyshortcuts="Alt+H">Show all parts ({changedParts} changed)</button>}
+            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts and clear fades (Alt+H)" aria-keyshortcuts="Alt+H">Show all parts ({changedParts} changed)</button>}
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>
