@@ -80,7 +80,7 @@ openscad --export-format binstl \
   public/misc/magnetic-saw-guide/magnetic-saw-guide.scad
 ```
 
-The OpenSCAD CLI is an optional authoring dependency; the browser uses the runtime below. Keep the exported default STL committed so the initial view and fallback download do not wait for compilation. After geometry changes, regenerate both thumbnails from the viewer's reset camera in solid + edges mode, with sections off. Crop the transparent canvas to the model, using the same framing in both themes. Check all section axes, flip and range endpoints, keyboard/touch controls, fallback images/downloads, mobile layout, theme-state preservation, and the site's hover shadow.
+Alternatively, `bun scripts/export-cad-stl.mjs <source.scad> <model.stl>` writes the default STL with the same engine as live edits, so it matches a fresh browser compilation exactly. The OpenSCAD CLI is an optional authoring dependency; the browser uses the runtime below. Keep the exported default STL committed so the initial view and fallback download do not wait for compilation. After geometry changes, regenerate both thumbnails from the viewer's reset camera in solid + edges mode, with sections off. Crop the transparent canvas to the model, using the same framing in both themes. Check all section axes, flip and range endpoints, keyboard/touch controls, fallback images/downloads, mobile layout, theme-state preservation, and the site's hover shadow.
 
 Keep CAD text inputs, selects, and buttons transparent so the theme-toggle hover shadow follows their borders, text, and icons. Use an accent outline for the primary update button. Native dropdown options retain an opaque themed surface for readability; verify the painted hover effect in both themes.
 
