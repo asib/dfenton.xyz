@@ -244,7 +244,9 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     </div>
     {outputLabel && result?.output && <details className="cad-model-output">
       <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
-      <pre>{result.output.replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
+      {/* Versioned machine-readable echoes (CUTLIST_V1, SHEET_PARTS_V1, ...) feed the worksheets, not this panel. */}
+      <pre>{result.output.split('\n').filter(line => !/^ECHO:\s*"[A-Z_]+_V\d+",/.test(line)).join('\n')
+        .replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
     </details>}
     {hasSheetLayout && result?.output && <p className="cad-compile-status"><a href="#sheet-layout-title" onClick={(event) => {
       if (onViewCutList) { event.preventDefault(); onViewCutList('sheet-layout-title'); }
