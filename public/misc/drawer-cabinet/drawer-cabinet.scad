@@ -259,11 +259,13 @@ module case_panel(top) {
 }
 module case_back() box([t - Back_rabbet_width, inner_d, 0], [Width - t + Back_rabbet_width, Depth, Height]);
 
+// Bearing height of drawer i's runners: a supported drawer's underside rests on
+// the strip top; a side-hung drawer's groove ceiling rests on it.
+function runner_top(i) = t + front_z[i] + (supported ? 0 : hang_center[i] + hang_groove_h / 2);
 // Runner strips for drawer i (0 = top); left and right.
 module runner(i, right) {
     y = [Front_thickness, inner_d];
-    z = supported ? [t + front_z[i] - Runner_height, t + front_z[i]]
-                  : [t + front_z[i] + hang_center[i] - Runner_height / 2, t + front_z[i] + hang_center[i] + Runner_height / 2];
+    z = [runner_top(i) - Runner_height, runner_top(i)];
     if (right) box([Width - t - runner_reach, y[0], z[0]], [Width - t + dado_depth, y[1], z[1]]);
     else box([t - dado_depth, y[0], z[0]], [t + runner_reach, y[1], z[1]]);
 }

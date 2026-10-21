@@ -140,7 +140,7 @@ test('supported drawers bear on their runners or the case bottom and clear the s
   }
 });
 
-test('side-hung runners run in side grooves with clearance and no lower support', () => {
+test('side-hung grooves bear on their runners with clearance below and at the floor', () => {
   const result = compile({ Runner_style: 'side_hung' });
   expect(result.ok).toBe(true);
   // Five reveals: 28 1/2 - 5/16 - 11 leaves 8 19/32 for each auto drawer.
@@ -149,7 +149,8 @@ test('side-hung runners run in side grooves with clearance and no lower support'
   const zc = 0.75 + 0.0625 + (0.25 + 8.59375) / 2;
   near(rayHits(piece(result, 'runners'), 0, 10, zc), [0.75, 1.03125, 22.96875, 23.25]);
   near(rayHits(piece(result, 'side-even'), 0, 10, zc), [1.0625, 1.3125, 22.6875, 22.9375]);
-  near(rayHits(piece(result, 'runners'), 2, 0.9, 10).slice(0, 2), [zc - 0.375, zc + 0.375]);
+  // The drawer hangs: the groove ceiling rests on the strip top, leaving the clearance below.
+  near(rayHits(piece(result, 'runners'), 2, 0.9, 10).slice(0, 2), [zc + 0.390625 - 0.75, zc + 0.390625]);
   near(rayHits(piece(result, 'side-even'), 2, 0.9, 10).slice(0, 4), [1.0625, zc - 0.390625, zc + 0.390625, 0.8125 + 8.59375]);
 });
 

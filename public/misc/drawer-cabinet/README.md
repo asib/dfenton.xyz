@@ -46,9 +46,9 @@ the two lower drawers, 8⅝ inches each.
   back rabbet. Strips are wider by the dado depth.
 - **Side-hung** (`side_hung`) drawers ride on a strip engaging a groove along
   each drawer side, centred on the side's height. Grooves are open at the back
-  and stop behind the front. The strip projects into the groove short of its
-  floor by `Runner_clearance`, and the groove is that much taller than the
-  strip. Side-hung boxes keep full-height sides and get a reveal below the
+  and stop behind the front. The drawer hangs with each groove's top face on
+  its strip; the strip stops `Runner_clearance` short of the groove floor, and
+  the groove is that much taller than the strip. Side-hung boxes keep full-height sides and get a reveal below the
   bottom drawer as well.
 
 Strips run from behind the drawer fronts to the back panel.
