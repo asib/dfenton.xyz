@@ -1,14 +1,14 @@
 {
   "type": "cad",
   "title": "Drawer cabinet",
-  "description": "A parametric frameless plywood cabinet with a single column of inset drawers on wooden runners. Set the case size, then the number of drawers and each drawer's height and depth.",
+  "description": "A parametric frameless plywood cabinet with a single column of inset drawers on wooden runners. Set the case size, then the number of drawers and each drawer's height and depth, with dimensioned drawings for every part.",
   "date": "2026-10-21",
   "preview": "preview.webp",
   "previewDark": "preview-dark.webp",
   "model": "drawer-cabinet.stl",
   "displayModel": "drawer-cabinet-display.json",
   "source": "drawer-cabinet.scad",
-  "notes": "Dimensions are inches; geometry and STL exports are millimetres. Drawer 1 is the top drawer. A drawer height is its inset front height; drawers left at 0 share the remaining opening equally, and depth 0 fills the case less the back clearance. Supported runners (screwed strips or strips housed in dados) carry each drawer on its underside; the strip carrying the drawer above also stops it tipping, so those boxes are shorter than their fronts. The bottom drawer runs on the case bottom with no lower reveal. Side-hung drawers ride on strips in grooves along their sides. Boxes are butt-jointed for glue with screws, pocket screws or brads; fasteners, drawer pulls and stops other than the back panel are not modelled. Bottoms nailed under the box show their edge below the front; a grooved bottom hides it. Use One drawer or Case and runners for separate STL exports; the assembled model contains touching parts.",
+  "notes": "Dimensions are inches; geometry and STL exports are millimetres. Drawer 1 is the top drawer. A drawer height is its inset front height; drawers left at 0 share the remaining opening equally, and depth 0 fills the case less the back clearance. Supported runners (screwed strips or strips housed in dados) carry each drawer on its underside; the strip carrying the drawer above also stops it tipping, so those boxes are shorter than their fronts. The bottom drawer runs on the case bottom with no lower reveal. Side-hung drawers ride on strips in grooves along their sides. Boxes are butt-jointed for glue with screws, pocket screws or brads; fasteners, drawer pulls and stops other than the back panel are not modelled. Bottoms nailed under the box show their edge below the front; a grooved bottom hides it. Drawings cover the assembly, a runner detail and one sheet per distinct part; drawer members with identical finished geometry share a sheet. Use One drawer or Case and runners for separate STL exports; the assembled model contains touching parts.",
   "camera": [
     1.35,
     -1.8,
@@ -16,6 +16,7 @@
   ],
   "customizer": {
     "units": "inches",
+    "drawings": true,
     "outputLabel": "Drawer schedule",
     "conditions": {
       "Drawer_2_height": {

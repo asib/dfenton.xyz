@@ -68,6 +68,26 @@ A nailed-under bottom shows its edge below the front; the grooved bottom hides
 it. Side grooves for the bottom start at the front's groove and run out through
 the back; the front's groove runs through its ends, which the sides cover.
 
+## Drawings
+
+The private `$misc_drawing` pass renders the assembled cabinet with a unique
+color for every physical piece and echoes `DRAWING_V1` and `PART_DRAWINGS_V1`.
+The assembly sheet gives overall and opening sizes and each drawer front
+height (D1 is the top drawer). The runner detail sections the left runner
+between drawers 1 and 2: A-A along the drawer side and B-B across the runner,
+with the bearing face highlighted. Supported drawers bear on the strip top;
+side-hung drawers bear with the groove ceiling on the strip, leaving the
+running clearance below the strip and at the groove floor. A single supported
+drawer gets a support detail on the case bottom instead.
+
+Part sheets cover the case side (left shown, laid flat, with chained runner
+positions and rabbet/dado sections), the top and bottom, the back panel and the
+runner strip. Each drawer member then gets a sheet per distinct finished
+geometry: fronts, side pairs, backs and bottoms are grouped across drawers
+whose blanks and machining match, with titles such as `drawers 3–8`. Grooves
+are dimensioned on the face where they show. Drawings ignore `Part` and
+`Explosion_percent`.
+
 ## Inspection
 
 `Explosion_percent` is sequenced so that no part passes through another: up to
@@ -86,9 +106,13 @@ live edits:
 bun scripts/export-cad-stl.mjs public/misc/drawer-cabinet/drawer-cabinet.scad public/misc/drawer-cabinet/drawer-cabinet.stl
 bun scripts/export-cad-display.mjs public/misc/drawer-cabinet/drawer-cabinet.scad public/misc/drawer-cabinet/drawer-cabinet-display.json
 bun test tests/drawer-cabinet.test.mjs
+bun test tests/drawer-cabinet-drawings.test.mjs
 ```
 
 The tests cover every runner, box and case-joint combination for closed,
 non-overlapping pieces at intermediate explosions; runner bearing heights and
 kicker clearance; side-hung groove clearance; dado depth; per-drawer heights
-and depths; assertion messages; and saved/live asset agreement.
+and depths; assertion messages; and saved/live asset agreement. The drawing
+tests check assembly, joint and part dimensions, bearing and clearance in the
+actual section contours, member grouping and quantities, and independence
+from the inspection controls.

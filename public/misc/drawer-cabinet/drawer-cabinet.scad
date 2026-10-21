@@ -342,7 +342,310 @@ module cabinet(e) {
             drawer(i, spread);
 }
 
-separation = Explosion_percent / 100;
-if (Part == "all") cabinet(separation);
-else if (Part == "carcass") carcass(separation);
-else drawer(Inspect_drawer - 1, separation);
+// ---------------------------------------------------------------------------
+// Dimensioned drawings for the private $misc_drawing pass. Witnesses are model
+// inches; dp() converts them to whole millimetres plus millionths so inch
+// fractions survive echo's six significant digits.
+function dp(p) = [for (n = p * inch) [floor(n), round((n - floor(n)) * 1000000)]];
+function dim(label, a, b, direction, side, tier = 1) = [label, dp(a), dp(b), direction, side, tier];
+function guide(a, b) = [dp(a), dp(b)];
+function section(depth, crop, breaks = [], notes = [], contacts = []) =
+    [dp([depth, 0, 0])[0], [for (n = crop) dp([n, 0, 0])[0]], breaks, notes, contacts];
+function join(v, i = 0) = i >= len(v) ? "" : str(i > 0 ? ", " : "", v[i], join(v, i + 1));
+
+FRONT = [[1, 0, 0], [0, 0, 1], [0, -1, 0]]; // Looking at the front face.
+TOP = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];    // Looking down; the back is at the top.
+RIGHT = [[0, 1, 0], [0, 0, 1], [1, 0, 0]];  // From +X; the front is at the left.
+LEFT = [[0, -1, 0], [0, 0, 1], [-1, 0, 0]]; // From -X; the front is at the right.
+FLAT = [[0, 0, 1], [0, -1, 0], [1, 0, 0]];  // From +X, laid flat: bottom edge at the left, front edge up.
+
+// Every physical piece gets its own drawing color (exact binary fractions) so a
+// part sheet can select exactly one mesh: case 0-4, runners 5-20, drawers 21+.
+function pc(p) = [(p % 8) / 8, floor(p / 8) / 8, 0.25];
+function runner_piece(i, right) = 5 + 2 * i + (right ? 1 : 0);
+function member_piece(i, m) = 21 + 5 * i + m;
+function drawer_origin(i) = [t + Reveal, 0, t + front_z[i]];
+
+module drawing_cabinet() {
+    color(pc(0)) case_side(false);
+    color(pc(1)) case_side(true);
+    color(pc(2)) case_panel(true);
+    color(pc(3)) case_panel(false);
+    color(pc(4)) case_back();
+    for (i = runner_drawers) for (right = [false, true]) color(pc(runner_piece(i, right))) runner(i, right);
+    for (i = [0:N-1]) let(members = drawer_members(i)) for (m = [0:4])
+        color(pc(member_piece(i, m))) translate(drawer_origin(i) * inch) drawer_member(i, members[m]);
+}
+
+// Assembly views.
+assembly_views = [
+    ["front", "Front / D1 is the top drawer", FRONT, concat([
+        dim("Overall width", [0, 0, Height], [Width, 0, Height], "horizontal", 1),
+        dim("Opening width", [t, 0, 0], [Width - t, 0, 0], "horizontal", -1),
+        dim("Overall height", [0, 0, 0], [0, 0, Height], "vertical", -1, 2),
+        dim("Opening height", [0, 0, t], [0, 0, Height - t], "vertical", -1)],
+        [for (i = [0:N-1]) dim(str("D", i + 1), [Width, 0, t + front_z[i]], [Width, 0, t + front_z[i] + front_h[i]], "vertical", 1)])],
+    ["top", "Top", TOP, [dim("Overall depth", [0, 0, Height], [0, Depth, Height], "vertical", -1)]],
+    ["right", "Right end", RIGHT, [dim("Overall depth", [Width, 0, 0], [Width, Depth, 0], "horizontal", -1)]]
+];
+
+// Runner detail: sections at the left runner carrying drawer 1, or under a lone drawer.
+two = N >= 2;
+bearing_z = runner_top(0);
+section_y = Front_thickness + (min(box_d) - Front_thickness - Box_back_thickness) / 2;
+section_x = t + Reveal + (supported ? min(0.4 * Side_thickness, (Runner_width - Reveal) / 2) : Hang_groove_depth / 2);
+detail_v = [supported && !two ? -0.25 : bearing_z - Runner_height - 1, bearing_z + (supported ? 1.5 : 1)];
+detail_breaks = supported && !two ? ["top", "right"] : ["top", "bottom", "right"];
+transverse_u = [-0.25, t + max(runner_reach, Reveal + Side_thickness) + 1];
+bearing_x = !supported ? t + runner_reach :
+    two ? (under_bottom ? t + Runner_width : t + min(Runner_width, Reveal + Side_thickness)) :
+    (under_bottom ? transverse_u[1] : t + Reveal + Side_thickness);
+lower_clearance = two && supported ? bearing_z - Runner_height - (t + front_z[1] + box_h[1]) : 0;
+joint_views = let(y = section_y, x = section_x, z = bearing_z, rh = Runner_height) [
+    ["joint-longitudinal", "A-A / Along the drawer side", RIGHT, concat(
+        two || !supported ? [dim("Runner start", [x, 0, z], [x, Front_thickness, z], "horizontal", -1)]
+                          : [dim("Case bottom", [x, 0, 0], [x, 0, t], "vertical", -1)]),
+     section(x, [-0.25, detail_v[0], Front_thickness + 3, detail_v[1]], detail_breaks,
+        [two || !supported ? "Runners start behind the drawer fronts." : "The drawer runs on the case bottom.",
+         Back_clearance == 0 ? "The back panel stops the drawers." : "Fit drawer stops; none are modelled."],
+        [guide([x, two || !supported ? Front_thickness : 0, z], [x, Front_thickness + 3, z])])],
+    ["joint-transverse", "B-B / Across the runner", FRONT, concat(
+        [dim("Case side", [0, y, detail_v[1]], [t, y, detail_v[1]], "horizontal", 1)],
+        Reveal > 0 ? [dim("Reveal", [t, y, z], [t + Reveal, y, z], "horizontal", 1, 2)] : [],
+        !supported ? [
+            dim("Runner reach", [t, y, z - rh], [t + runner_reach, y, z - rh], "horizontal", -1),
+            dim("Groove depth", [t + Reveal, y, z], [t + Reveal + Hang_groove_depth, y, z], "horizontal", -1, 2),
+            dim("Runner height", [t, y, z - rh], [t, y, z], "vertical", -1),
+            dim("Groove height", [t + Reveal + Hang_groove_depth, y, z - hang_groove_h], [t + Reveal + Hang_groove_depth, y, z], "vertical", 1)] :
+        two ? concat([
+            dim(dadoed ? "Runner width" : "Runner projection", [t - dado_depth, y, z - rh], [t + Runner_width, y, z - rh], "horizontal", -1),
+            dim("Runner height", [t, y, z - rh], [t, y, z], "vertical", -1)],
+            dadoed ? [dim("Dado depth", [t - dado_depth, y, z], [t, y, z], "horizontal", -1, 2)] : [],
+            lower_clearance > 1e-6 ? [dim("Clearance", [t + Reveal, y, z - rh - lower_clearance], [t + Reveal, y, z - rh], "vertical", 1)] : []) :
+        [dim("Case bottom", [0, y, 0], [0, y, t], "vertical", -1)]),
+     section(-y, [transverse_u[0], detail_v[0], transverse_u[1], detail_v[1]], detail_breaks,
+        !supported ? [str("Runner ", frac(rh), " x ", frac(runner_reach), ", screwed to the case side."),
+                      str("It stops ", frac(Runner_clearance), " short of the groove floor.")] :
+        two ? [str("Runner ", frac(rh), " x ", frac(Runner_width + dado_depth),
+                   dadoed ? str(", glued into a ", frac(dado_depth), " dado.") : ", screwed to the case side."),
+               str("Drawer 2 clears the runner above by ", frac(lower_clearance), ".")] :
+        ["A single drawer needs no runners."],
+        [guide([t + Reveal, y, z], [bearing_x, y, z])])]
+];
+joint_caption = [
+    supported && !two ? "Drawer support detail" : "Runner detail",
+    str("Enlarged sections through the left ", supported && !two ? "case bottom under drawer 1" :
+        two && supported ? "runner between drawers 1 and 2" : "runner of drawer 1",
+        ". Hatching distinguishes parts; the right side is mirrored."),
+    !supported ? "Groove top bears on the runner; the drawer hangs." :
+    two ? "Drawer underside bears on the runner top." : "Drawer underside runs on the case bottom."];
+
+// Part sheets.
+runner_tops = [for (k = [len(runner_drawers) - 1:-1:0]) runner_top(runner_drawers[k])]; // Ascending.
+runner_names = [for (k = [len(runner_drawers) - 1:-1:0]) str("R", runner_drawers[k] + 1)];
+mid_y = (Front_thickness + inner_d) / 2;
+
+function case_side_sheet() = let(x = t, rabbeted = Case_joinery == "rabbet", n = len(runner_tops),
+    z_back = Height - t - 0.5, z_dado = n > 0 ? runner_tops[n-1] : 0,
+    // Section D-D covers the top end rabbet and, for dados, down through the top dado.
+    d_lo = dadoed && n > 0 ? z_dado - Runner_height - 1.25 : Height - t - 1)
+    ["case-side", "Case side", 2, concat([
+        str(frac(t), " plywood. The left side is shown; make the right side its mirror image."),
+        rabbeted ? str("End rabbets: the top and bottom sit ", frac(end_rabbet), " into each side, ", frac(t), " high.")
+                 : "The top and bottom butt between the sides.",
+        str("Back rabbet ", frac(Back_rabbet_width), " into the side x ", frac(Back_thickness), ", full height.")],
+        n == 0 ? [] : [
+            str("Runner tops above the bottom edge: ", join([for (k = [n-1:-1:0]) str(runner_names[k], " ", frac(runner_tops[k]))]),
+                ". Rk carries drawer k."),
+            dadoed ? str("Stopped dados ", frac(Runner_height), " wide x ", frac(dado_depth), " deep, ",
+                         frac(Front_thickness), " back from the front edge to the back rabbet.")
+                   : "Dashed lines locate the runner strips; glue and screw them on."]),
+     pc(0), concat([
+        ["inside", "Inside face, laid flat / bottom edge at left, front edge up", FLAT, concat([
+            dim("Height", [x, Depth, 0], [x, Depth, Height], "horizontal", -1, 2),
+            dim("Depth", [x, 0, 0], [x, Depth, 0], "vertical", -1),
+            dim("Back rabbet", [x, inner_d, Height], [x, Depth, Height], "vertical", 1)],
+            rabbeted ? [dim("Rabbet", [x, Depth, 0], [x, Depth, t], "horizontal", -1),
+                        dim("Rabbet", [x, Depth, Height - t], [x, Depth, Height], "horizontal", -1)] : [],
+            n > 0 ? [dim("Runner start", [x, 0, Height], [x, Front_thickness, Height], "vertical", 1, 2)] : [],
+            // Chained from the bottom edge to each runner top.
+            [for (k = [0:1:n-1]) dim(k == 0 ? str("To ", runner_names[k]) : str(runner_names[k-1], "–", runner_names[k]),
+                [x, 0, k == 0 ? 0 : runner_tops[k-1]], [x, 0, runner_tops[k]], "horizontal", 1)]),
+         [], dadoed ? [] : [for (z = runner_tops) each [
+            guide([x, Front_thickness, z], [x, inner_d, z]),
+            guide([x, Front_thickness, z - Runner_height], [x, inner_d, z - Runner_height])]]],
+        ["back-rabbet", "C-C / Section below the top, from above", TOP, [
+            dim("Thickness", [0, inner_d - 1, z_back], [t, inner_d - 1, z_back], "horizontal", -1),
+            dim("Back rabbet width", [t - Back_rabbet_width, Depth, z_back], [t, Depth, z_back], "horizontal", 1),
+            dim("Back rabbet", [t, inner_d, z_back], [t, Depth, z_back], "vertical", 1)],
+         section(z_back, [-0.25, inner_d - 1.25, t + 0.25, Depth + 0.25], ["bottom"])]],
+        rabbeted || (dadoed && n > 0) ? [
+        ["end", dadoed && n > 0 ? "D-D / Section through the top end and top dado" : "D-D / Section through the top end", FRONT, concat(
+            [dim("Thickness", [0, mid_y, d_lo], [t, mid_y, d_lo], "horizontal", -1)],
+            rabbeted ? [
+                dim("End rabbet depth", [t - end_rabbet, mid_y, Height], [t, mid_y, Height], "horizontal", 1),
+                dim("Rabbet height", [t, mid_y, Height - t], [t, mid_y, Height], "vertical", 1)] : [],
+            dadoed && n > 0 ? [
+                dim("Dado depth", [t - dado_depth, mid_y, z_dado], [t, mid_y, z_dado], "horizontal", 1, rabbeted ? 2 : 1),
+                dim("Dado width", [t, mid_y, z_dado - Runner_height], [t, mid_y, z_dado], "vertical", 1)] : []),
+         section(-mid_y, [-0.25, d_lo, t + 0.25, Height + 0.25], ["bottom"])]] : [])];
+
+function panel_sheet() = let(o = Case_joinery == "rabbet" ? end_rabbet : 0, z = Height, xm = Width / 2)
+    ["case-panels", "Case top and bottom", 2, [
+        str(frac(t), " plywood. The top and bottom are identical."),
+        o > 0 ? str("Their ends fit the side rabbets, ", frac(o), " each side.") : "They butt between the sides.",
+        "The back panel covers their back edges."],
+     pc(2), [
+        ["plan", "Plan", TOP, [
+            dim("Width", [t - o, 0, z], [Width - t + o, 0, z], "horizontal", -1),
+            dim("Depth", [t - o, 0, z], [t - o, inner_d, z], "vertical", -1)]],
+        ["edge", "E-E / Section at the front edge", RIGHT, [
+            dim("Thickness", [xm, 0, z - t], [xm, 0, z], "vertical", -1)],
+         section(xm, [-0.25, z - t - 0.25, 1.5, z + 0.25], ["right"])]]];
+
+function back_sheet() = let(xm = Width / 2)
+    ["back-panel", "Back panel", 1, [
+        str(frac(Back_thickness), " plywood, set in the side rabbets."),
+        "It covers the back edges of the top and bottom; glue and nail it on."],
+     pc(4), [
+        ["face", "Face", FRONT, [
+            dim("Width", [t - Back_rabbet_width, Depth, Height], [Width - t + Back_rabbet_width, Depth, Height], "horizontal", 1),
+            dim("Height", [t - Back_rabbet_width, Depth, 0], [t - Back_rabbet_width, Depth, Height], "vertical", -1)]],
+        ["edge", "F-F / Section at the top edge", RIGHT, [
+            dim("Thickness", [xm, inner_d, Height], [xm, Depth, Height], "horizontal", 1)],
+         section(xm, [inner_d - 0.25, Height - 1.5, Depth + 0.25, Height + 0.25], ["bottom"])]]];
+
+function runner_sheet() = let(i = runner_drawers[0], z = runner_top(i), x0 = t - dado_depth, x1 = t + runner_reach)
+    ["runner", "Runner strip", 2 * len(runner_drawers), [
+        "Hardwood. Positions are on the case side sheet.",
+        Runner_style == "strip" ? "Glue and screw to the case side; the top carries the drawer." :
+        dadoed ? str("Glue into the ", frac(dado_depth), "-deep dado; ", frac(Runner_width), " projects to carry the drawer.") :
+        str("Engages the drawer-side groove, stopping ", frac(Runner_clearance), " short of its floor.")],
+     pc(runner_piece(i, false)), [
+        ["side", "Side", RIGHT, [
+            dim("Length", [x1, Front_thickness, z], [x1, inner_d, z], "horizontal", 1),
+            dim("Height", [x1, Front_thickness, z - Runner_height], [x1, Front_thickness, z], "vertical", -1)]],
+        ["end", "G-G / Cross-section", FRONT, [
+            dim("Width", [x0, mid_y, z], [x1, mid_y, z], "horizontal", 1)],
+         section(-mid_y, [x0 - 0.25, z - Runner_height - 0.25, x1 + 0.25, z + 0.25])]]];
+
+// Drawer members grouped across drawers with identical finished geometry.
+// Member order follows drawer_members(): 0 bottom, 1 front, 2 left, 3 right, 4 back.
+// Rounded to a millionth of an inch so derived heights group despite float noise.
+function signature(i, k) = let(m = drawer_members(i)[k])
+    [for (n = concat(m[2] - m[1], (k == 2 || k == 4) && !supported ? hang_center[i] : 0)) round(n * 1e6)];
+function matching(i, k) = [for (j = [0:N-1]) if (signature(j, k) == signature(i, k)) j];
+function representatives(k) = [for (i = [0:N-1]) if (matching(i, k)[0] == i) i];
+// Drawer numbers with runs of three or more compressed, e.g. "1, 3–6".
+function run_end(v, i) = i + 1 < len(v) && v[i+1] == v[i] + 1 ? run_end(v, i + 1) : i;
+function runs(v, i = 0) = i >= len(v) ? "" : let(j = run_end(v, i))
+    str(i > 0 ? ", " : "", j > i + 1 ? str(v[i], "–", v[j]) : j == i + 1 ? str(v[i], ", ", v[j]) : str(v[i]), runs(v, j + 1));
+function drawers_title(name, set) = str(name, len(set) == 1 ? " · drawer " : " · drawers ", runs([for (j = set) j + 1]));
+function lo_of(i, k) = drawer_origin(i) + drawer_members(i)[k][1];
+function hi_of(i, k) = drawer_origin(i) + drawer_members(i)[k][2];
+box_material = "Solid wood or plywood; butt joints glued with screws, pocket screws or brads.";
+
+function front_sheet(i) = let(set = matching(i, 1), lo = lo_of(i, 1), hi = hi_of(i, 1), xm = (lo[0] + hi[0]) / 2,
+    g = Groove_depth, o = Groove_offset, tb = Bottom_thickness, top = min(hi[2], lo[2] + 2))
+    [str("front-", i + 1), drawers_title("Drawer front", set), len(set), [
+        "Integral inset front; the visible face is shown.", box_material,
+        Box_construction == "front_back_overlap" ? "Runs the full box width; the sides butt into its back face." :
+            "Fits between the sides, whose ends show on the face.",
+        under_bottom ? str("Sits on the bottom panel, whose edge shows below it: ", frac(front_h[i]), " overall.") :
+            str("Bottom groove ", frac(tb), " wide x ", frac(g), " deep, ", frac(o), " up, through the length.")],
+     pc(member_piece(i, 1)), [
+        ["face", "Face", FRONT, [
+            dim("Width", [lo[0], lo[1], hi[2]], [hi[0], lo[1], hi[2]], "horizontal", 1),
+            dim("Height", [lo[0], lo[1], lo[2]], [lo[0], lo[1], hi[2]], "vertical", -1)]],
+        ["edge", "H-H / Section at the bottom edge", RIGHT, concat([
+            dim("Thickness", [xm, lo[1], lo[2]], [xm, hi[1], lo[2]], "horizontal", -1)],
+            under_bottom ? [] : [
+                dim("Groove offset", [xm, hi[1], lo[2]], [xm, hi[1], lo[2] + o], "vertical", 1),
+                dim("Groove", [xm, hi[1], lo[2] + o], [xm, hi[1], lo[2] + o + tb], "vertical", 1, 2),
+                dim("Groove depth", [xm, hi[1] - g, lo[2] + o], [xm, hi[1], lo[2] + o], "horizontal", -1, 2)]),
+         section(xm, [lo[1] - 0.25, lo[2] - 0.25, hi[1] + 0.25, top + 0.25], top < hi[2] ? ["top"] : [])]]];
+
+function side_sheet(i) = let(set = matching(i, 2), lo = lo_of(i, 2), hi = hi_of(i, 2), oz = drawer_origin(i)[2],
+    g = Groove_depth, o = Groove_offset, tb = Bottom_thickness, ym = (lo[1] + hi[1]) / 2,
+    hung = !supported, hang_lo = oz + hang_center[i] - hang_groove_h / 2, hang_hi = oz + hang_center[i] + hang_groove_h / 2,
+    hang_stop = hung && lo[1] < Front_thickness, grooved = !under_bottom,
+    // Bottom-groove dimensions belong on the inside face, where the groove shows.
+    groove_dims = [
+        dim("Groove stop", [lo[0], lo[1], lo[2]], [lo[0], Front_thickness - g, lo[2]], "horizontal", -1),
+        dim("Groove offset", [lo[0], hi[1], lo[2]], [lo[0], hi[1], lo[2] + o], "vertical", 1),
+        dim("Groove", [lo[0], hi[1], lo[2] + o], [lo[0], hi[1], lo[2] + o + tb], "vertical", 1, 2)],
+    top = min(hi[2], hung ? hang_hi + 0.75 : grooved ? lo[2] + o + tb + 0.75 : lo[2] + 1.5))
+    [str("side-", i + 1), drawers_title("Drawer sides", set), 2 * len(set), concat([
+        grooved || hang_stop ? "Make mirrored left/right pairs; the left side is shown." : "Left and right sides are identical.",
+        box_material,
+        Box_construction == "front_back_overlap" ? "Fits between the front and back." : "Runs the full box depth; the front and back fit between the sides."],
+        under_bottom ? ["Sits on the bottom panel."] :
+            [str("Stopped bottom groove ", frac(tb), " wide x ", frac(g), " deep, ", frac(o), " up, open at the back.")],
+        hung ? [str("Runner groove ", frac(hang_groove_h), " wide x ", frac(Hang_groove_depth), " deep in the outside face, open at the back.")] : [],
+        supported && box_h[i] < front_h[i] - 1e-9 ? [str("Lower than the front so it clears the runner above by ", frac(Runner_clearance), ".")] : []),
+     pc(member_piece(i, 2)), concat([
+        [hung ? "outside" : "inside", hung ? "Outside face" : "Inside face", hung ? LEFT : RIGHT, concat([
+            dim("Length", [lo[0], lo[1], hi[2]], [lo[0], hi[1], hi[2]], "horizontal", 1),
+            dim("Height", [lo[0], hi[1], lo[2]], [lo[0], hi[1], hi[2]], "vertical", -1, 2)],
+            hung ? concat([
+                dim("To runner groove", [lo[0], hi[1], lo[2]], [lo[0], hi[1], hang_lo], "vertical", -1),
+                dim("Runner groove", [lo[0], lo[1], hang_lo], [lo[0], lo[1], hang_hi], "vertical", 1)],
+                hang_stop ? [dim("Runner groove stop", [lo[0], lo[1], lo[2]], [lo[0], Front_thickness, lo[2]], "horizontal", -1)] : []) :
+            grooved ? groove_dims : [])]],
+        hung && grooved ? [["inside", "Inside face", RIGHT, groove_dims]] : [],
+        [["section", "J-J / Cross-section", FRONT, concat([
+            dim("Thickness", [lo[0], ym, lo[2]], [hi[0], ym, lo[2]], "horizontal", -1)],
+            hung ? [dim("Runner groove depth", [lo[0], ym, hang_hi], [lo[0] + Hang_groove_depth, ym, hang_hi], "horizontal", 1)] : [],
+            grooved ? [dim("Groove depth", [hi[0] - g, ym, lo[2] + o], [hi[0], ym, lo[2] + o], "horizontal", -1, 2)] : []),
+         section(-ym, [lo[0] - 0.25, lo[2] - 0.25, hi[0] + 0.25, top + 0.25], top < hi[2] ? ["top"] : [])]])];
+
+function back_member_sheet(i) = let(set = matching(i, 4), lo = lo_of(i, 4), hi = hi_of(i, 4), oz = drawer_origin(i)[2],
+    xm = (lo[0] + hi[0]) / 2, notched = !supported && Box_construction == "front_back_overlap",
+    hang_lo = oz + hang_center[i] - hang_groove_h / 2, hang_hi = oz + hang_center[i] + hang_groove_h / 2,
+    top = min(hi[2], lo[2] + 1.5))
+    [str("back-", i + 1), drawers_title("Drawer back", set), len(set), concat([
+        box_material,
+        Box_construction == "front_back_overlap" ? "Runs the full box width; the sides butt into its front face." : "Fits between the sides.",
+        under_bottom ? "Sits on the bottom panel." : "Sits on the bottom, which slides in beneath it; nail the bottom up into it."],
+        notched ? [str("Notch both ends for the runner grooves: ", frac(hang_groove_h), " high x ", frac(Hang_groove_depth), " deep.")] : []),
+     pc(member_piece(i, 4)), [
+        ["face", "Face", FRONT, concat([
+            dim("Width", [lo[0], lo[1], hi[2]], [hi[0], lo[1], hi[2]], "horizontal", 1),
+            dim("Height", [lo[0], lo[1], lo[2]], [lo[0], lo[1], hi[2]], "vertical", -1)],
+            notched ? [
+                dim("Notch depth", [hi[0] - Hang_groove_depth, lo[1], lo[2]], [hi[0], lo[1], lo[2]], "horizontal", -1),
+                dim("To notch", [hi[0], lo[1], lo[2]], [hi[0], lo[1], hang_lo], "vertical", 1),
+                dim("Notch", [hi[0], lo[1], hang_lo], [hi[0], lo[1], hang_hi], "vertical", 1)] : [])],
+        ["edge", "K-K / Section at the bottom edge", RIGHT, [
+            dim("Thickness", [xm, lo[1], lo[2]], [xm, hi[1], lo[2]], "horizontal", -1)],
+         section(xm, [lo[1] - 0.25, lo[2] - 0.25, hi[1] + 0.25, top + 0.25], top < hi[2] ? ["top"] : [])]]];
+
+function bottom_sheet(i) = let(set = matching(i, 0), lo = lo_of(i, 0), hi = hi_of(i, 0), xm = (lo[0] + hi[0]) / 2)
+    [str("bottom-", i + 1), drawers_title("Drawer bottom", set), len(set), [
+        str(frac(Bottom_thickness), " plywood or hardboard."),
+        under_bottom ? "Glue and brad it under the sides, front and back." :
+            str("Slides into the ", frac(Groove_depth), "-deep grooves in the sides and front; nail it up into the back.")],
+     pc(member_piece(i, 0)), [
+        ["plan", "Plan", TOP, [
+            dim("Width", [lo[0], lo[1], hi[2]], [hi[0], lo[1], hi[2]], "horizontal", -1),
+            dim("Depth", [lo[0], lo[1], hi[2]], [lo[0], hi[1], hi[2]], "vertical", -1)]],
+        ["edge", "L-L / Section at the front edge", RIGHT, [
+            dim("Thickness", [xm, lo[1], lo[2]], [xm, lo[1], hi[2]], "vertical", -1)],
+         section(xm, [lo[1] - 0.25, lo[2] - 0.25, lo[1] + 1.5, hi[2] + 0.25], ["right"])]]];
+
+if (!is_undef($misc_drawing) && $misc_drawing) {
+    echo("DRAWING_V1", ["inches", concat(assembly_views, joint_views), joint_caption]);
+    echo("PART_DRAWINGS_V1", concat(
+        [case_side_sheet(), panel_sheet(), back_sheet()],
+        len(runner_drawers) > 0 ? [runner_sheet()] : [],
+        [for (i = representatives(1)) front_sheet(i)],
+        [for (i = representatives(2)) side_sheet(i)],
+        [for (i = representatives(4)) back_member_sheet(i)],
+        [for (i = representatives(0)) bottom_sheet(i)]));
+    drawing_cabinet();
+} else {
+    separation = Explosion_percent / 100;
+    if (Part == "all") cabinet(separation);
+    else if (Part == "carcass") carcass(separation);
+    else drawer(Inspect_drawer - 1, separation);
+}
