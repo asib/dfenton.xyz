@@ -3,13 +3,19 @@ import DarkModeIcon from "./DarkModeIcon";
 import LightModeIcon from "./LightModeIcon";
 import clsx from "clsx";
 
+// Storage can be blocked entirely or refuse writes; the page's dark class (set
+// before first paint in index.html) then stands in for the stored theme.
 const getTheme = (): string | null => {
-    const theme = window.localStorage.getItem('theme');
-    return theme;
+    try {
+        return window.localStorage.getItem('theme');
+    } catch {
+        return null;
+    }
 }
 
 const isDarkModeEnabled = (): boolean => {
-    return getTheme() === 'dark';
+    const theme = getTheme();
+    return theme ? theme === 'dark' : document.documentElement.classList.contains('dark');
 }
 
 export default function DarkModeToggle() {
@@ -36,7 +42,11 @@ export default function DarkModeToggle() {
         } else {
             document.documentElement.classList.add('dark');
         }
-        window.localStorage.setItem('theme', enabled ? 'light' : 'dark');
+        try {
+            window.localStorage.setItem('theme', enabled ? 'light' : 'dark');
+        } catch {
+            // The class above still switches the theme for this visit.
+        }
         window.dispatchEvent(new Event('storage'));
     };
 

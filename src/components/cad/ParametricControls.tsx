@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CadEntry } from '../../misc';
 import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
 import type { DrawingOutput, DrawingSheet } from './drawings';
-import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
+import { changedValues, fingerprint, readConfigurations, reconcile, storageKey, writeConfigurations, type Configuration } from './configurations';
+import { configurationLink, decodeConfiguration, encodeConfiguration, readConfigurationHash } from './shareLink';
+import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type ListValue, type ParameterValue, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
@@ -13,7 +15,7 @@ interface Result { values: Values; stl: string; source: string; output: string; 
 export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList, onDrawings }: {
   entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
   onOutput: (output: CutListOutput) => void;
-  onViewCutList?: () => void;
+  onViewCutList?: (headingId: string) => void;
   onDrawings?: (output: DrawingOutput) => void;
 }) {
   const [source, setSource] = useState<Source | null>(null);
@@ -23,6 +25,17 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [initialModel, setInitialModel] = useState<CompiledModel | null>(null);
+  // Named configurations saved in this browser for this item.
+  const storage = useMemo(() => { try { return window.localStorage; } catch { return null; } }, []);
+  const configurationKey = storageKey(entry.href);
+  const [configurations, setConfigurations] = useState<Configuration[]>(() => readConfigurations(storage, configurationKey));
+  const [activeName, setActiveName] = useState('');
+  const [loadedValues, setLoadedValues] = useState<Values | null>(null);
+  const [configurationNotice, setConfigurationNotice] = useState('');
+  const [naming, setNaming] = useState<{ mode: 'save' | 'rename'; text: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // A share link the clipboard refused, shown for copying by hand.
+  const [manualLink, setManualLink] = useState('');
   const job = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const updateTimer = useRef<number>();
@@ -33,6 +46,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const outputLabel = entry.customizer?.outputLabel;
   const hasParts = !!entry.customizer?.parts?.length;
   const hasCutList = !!entry.customizer?.cutList;
+  const hasSheetLayout = !!entry.customizer?.sheetLayout;
   const hasDrawings = !!entry.customizer?.drawings;
 
   useEffect(() => {
@@ -45,7 +59,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         const text = await response.text();
         const schema = await compileJob({ kind: 'parameters', source: text }, controller.signal);
         if (controller.signal.aborted || schema.kind !== 'parameters') return;
-        const parameters = parseParameters(schema.json);
+        const parameters = parseParameters(schema.json, text);
         const values = defaults(parameters);
         // Verify that configured downloads can preserve these literal assignments.
         configuredSource(text, parameters, values);
@@ -53,7 +67,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         // worker. The committed fallback mesh stays visible while this runs.
         let output = '';
         let drawings: DrawingSheet | undefined;
-        if (outputLabel || hasParts || hasCutList || hasDrawings) {
+        if (outputLabel || hasParts || hasCutList || hasSheetLayout || hasDrawings) {
           const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal);
           controller.signal.throwIfAborted();
           if (compiled.kind !== 'model') return;
@@ -75,7 +89,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); window.clearTimeout(updateTimer.current); };
-  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasDrawings, retry]);
+  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasSheetLayout, hasDrawings, retry]);
 
   useEffect(() => {
     if (!available || !initialModel) return;
@@ -101,21 +115,25 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     window.clearTimeout(updateTimer.current);
     updateTimer.current = undefined;
   };
-  const edit = (name: string, value: string | number | boolean) => {
-    cancelAutoUpdate();
-    job.current?.abort();
-    setPhase('');
-    setError('');
-    const next = { ...draftValues.current, [name]: value };
+  // Keep choices and conditional fields consistent after any change of values.
+  const settle = (next: Values) => {
     for (const parameter of source?.parameters ?? []) {
       const condition = entry.customizer?.conditions?.[parameter.name];
       const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], next);
       if (options?.length && !options.some(option => option.value === next[parameter.name])) next[parameter.name] = options[0].value;
       // An empty field must not prevent switching to a mode that ignores it.
-      if (condition && !conditionMatches(condition, next) && typeof next[parameter.name] !== parameter.type) {
+      if (condition && !conditionMatches(condition, next) && parameter.type !== 'list' && typeof next[parameter.name] !== parameter.type) {
         next[parameter.name] = parameter.value;
       }
     }
+    return next;
+  };
+  const edit = (name: string, value: ParameterValue) => {
+    cancelAutoUpdate();
+    job.current?.abort();
+    setPhase('');
+    setError('');
+    const next = settle({ ...draftValues.current, [name]: value });
     // Blur can follow an input event before React renders the new draft.
     draftValues.current = next;
     edited.current = true;
@@ -157,7 +175,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     edited.current = false;
     if (!form.checkValidity()) {
       const invalid = form.querySelector<HTMLInputElement | HTMLSelectElement>('input:invalid, select:invalid');
-      setError(invalid ? `${parameterLabel(invalid.name)}: ${invalid.validationMessage}` : 'Enter valid parameter values.');
+      // List cells name their row and column; other fields use their parameter name.
+      setError(invalid ? `${invalid.getAttribute('aria-label') ?? parameterLabel(invalid.name)}: ${invalid.validationMessage}` : 'Enter valid parameter values.');
       return;
     }
     const values = draftValues.current;
@@ -166,6 +185,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const reset = () => {
     cancelAutoUpdate();
     if (!source) return;
+    setActiveName('');
+    setLoadedValues(null);
     job.current?.abort();
     const values = defaults(source.parameters);
     draftValues.current = values;
@@ -175,11 +196,164 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setPhase('');
     if (JSON.stringify(values) !== JSON.stringify(result?.values)) void apply(values);
   };
+  const persist = (next: Configuration[]) => {
+    if (writeConfigurations(storage, configurationKey, next)) { setConfigurations(next); return true; }
+    setConfigurationNotice('This browser did not allow saving; private windows and blocked site data prevent it.');
+    return false;
+  };
+  // Loading applies a configuration like Reset applies the defaults, then compiles it.
+  const loadConfiguration = (name: string) => {
+    setNaming(null);
+    setConfirmDelete(false);
+    if (!source) return;
+    if (!name) { reset(); setConfigurationNotice(''); return; }
+    const configuration = configurations.find(item => item.name === name);
+    if (!configuration) return;
+    applySaved(configuration.values, name, configuration.fingerprint !== fingerprint(source.parameters)
+      ? 'Saved for an earlier version of this model; every setting still applies.' : '');
+  };
+  // Shared by saved configurations and share links: values that still fit apply over
+  // the defaults, settle like an edit, and compile.
+  const applySaved = (saved: Record<string, unknown>, name: string, notice: string) => {
+    if (!source) return;
+    const { values, dropped } = reconcile(source.parameters, saved);
+    const settled = settle(values);
+    cancelAutoUpdate();
+    job.current?.abort();
+    draftValues.current = settled;
+    edited.current = false;
+    setDraft(settled);
+    setError('');
+    setPhase('');
+    setActiveName(name);
+    setLoadedValues(name ? settled : null);
+    setConfigurationNotice(dropped.length
+      ? `${notice ? `${notice} ` : ''}${String(dropped.length)} ${dropped.length === 1 ? 'setting no longer applies and was' : 'settings no longer apply and were'} reset to the source default: ${dropped.join(', ')}.`
+      : notice);
+    if (JSON.stringify(settled) !== JSON.stringify(result?.values)) void apply(settled);
+  };
+  // Copy a link carrying the values that differ from the source defaults.
+  const copyLink = async () => {
+    if (!source) return;
+    setNaming(null);
+    setConfirmDelete(false);
+    if (form.current && !form.current.checkValidity()) {
+      setConfigurationNotice('Correct the invalid parameter values before sharing.');
+      return;
+    }
+    const link = configurationLink(window.location.href, await encodeConfiguration(changedValues(source.parameters, draftValues.current)));
+    try {
+      await navigator.clipboard.writeText(link);
+      setManualLink('');
+      setConfigurationNotice('Link copied. Opening it loads these parameters.');
+    } catch {
+      setManualLink(link);
+      setConfigurationNotice('Copy this link to share these parameters.');
+    }
+  };
+  // Opening a share link (or pasting one into this tab) loads it once the model is ready.
+  const ready = !!source && !!result && available;
+  const sharedRef = useRef(applySaved);
+  sharedRef.current = applySaved;
+  useEffect(() => {
+    if (!ready) return;
+    const loadShared = async () => {
+      const encoded = readConfigurationHash(window.location.hash);
+      if (!encoded) return;
+      const shared = await decodeConfiguration(decodeURIComponent(encoded));
+      // Keep the address clean: later edits would no longer match the link.
+      history.replaceState(history.state, '', window.location.pathname + window.location.search);
+      if (shared) sharedRef.current(shared, '', 'Loaded a shared configuration; use Save as to keep it.');
+      else setConfigurationNotice('The configuration link could not be read.');
+    };
+    void loadShared();
+    const onHash = () => { void loadShared(); };
+    window.addEventListener('hashchange', onHash);
+    return () => { window.removeEventListener('hashchange', onHash); };
+  }, [ready]);
+  // Saves the values in the form, which must be valid; an existing name is replaced in place.
+  const saveConfiguration = (name: string) => {
+    if (!source) return;
+    if (form.current && !form.current.checkValidity()) {
+      setConfigurationNotice('Correct the invalid parameter values before saving.');
+      return;
+    }
+    const values = draftValues.current;
+    const configuration = { name, values, fingerprint: fingerprint(source.parameters), savedAt: new Date().toISOString() };
+    const exists = configurations.some(item => item.name === name);
+    if (!persist(exists ? configurations.map(item => item.name === name ? configuration : item) : [...configurations, configuration])) return;
+    setActiveName(name);
+    setLoadedValues(values);
+    setNaming(null);
+    setConfigurationNotice(exists ? `Saved over “${name}”.` : `Saved “${name}”.`);
+  };
+  const renameConfiguration = (name: string) => {
+    if (name !== activeName && configurations.some(item => item.name === name)) {
+      setConfigurationNotice(`A configuration named “${name}” already exists.`);
+      return;
+    }
+    if (!persist(configurations.map(item => item.name === activeName ? { ...item, name } : item))) return;
+    setActiveName(name);
+    setNaming(null);
+    setConfigurationNotice(`Renamed to “${name}”.`);
+  };
+  const deleteConfiguration = () => {
+    if (!persist(configurations.filter(item => item.name !== activeName))) return;
+    setConfigurationNotice(`Deleted “${activeName}”.`);
+    setActiveName('');
+    setLoadedValues(null);
+    setConfirmDelete(false);
+  };
+  const submitName = () => {
+    const name = naming?.text.trim() ?? '';
+    if (!name) { setConfigurationNotice('Enter a name for the configuration.'); return; }
+    if (naming?.mode === 'rename') renameConfiguration(name); else saveConfiguration(name);
+  };
+  const modified = !!activeName && !!loadedValues && JSON.stringify(draft) !== JSON.stringify(loadedValues);
   const groups = [...new Set(source?.parameters.map((parameter) => parameter.group))];
 
   return <aside className="cad-parameters" aria-label="Model parameters">
     <h2 className="sr-only">Model parameters</h2>
     <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model after a 1-second pause, or when you leave a field.</p>
+    {source && <section className="cad-configurations" aria-labelledby="cad-configurations-title">
+      <h3 id="cad-configurations-title">Saved configurations</h3>
+      {!storage ? <>
+        <div className="cad-configuration-actions">
+          <button type="button" disabled={!available} onClick={() => { void copyLink(); }}>Copy link</button>
+        </div>
+        <p>Saving configurations needs browser storage, which is unavailable here; links still work.</p>
+      </> : <>
+        <label className="cad-configuration-select">Configuration
+          <select value={activeName} disabled={!available} onChange={(event) => { loadConfiguration(event.target.value); }}>
+            <option value="">Source defaults</option>
+            {configurations.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+          </select>
+        </label>
+        {naming ? <div className="cad-configuration-actions">
+          <input aria-label={naming.mode === 'rename' ? 'New configuration name' : 'Configuration name'} value={naming.text} maxLength={60} autoFocus
+            onChange={(event) => { setNaming({ ...naming, text: event.target.value }); }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); submitName(); }
+              if (event.key === 'Escape') { event.preventDefault(); setNaming(null); }
+            }} />
+          <button type="button" onClick={submitName}>{naming.mode === 'rename' ? 'Rename' : 'Save'}</button>
+          <button type="button" onClick={() => { setNaming(null); }}>Cancel</button>
+        </div> : <div className="cad-configuration-actions">
+          <button type="button" disabled={!available} onClick={() => { setConfirmDelete(false); setConfigurationNotice(''); setNaming({ mode: 'save', text: '' }); }}>Save as…</button>
+          <button type="button" disabled={!activeName || !modified} onClick={() => { saveConfiguration(activeName); }}>Update</button>
+          <button type="button" disabled={!activeName} onClick={() => { setConfirmDelete(false); setNaming({ mode: 'rename', text: activeName }); }}>Rename</button>
+          {confirmDelete
+            ? <button type="button" className="cad-configuration-danger" onClick={deleteConfiguration}>Confirm delete</button>
+            : <button type="button" disabled={!activeName} onClick={() => { setConfirmDelete(true); }}>Delete</button>}
+          <button type="button" disabled={!available} onClick={() => { void copyLink(); }}>Copy link</button>
+        </div>}
+        {modified && <p>Changed since loading “{activeName}”; Update keeps the changes.</p>}
+        {configurationNotice && <p role="status">{configurationNotice}</p>}
+        <p className="cad-configuration-help">Configurations are saved in this browser only; Copy link shares the current parameters.</p>
+      </>}
+      {manualLink && <input className="cad-configuration-link" readOnly aria-label="Configuration link" value={manualLink}
+        onFocus={(event) => { event.currentTarget.select(); }} />}
+    </section>}
     {source && <form ref={form}
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
       onBlur={(event) => {
@@ -203,6 +377,42 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
             const disabled = !!condition && !conditionMatches(condition, draft);
             if (disabled && condition.hide) return null;
             const value = draft[parameter.name];
+            if (parameter.type === 'list') {
+              const rows = Array.isArray(value) ? value : [];
+              const { columns = [], minRows = 1, maxRows, rowLabel = 'Row' } = parameter.control;
+              const defaultRows = parameter.value as ListValue;
+              const setRows = (next: ListValue) => { edit(parameter.name, next); };
+              const row = rowLabel.toLowerCase();
+              return <div key={parameter.name} className="cad-parameter cad-list-parameter" data-inactive={disabled || undefined}>
+                <span id={`${id}-label`} className="cad-list-title">{parameterLabel(parameter.name)}</span>
+                <p id={`${id}-help`}>{parameter.description}</p>
+                <div className="cad-list-scroll">
+                  <table className="cad-list-table" aria-labelledby={`${id}-label`} aria-describedby={`${id}-help`}>
+                    <thead><tr>
+                      <th scope="col">{rowLabel}</th>
+                      {columns.map(column => <th key={column.label} scope="col">{column.label}</th>)}
+                      <th scope="col"><span className="sr-only">Remove</span></th>
+                    </tr></thead>
+                    <tbody>{rows.map((cells, r) => <tr key={r}>
+                      <th scope="row">{r + 1}</th>
+                      {cells.map((cell, c) => <td key={c}>
+                        <input type="number" name={parameter.name} aria-label={`${rowLabel} ${String(r + 1)} ${columns[c].label.toLowerCase()}`}
+                          value={String(cell)} min={columns[c].min} max={columns[c].max} step={columns[c].step ?? 'any'} required disabled={disabled}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            setRows(rows.map((other, i) => i === r ? other.map((item, j) => j === c ? (raw === '' ? '' : Number(raw)) : item) : other));
+                          }} />
+                      </td>)}
+                      <td><button type="button" className="cad-list-remove" aria-label={`Remove ${row} ${String(r + 1)}`}
+                        disabled={disabled || rows.length <= minRows} onClick={() => { setRows(rows.filter((_, i) => i !== r)); }}>×</button></td>
+                    </tr>)}</tbody>
+                  </table>
+                </div>
+                {/* New rows copy the source's last default row. */}
+                <button type="button" className="cad-list-add" disabled={disabled || (maxRows !== undefined && rows.length >= maxRows)}
+                  onClick={() => { setRows([...rows, [...defaultRows[defaultRows.length - 1]]]); }}>Add {row}</button>
+              </div>;
+            }
             const { min, max, step } = parameter.control;
             const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], draft);
             const changeNumber = (raw: string) => { edit(parameter.name, raw === '' ? '' : Number(raw)); };
@@ -243,10 +453,15 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     </div>
     {outputLabel && result?.output && <details className="cad-model-output">
       <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
-      <pre>{result.output.replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
+      {/* Versioned machine-readable echoes (CUTLIST_V1, SHEET_PARTS_V1, ...) feed the worksheets, not this panel. */}
+      <pre>{result.output.split('\n').filter(line => !/^ECHO:\s*"[A-Z_]+_V\d+",/.test(line)).join('\n')
+        .replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
     </details>}
+    {hasSheetLayout && result?.output && <p className="cad-compile-status"><a href="#sheet-layout-title" onClick={(event) => {
+      if (onViewCutList) { event.preventDefault(); onViewCutList('sheet-layout-title'); }
+    }}>View sheet layout ↓</a></p>}
     {hasCutList && result?.output && <p className="cad-compile-status"><a href="#cut-list-title" onClick={(event) => {
-      if (onViewCutList) { event.preventDefault(); onViewCutList(); }
+      if (onViewCutList) { event.preventDefault(); onViewCutList('cut-list-title'); }
     }}>View cut list ↓</a></p>}
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">

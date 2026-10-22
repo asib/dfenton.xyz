@@ -1,0 +1,143 @@
+# Drawer cabinet
+
+`drawer-cabinet.scad` is a self-contained OpenSCAD model of a frameless
+plywood case holding a single column of inset drawers on wooden runners.
+Dimensional parameters are **inches**; every box is converted to
+**millimetres** before boolean operations, matching the browser engine, site
+viewer and STL downloads. The origin is the case's front-bottom-left corner:
+X runs across the width, Y from the front face (Y=0) to the back, and Z up.
+Drawer 1 is the top drawer.
+
+## Case
+
+The sides run the full height and depth. `Case_joinery` either butts the top
+and bottom between the sides (for screws or pocket screws) or houses them in
+rabbets half the case thickness deep in the side ends. The back panel sits in
+rabbets along the back of both sides, `Back_rabbet_width` deep, and covers the
+back edges of the top and bottom, so those panels are `Depth - Back_thickness`
+deep. Interior width and height are the outside sizes less two case
+thicknesses.
+
+## Drawer layout
+
+`Drawers` is a list parameter with one `[front height, depth]` row per
+drawer, top first, and no fixed maximum: the page edits it as a table with
+add and remove buttons. A row's front height is its inset front height.
+Drawers left at 0 share whatever remains of the opening equally, each needing
+at least 1 inch, so the opening limits the count; if every drawer has a height,
+the heights must total the opening exactly. `Reveal` is the gap around each
+front: above the top drawer, between drawers and at both sides. The box is the
+front's width (`opening - 2 × Reveal`), so the same gap is the side running
+clearance. A row's depth is the box depth from the front face; 0 fills the
+interior less `Back_clearance`. With zero back clearance the back panel stops
+the drawers.
+
+The default 24 × 30 × 18 inch case with 3/4 inch plywood has a 22½ × 28½ inch
+opening. Four drawers with 5 and 6 inch fronts set leave 17¼ inches shared by
+the two lower drawers, 8⅝ inches each.
+
+## Runners
+
+- **Strips** (`strip`) are screwed to the inside of each case side. A drawer's
+  underside bears on the strip top, which is level with the bottom of its
+  front. The strip carrying the drawer above stops it tipping, so supported
+  boxes are cut down to `Runner_clearance` below that strip; their fronts stay
+  full height. The bottom drawer runs on the case bottom, so its front has no
+  lower reveal.
+- **Dadoed strips** (`dado`) are the same strips housed `Runner_dado_depth`
+  into stopped dados. The dados start behind the drawer fronts and stop at the
+  back rabbet. Strips are wider by the dado depth.
+- **Side-hung** (`side_hung`) drawers ride on a strip engaging a groove along
+  each drawer side, centred on the side's height. Grooves are open at the back
+  and stop behind the front. The drawer hangs with each groove's top face on
+  its strip; the strip stops `Runner_clearance` short of the groove floor, and
+  the groove is that much taller than the strip. Side-hung boxes keep full-height sides and get a reveal below the
+  bottom drawer as well.
+
+Strips run from behind the drawer fronts to the back panel.
+
+## Drawer boxes
+
+Boxes are butt-jointed for glue with screws, pocket screws or brads; fasteners
+are not modelled. The front is integral: it is the inset face.
+
+| `Box_construction` | Arrangement |
+| --- | --- |
+| `sides_overlap` | Sides run the full box depth; front and back fit between them. The bottom is nailed under all four. |
+| `front_back_overlap` | Front and back run the full box width; sides fit between them. The bottom is nailed under all four. |
+| `sides_overlap_groove` | Sides run the full depth; the bottom slides into a groove in the sides and front, under a back that sits on it. |
+
+A nailed-under bottom shows its edge below the front; the grooved bottom hides
+it. Side grooves for the bottom start at the front's groove and run out through
+the back; the front's groove runs through its ends, which the sides cover.
+
+## Drawings
+
+The private `$misc_drawing` pass renders the assembled cabinet with a unique
+color for every physical piece and echoes `DRAWING_V1` and `PART_DRAWINGS_V1`.
+The assembly sheet gives overall and opening sizes and each drawer front
+height (D1 is the top drawer). The runner detail sections the left runner
+between drawers 1 and 2: A-A along the drawer side and B-B across the runner,
+with the bearing face highlighted. Supported drawers bear on the strip top;
+side-hung drawers bear with the groove ceiling on the strip, leaving the
+running clearance below the strip and at the groove floor. A single supported
+drawer gets a support detail on the case bottom instead.
+
+Part sheets cover the case side (left shown, laid flat, with chained runner
+positions and rabbet/dado sections), the top and bottom, the back panel and the
+runner strip. Each drawer member then gets a sheet per distinct finished
+geometry: fronts, side pairs, backs and bottoms are grouped across drawers
+whose blanks and machining match, with titles such as `drawers 3–8`. Grooves
+are dimensioned on the face where they show. Drawings ignore `Part` and
+`Explosion_percent`.
+
+## Stock
+
+Every case and drawer part is plywood: 3/4 inch for the case and fronts,
+1/2 inch for drawer sides and backs, and 1/4 inch for the back and drawer
+bottoms, following the thickness parameters. The model emits these as
+`SHEET_PARTS_V1` rows grouped like the drawings. The case sides, top/bottom and
+drawer fronts keep their face grain along the part; hidden parts may turn.
+The page lays them out on 48 × 96 inch sheets by densest nesting or rip-first
+strips, with a diagram per sheet and a CSV. The defaults fit one sheet of each
+thickness. The hardwood runner strips are the only board-feet cut-list row.
+
+## Viewer pieces
+
+Drawer members and runner strips share legend colors, alternating between
+odd and even drawers. Each physical piece is colored within 3/255 of its
+legend color, nudged by its index, so the viewer can select, fade, hide or
+isolate it on its own. `PIECES_V1` names them, for example `Drawer 3 front`
+or `Runner R2 · left`.
+
+## Inspection
+
+`Explosion_percent` is sequenced so that no part passes through another: up to
+100 the case comes apart and the drawers slide out whole until they clear it;
+from 100 to 200 the drawers spread vertically and their own parts separate.
+A single drawer (`Part = drawer`) separates from 0. Part sizes never change.
+Use `Case and runners` or `One drawer` for separate STL exports; the assembled
+model contains touching parts.
+
+## Reproduction
+
+The default STL and colored first-load mesh come from the same engine as
+live edits:
+
+```sh
+bun scripts/export-cad-stl.mjs public/misc/drawer-cabinet/drawer-cabinet.scad public/misc/drawer-cabinet/drawer-cabinet.stl
+bun scripts/export-cad-display.mjs public/misc/drawer-cabinet/drawer-cabinet.scad public/misc/drawer-cabinet/drawer-cabinet-display.json
+bun test tests/drawer-cabinet.test.mjs
+bun test tests/drawer-cabinet-drawings.test.mjs
+bun test tests/sheet-layout.test.mjs
+```
+
+The tests cover every runner, box and case-joint combination for closed,
+non-overlapping pieces at intermediate explosions; runner bearing heights and
+kicker clearance; side-hung groove clearance; dado depth; per-drawer heights
+and depths; assertion messages; and saved/live asset agreement. The drawing
+tests check assembly, joint and part dimensions, bearing and clearance in the
+actual section contours, member grouping and quantities, and independence
+from the inspection controls. Stock tests check the emitted plywood rows,
+piece totals, one-sheet-per-thickness layouts by both methods and every
+grain setting, the runner row, and the error for parts too large for a sheet.

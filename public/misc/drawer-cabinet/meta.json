@@ -1,0 +1,145 @@
+{
+  "type": "cad",
+  "title": "Drawer cabinet",
+  "description": "A parametric frameless plywood cabinet with a single column of inset drawers on wooden runners. Set the case size, then the number of drawers and each drawer's height and depth, with dimensioned drawings for every part.",
+  "date": "2026-10-21",
+  "preview": "preview.webp",
+  "previewDark": "preview-dark.webp",
+  "model": "drawer-cabinet.stl",
+  "displayModel": "drawer-cabinet-display.json",
+  "source": "drawer-cabinet.scad",
+  "notes": "Dimensions are inches; geometry and STL exports are millimetres. Drawer 1 is the top drawer. Add or remove drawers in the Drawers table; each row is a drawer's inset front height and box depth. Heights left at 0 share the remaining opening equally, and depth 0 fills the case less the back clearance. Supported runners (screwed strips or strips housed in dados) carry each drawer on its underside; the strip carrying the drawer above also stops it tipping, so those boxes are shorter than their fronts. The bottom drawer runs on the case bottom with no lower reveal. Side-hung drawers ride on strips in grooves along their sides. Case and drawer parts are plywood; boxes are butt-jointed for glue with screws, pocket screws or brads; fasteners, drawer pulls and stops other than the back panel are not modelled. Bottoms nailed under the box show their edge below the front; a grooved bottom hides it. Drawings cover the assembly, a runner detail and one sheet per distinct part; drawer members with identical finished geometry share a sheet. The sheet layout nests every plywood part on full sheets, by densest nesting or rip-first strips, with a choice of grain handling; the cut list covers the hardwood runners. Use One drawer or Case and runners for separate STL exports; the assembled model contains touching parts.",
+  "camera": [
+    1.35,
+    -1.8,
+    1.1
+  ],
+  "customizer": {
+    "units": "inches",
+    "drawings": true,
+    "sheetLayout": true,
+    "cutList": true,
+    "outputLabel": "Drawer schedule",
+    "conditions": {
+      "Inspect_drawer": {
+        "parameter": "Part",
+        "value": "drawer",
+        "hide": true
+      },
+      "Runner_width": {
+        "parameter": "Runner_style",
+        "values": [
+          "strip",
+          "dado"
+        ],
+        "hide": true
+      },
+      "Runner_dado_depth": {
+        "parameter": "Runner_style",
+        "value": "dado",
+        "hide": true
+      },
+      "Hang_groove_depth": {
+        "parameter": "Runner_style",
+        "value": "side_hung",
+        "hide": true
+      },
+      "Groove_depth": {
+        "parameter": "Box_construction",
+        "value": "sides_overlap_groove",
+        "hide": true
+      },
+      "Groove_offset": {
+        "parameter": "Box_construction",
+        "value": "sides_overlap_groove",
+        "hide": true
+      }
+    },
+    "parts": [
+      {
+        "id": "case-left",
+        "label": "Case side · left",
+        "color": "#2c78b5",
+        "darkColor": "#65b0e5"
+      },
+      {
+        "id": "case-right",
+        "label": "Case side · right",
+        "color": "#3998a5",
+        "darkColor": "#65cbd0"
+      },
+      {
+        "id": "case-top",
+        "label": "Case top",
+        "color": "#5d6b7c",
+        "darkColor": "#a3b3c6"
+      },
+      {
+        "id": "case-bottom",
+        "label": "Case bottom",
+        "color": "#7a6f4e",
+        "darkColor": "#c2b48a"
+      },
+      {
+        "id": "case-back",
+        "label": "Back panel",
+        "color": "#9a8f80",
+        "darkColor": "#cfc5b5"
+      },
+      {
+        "id": "runners",
+        "label": "Runner strips",
+        "color": "#2f7a4f",
+        "darkColor": "#6fd09a"
+      },
+      {
+        "id": "front-odd",
+        "label": "Fronts · drawers 1, 3, 5, 7",
+        "color": "#b87924",
+        "darkColor": "#e7b44f"
+      },
+      {
+        "id": "front-even",
+        "label": "Fronts · drawers 2, 4, 6, 8",
+        "color": "#b6483b",
+        "darkColor": "#ef8a7a"
+      },
+      {
+        "id": "side-odd",
+        "label": "Drawer sides · 1, 3, 5, 7",
+        "color": "#ae689d",
+        "darkColor": "#e7a4d4"
+      },
+      {
+        "id": "side-even",
+        "label": "Drawer sides · 2, 4, 6, 8",
+        "color": "#7065af",
+        "darkColor": "#ada4e9"
+      },
+      {
+        "id": "back-odd",
+        "label": "Drawer backs · 1, 3, 5, 7",
+        "color": "#956d70",
+        "darkColor": "#cda6ab"
+      },
+      {
+        "id": "back-even",
+        "label": "Drawer backs · 2, 4, 6, 8",
+        "color": "#5d7c92",
+        "darkColor": "#9dbacf"
+      },
+      {
+        "id": "bottom-odd",
+        "label": "Drawer bottoms · 1, 3, 5, 7",
+        "color": "#8a8a3a",
+        "darkColor": "#cccb76"
+      },
+      {
+        "id": "bottom-even",
+        "label": "Drawer bottoms · 2, 4, 6, 8",
+        "color": "#47856d",
+        "darkColor": "#87c4ab"
+      }
+    ]
+  }
+}
