@@ -6,7 +6,7 @@ import { dimensionValue } from '../src/components/cad/drawings';
 import { configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
 
 const source = readFileSync(new URL('../public/misc/drawer-cabinet/drawer-cabinet.scad', import.meta.url), 'utf8');
-const schema = parseParameters(parameters(source)), initial = defaults(schema);
+const schema = parseParameters(parameters(source), source), initial = defaults(schema);
 const drawing = (changes = {}) => compileDrawings(configuredSource(source, schema, { ...initial, ...changes }), render);
 const mm = 25.4;
 // Label -> inches; repeated labels keep every value.
@@ -92,18 +92,18 @@ test('runner sections show bearing and clearance in the actual geometry', () => 
   expect(solid(transverse, 1.03125 + 0.015, ceiling - 0.3)).toBe(false);
   expect(longitudinal.section.contacts[0][0][2] / mm).toBeCloseTo(ceiling, 6);
   // A lone supported drawer runs on the case bottom.
-  const lone = drawing({ Drawer_count: 1, Drawer_1_height: 0 });
+  const lone = drawing({ Drawers: [[0, 0]] });
   expect(lone.joint.title).toBe('Drawer support detail');
   expect(lone.parts.map(p => p.id)).toEqual(['case-side', 'case-panels', 'back-panel', 'front-1', 'side-1', 'back-1', 'bottom-1']);
 });
 
 test.each([
-  [{ Drawer_count: 8, Height: 48, Drawer_1_height: 0 }, { front: [7, 1], side: [2, 2, 12], back: [1, 1, 6], bottom: [8], runner: 14 }],
-  [{ Drawer_count: 8, Height: 48, Drawer_1_height: 0, Runner_style: 'side_hung' }, { front: [7, 1], side: [14, 2], back: [7, 1], bottom: [8], runner: 16 }],
-  [{ Drawer_2_depth: 12, Back_clearance: 1 }, { front: [1, 1, 2], side: [2, 2, 4], back: [1, 1, 2], bottom: [3, 1], runner: 6 }],
+  [{ Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] }, { front: [7, 1], side: [2, 2, 12], back: [1, 1, 6], bottom: [8], runner: 14 }],
+  [{ Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]], Runner_style: 'side_hung' }, { front: [7, 1], side: [14, 2], back: [7, 1], bottom: [8], runner: 16 }],
+  [{ Drawers: [[5, 0], [6, 12], [0, 0], [0, 0]], Back_clearance: 1 }, { front: [1, 1, 2], side: [2, 2, 4], back: [1, 1, 2], bottom: [3, 1], runner: 6 }],
 ])('groups identical drawer members and totals every piece for %j', (changes, expected) => {
   const sheet = drawing(changes);
-  if (changes.Drawer_count === 8) expect(sheet.parts.find(p => p.id === 'side-3')?.title ?? sheet.parts.find(p => p.id === 'side-1').title).toMatch(/drawers 3–8|drawers 1, 3–8/);
+  if (changes.Drawers?.length === 8) expect(sheet.parts.find(p => p.id === 'side-3')?.title ?? sheet.parts.find(p => p.id === 'side-1').title).toMatch(/drawers 3–8|drawers 1, 3–8/);
   for (const kind of ['front', 'side', 'back', 'bottom'])
     expect(sheet.parts.filter(p => new RegExp(`^${kind}-\\d`).test(p.id)).map(p => p.quantity)).toEqual(expected[kind]);
   expect(part(sheet, 'runner').quantity).toBe(expected.runner);
@@ -137,5 +137,5 @@ test('grooved boxes dimension both grooves on the faces where they show', () => 
 });
 
 test('invalid configurations produce no drawings', () => {
-  expect(() => drawing({ Drawer_3_height: 20 })).toThrow('drawer set to 0');
+  expect(() => drawing({ Drawers: [[5, 0], [6, 0], [20, 0], [0, 0]] })).toThrow('drawer set to 0');
 });

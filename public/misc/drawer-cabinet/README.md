@@ -20,12 +20,15 @@ thicknesses.
 
 ## Drawer layout
 
-Each drawer's `Drawer_N_height` is its inset front height. Drawers left at 0
-share whatever remains of the opening equally; if every drawer has a height,
+`Drawers` is a list parameter with one `[front height, depth]` row per
+drawer, top first, and no fixed maximum: the page edits it as a table with
+add and remove buttons. A row's front height is its inset front height.
+Drawers left at 0 share whatever remains of the opening equally, each needing
+at least 1 inch, so the opening limits the count; if every drawer has a height,
 the heights must total the opening exactly. `Reveal` is the gap around each
 front: above the top drawer, between drawers and at both sides. The box is the
 front's width (`opening - 2 × Reveal`), so the same gap is the side running
-clearance. `Drawer_N_depth` is the box depth from the front face; 0 fills the
+clearance. A row's depth is the box depth from the front face; 0 fills the
 interior less `Back_clearance`. With zero back clearance the back panel stops
 the drawers.
 

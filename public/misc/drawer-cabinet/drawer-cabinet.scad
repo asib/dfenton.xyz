@@ -21,8 +21,8 @@ Back_thickness = 0.25; // [0.125:0.75]
 Back_rabbet_width = 0.375; // [0.0625:1.25]
 
 /* [Drawer layout] */
-// Drawers stacked in the single column. Each drawer has its own settings below.
-Drawer_count = 4; // [1:1:8]
+// One row per drawer in the single column, top drawer first. Front height is the inset front; 0 shares the remaining opening equally with the other 0-height drawers. Depth is the box depth from the front face; 0 fills the case less the back clearance.
+Drawers = [[5, 0], [6, 0], [0, 0], [0, 0]]; // [list:1:] Drawer | Front height:0:96, Depth:0:36
 // Gap around each inset front: above, between and beside the drawers. Side-hung drawers also get the gap below the bottom drawer.
 Reveal = 0.0625; // [0:0.25]
 // Space left behind drawers with automatic depth. Zero lets the back panel act as the drawer stop.
@@ -58,67 +58,18 @@ Hang_groove_depth = 0.25; // [0.0625:0.75]
 // Running clearance: below the strip above a supported drawer, and around a side-hung strip in its groove.
 Runner_clearance = 0.03125; // [0:0.125]
 
-/* [Drawer 1 (top)] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_1_height = 5; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_1_depth = 0; // [0:36]
-
-/* [Drawer 2] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_2_height = 6; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_2_depth = 0; // [0:36]
-
-/* [Drawer 3] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_3_height = 0; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_3_depth = 0; // [0:36]
-
-/* [Drawer 4] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_4_height = 0; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_4_depth = 0; // [0:36]
-
-/* [Drawer 5] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_5_height = 0; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_5_depth = 0; // [0:36]
-
-/* [Drawer 6] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_6_height = 0; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_6_depth = 0; // [0:36]
-
-/* [Drawer 7] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_7_height = 0; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_7_depth = 0; // [0:36]
-
-/* [Drawer 8] */
-// Inset front height. Zero shares the remaining height equally with other zero-height drawers.
-Drawer_8_height = 0; // [0:60]
-// Box depth from the front face. Zero fills the case depth less the back clearance.
-Drawer_8_depth = 0; // [0:36]
-
 /* [Inspection] */
 // Separation in percent: 0 assembles the cabinet; 100 opens the case and slides the drawers clear; 200 also takes the drawers apart. A single drawer separates from 0. Part sizes stay fixed.
 Explosion_percent = 0; // [0:5:200]
 // Show the complete cabinet, the case with its runners, or one drawer for inspection and a separate STL export.
 Part = "all"; // [all:Complete cabinet, carcass:Case and runners, drawer:One drawer]
 // Drawer shown when Part is One drawer; 1 is the top drawer.
-Inspect_drawer = 1; // [1:1:8]
+Inspect_drawer = 1;
 
 /* [Hidden] */
 inch = 25.4;
 eps = 0.01 / inch; // Boolean-tool overrun, 0.01 mm.
-max_drawers = 8;
-N = Drawer_count;
+N = len(Drawers);
 t = Case_thickness;
 end_rabbet = t / 2; // Side-end rabbet depth when the top and bottom are housed.
 inner_w = Width - 2 * t;
@@ -130,10 +81,8 @@ under_bottom = Box_construction != "sides_overlap_groove";
 
 function sumv(v, i = 0) = i >= len(v) ? 0 : v[i] + sumv(v, i + 1);
 
-height_inputs = [Drawer_1_height, Drawer_2_height, Drawer_3_height, Drawer_4_height,
-                 Drawer_5_height, Drawer_6_height, Drawer_7_height, Drawer_8_height];
-depth_inputs = [Drawer_1_depth, Drawer_2_depth, Drawer_3_depth, Drawer_4_depth,
-                Drawer_5_depth, Drawer_6_depth, Drawer_7_depth, Drawer_8_depth];
+height_inputs = [for (row = Drawers) row[0]];
+depth_inputs = [for (row = Drawers) row[1]];
 // Supported drawers have a reveal above each front; side-hung drawers also have one below the bottom drawer.
 reveal_count = supported ? N : N + 1;
 front_space = inner_h - reveal_count * Reveal;
@@ -171,7 +120,8 @@ assert(Case_joinery == "butt" || Case_joinery == "rabbet", "Choose a case joint.
 assert(Back_thickness >= 0.125 && Back_thickness <= 0.75 && Back_thickness < Depth / 2,
     "Back thickness must be between 1/8 and 3/4 inch.");
 assert(Back_rabbet_width > 0 && Back_rabbet_width < t, "Back rabbet width must be less than the case thickness.");
-assert(N >= 1 && N <= max_drawers && floor(N) == N, "Drawer count must be a whole number from 1 to 8.");
+assert(is_list(Drawers) && N >= 1 && len([for (row = Drawers) if (!(is_list(row) && len(row) == 2 && is_num(row[0]) && is_num(row[1]))) 1]) == 0,
+    "Each drawer needs a front height and a depth.");
 assert(Reveal >= 0 && Reveal <= 0.25, "Reveal must be between 0 and 1/4 inch.");
 assert(Back_clearance >= 0, "Back clearance cannot be negative.");
 assert(Box_construction == "sides_overlap" || Box_construction == "front_back_overlap" ||
@@ -225,8 +175,10 @@ front_rgb = [[184, 121, 36], [182, 72, 59]];
 side_rgb = [[174, 104, 157], [112, 101, 175]];
 back_rgb = [[149, 109, 112], [93, 124, 146]];
 bottom_rgb = [[138, 138, 58], [71, 133, 109]];
-// Piece k of a legend color: base-4 digits of k nudge red, green and blue.
-function shade(base, k) = [for (c = [0:2]) let(d = floor(k / pow(4, c)) % 4) base[c] + (base[c] > 250 ? -d : d)];
+// Piece k of a legend color: base-7 digits of k nudge red, green and blue by
+// 0, +1, -1, +2, -2, +3 or -3, giving 343 distinct pieces within 3/255.
+function shade(base, k) = [for (c = [0:2]) let(d = [0, 1, -1, 2, -2, 3, -3][floor(k / pow(7, c)) % 7])
+    base[c] + (base[c] + d < 0 || base[c] + d > 255 ? -d : d)];
 function hex2(n) = str("0123456789abcdef"[floor(n / 16)], "0123456789abcdef"[n % 16]);
 function hex_color(c) = str("#", hex2(c[0]), hex2(c[1]), hex2(c[2]));
 function runner_rgb_of(i, right) = shade(runner_rgb, 2 * i + (right ? 1 : 0));
@@ -369,10 +321,11 @@ LEFT = [[0, -1, 0], [0, 0, 1], [-1, 0, 0]]; // From -X; the front is at the righ
 FLAT = [[0, 0, 1], [0, -1, 0], [1, 0, 0]];  // From +X, laid flat: bottom edge at the left, front edge up.
 
 // Every physical piece gets its own drawing color (exact binary fractions) so a
-// part sheet can select exactly one mesh: case 0-4, runners 5-20, drawers 21+.
-function pc(p) = [(p % 8) / 8, floor(p / 8) / 8, 0.25];
+// part sheet can select exactly one mesh: case 0-4, then two runners and five
+// members per drawer. Sixteenths per channel allow 4096 pieces.
+function pc(p) = [(p % 16) / 16, (floor(p / 16) % 16) / 16, floor(p / 256) / 16];
 function runner_piece(i, right) = 5 + 2 * i + (right ? 1 : 0);
-function member_piece(i, m) = 21 + 5 * i + m;
+function member_piece(i, m) = 5 + 2 * N + 5 * i + m;
 function drawer_origin(i) = [t + Reveal, 0, t + front_z[i]];
 
 module drawing_cabinet() {

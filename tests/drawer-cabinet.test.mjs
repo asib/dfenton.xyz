@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { parameters, render } from 'openrscad-engine/node';
-import { conditionMatches, configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
+import { configuredSource, defaults, parseParameters } from '../src/components/cad/parameters';
 import { Color } from 'three';
 import { coloredGeometry, geometryPieces, legendPart, parseDisplayMesh, parsePieceLabels, pieceKey, visiblePartColors } from '../src/components/cad/displayMesh';
 import { parseCutList } from '../src/components/cad/cutList';
@@ -10,7 +10,7 @@ import { layoutSheets, parseSheetParts, parseSheetStock } from '../src/component
 const folder = new URL('../public/misc/drawer-cabinet/', import.meta.url);
 const source = readFileSync(new URL('drawer-cabinet.scad', folder), 'utf8');
 const metadata = JSON.parse(readFileSync(new URL('meta.json', folder), 'utf8'));
-const schema = parseParameters(parameters(source));
+const schema = parseParameters(parameters(source), source);
 const initial = defaults(schema);
 const inch = 25.4;
 const colors = Object.fromEntries(metadata.customizer.parts.map(part => [part.id, part.color]));
@@ -79,19 +79,17 @@ const near = (values, expected) => {
   values.forEach((value, i) => expect(value).toBeCloseTo(expected[i], 4));
 };
 
-test('exposes carcass, layout, box, runner and per-drawer parameters', () => {
+test('exposes carcass, layout, box, runner and a drawer list with no fixed maximum', () => {
   expect(initial).toMatchObject({ Width: 24, Height: 30, Depth: 18, Case_thickness: 0.75, Case_joinery: 'rabbet',
-    Drawer_count: 4, Reveal: 0.0625, Box_construction: 'front_back_overlap', Runner_style: 'strip',
-    Drawer_1_height: 5, Drawer_2_height: 6, Drawer_3_height: 0, Drawer_8_depth: 0, Part: 'all' });
+    Drawers: [[5, 0], [6, 0], [0, 0], [0, 0]], Reveal: 0.0625, Box_construction: 'front_back_overlap', Runner_style: 'strip', Part: 'all' });
   expect(schema.every(field => field.description.length > 0)).toBe(true);
-  expect(schema.find(field => field.name === 'Drawer_count').control).toMatchObject({ min: 1, max: 8, step: 1 });
+  expect(schema.find(field => field.name === 'Drawers')).toMatchObject({ type: 'list', group: 'Drawer layout',
+    control: { minRows: 1, maxRows: undefined, rowLabel: 'Drawer', columns: [{ label: 'Front height', min: 0, max: 96 }, { label: 'Depth', min: 0, max: 36 }] } });
+  // Inspect_drawer has no fixed range; the source assertion limits it to the drawers present.
+  const inspect = schema.find(field => field.name === 'Inspect_drawer').control;
+  expect([inspect.min, inspect.max]).toEqual([undefined, undefined]);
   expect(configuredSource(source, schema, initial)).toBe(source);
-  // Drawer k's fields appear only when at least k drawers are present.
-  for (let k = 2; k <= 8; k++) for (const field of ['height', 'depth']) {
-    const condition = metadata.customizer.conditions[`Drawer_${k}_${field}`];
-    for (let count = 1; count <= 8; count++)
-      expect(conditionMatches(condition, { Drawer_count: count })).toBe(count >= k);
-  }
+  expect(Object.keys(metadata.customizer.conditions).some(name => name.startsWith('Drawer_'))).toBe(false);
 });
 
 test('defaults share the remaining opening between drawers left at zero', () => {
@@ -109,8 +107,8 @@ for (const Runner_style of ['strip', 'dado', 'side_hung'])
   for (const Box_construction of ['sides_overlap', 'front_back_overlap', 'sides_overlap_groove'])
     for (const Case_joinery of ['butt', 'rabbet']) matrix.push({ Runner_style, Box_construction, Case_joinery });
 
-test.each([...matrix, { Drawer_count: 1, Drawer_1_height: 0 }, { Drawer_count: 8, Height: 48, Drawer_1_height: 0 },
-  { Drawer_2_depth: 12, Back_clearance: 1 }, { Runner_height: 2, Reveal: 0 }])(
+test.each([...matrix, { Drawers: [[0, 0]] }, { Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] },
+  { Drawers: [[5, 0], [6, 12], [0, 0], [0, 0]], Back_clearance: 1 }, { Runner_height: 2, Reveal: 0 }])(
   'closed, non-overlapping pieces for %j', changes => {
     const result = compile(changes);
     expect(result.ok).toBe(true);
@@ -161,14 +159,14 @@ test('side-hung grooves bear on their runners with clearance below and at the fl
 });
 
 test('per-drawer heights and depths change only that drawer', () => {
-  const layout = { Drawer_count: 6, Drawer_3_height: 4, Drawer_5_height: 3, Drawer_6_depth: 10 };
+  const layout = { Drawers: [[5, 0], [6, 0], [4, 0], [0, 0], [3, 0], [0, 10]] };
   const result = compile(layout);
   expect(result.ok).toBe(true);
   // 28 1/8 after six reveals, less 18 set: 10 1/8 shared by drawers 4 and 6.
   expect(result.echo).toContain('Drawer 4: front 22 3/8″ x 5 1/16″');
   expect(result.echo).toContain('Drawer 5: front 22 3/8″ x 3″');
   expect(result.echo).toContain('Drawer 6: front 22 3/8″ x 5 1/16″; box 22 3/8″ wide x 10″ deep');
-  expect(compile({ ...layout, Drawer_3_height: 0 }).echo).toContain('Drawer 3: front 22 3/8″ x ≈4 45/64″');
+  expect(compile({ Drawers: [[5, 0], [6, 0], [0, 0], [0, 0], [3, 0], [0, 10]] }).echo).toContain('Drawer 3: front 22 3/8″ x ≈4 45/64″');
   const drawer = k => bounds(compile({ ...layout, Part: 'drawer', Inspect_drawer: k }).positions).size.map(n => n / inch);
   near(drawer(5), [22.375, 17.75, 3]);
   near(drawer(6), [22.375, 10, 5.0625]);
@@ -189,9 +187,9 @@ test('explosion moves parts without changing them', () => {
 });
 
 test.each([
-  [{ Drawer_count: 2, Drawer_1_height: 10, Drawer_2_height: 18 }, 'the fronts must total 28 3/8″ (they total 28″)'],
-  [{ Drawer_3_height: 20 }, 'leave -2 3/4″ for 1 drawer set to 0'],
-  [{ Drawer_2_depth: 30 }, 'Drawer 2 depth exceeds the 17 3/4″ available'],
+  [{ Drawers: [[10, 0], [18, 0]] }, 'the fronts must total 28 3/8″ (they total 28″)'],
+  [{ Drawers: [[5, 0], [6, 0], [20, 0], [0, 0]] }, 'leave -2 3/4″ for 1 drawer set to 0'],
+  [{ Drawers: [[5, 0], [6, 30], [0, 0], [0, 0]] }, 'Drawer 2 depth exceeds the 17 3/4″ available'],
   [{ Runner_height: 7 }, 'Drawer 2 leaves its sides only'],
   [{ Part: 'drawer', Inspect_drawer: 6 }, 'Choose a drawer from 1 to 4.'],
   [{ Back_rabbet_width: 0.75 }, 'Back rabbet width must be less than the case thickness.'],
@@ -237,8 +235,8 @@ test('plywood parts feed sheet layouts and hardwood runners feed the cut list', 
   for (const swatch of parts.flatMap(p => p.swatches)) expect(colors[swatch]).toBeDefined();
   expect(parseSheetStock(compile().echo)).toEqual({ sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0 });
   // Every physical piece is counted once.
-  for (const changes of [{}, { Drawer_count: 8, Height: 48, Drawer_1_height: 0 }, { Runner_style: 'side_hung', Box_construction: 'sides_overlap_groove' }]) {
-    const n = changes.Drawer_count ?? 4, count = prefix => sheetParts(changes).filter(p => new RegExp(`^${prefix}\\d`).test(p.id)).reduce((s, p) => s + p.quantity, 0);
+  for (const changes of [{}, { Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] }, { Runner_style: 'side_hung', Box_construction: 'sides_overlap_groove' }]) {
+    const n = changes.Drawers?.length ?? 4, count = prefix => sheetParts(changes).filter(p => new RegExp(`^${prefix}\\d`).test(p.id)).reduce((s, p) => s + p.quantity, 0);
     expect([count('front-'), count('side-'), count('back-'), count('bottom-')]).toEqual([n, 2 * n, n, n]);
   }
   // Each thickness fits one 4 x 8 sheet by either method and grain setting.
@@ -249,17 +247,17 @@ test('plywood parts feed sheet layouts and hardwood runners feed the cut list', 
   expect(parseCutList(compile().echo)).toEqual([{ id: 'runners', name: 'Runner strip', material: 'Hardwood', quantity: 6,
     thickness: 0.75, width: 0.75, length: 17, blank: 'Runner strip', resawGroup: undefined }]);
   expect(parseCutList(compile({ Runner_style: 'dado' }).echo)[0]).toMatchObject({ thickness: 0.75, width: 1 });
-  expect(parseCutList(compile({ Drawer_count: 1, Drawer_1_height: 0 }).echo)).toEqual([]);
+  expect(parseCutList(compile({ Drawers: [[0, 0]] }).echo)).toEqual([]);
   // A part that cannot fit is reported rather than silently dropped.
-  const tall = sheetParts({ Height: 96, Drawer_count: 1, Drawer_1_height: 0 });
+  const tall = sheetParts({ Height: 96, Drawers: [[0, 0]] });
   expect(layoutSheets(tall, { sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0.5, method: 'densest', grain: 'visible' }))
     .toEqual({ ok: false, error: 'Case sides does not fit on the usable 47 × 95 in sheet with its grain along the sheet.' });
 });
 
 test('every physical piece is individually selectable and labeled in its legend color', () => {
-  for (const changes of [{}, { Drawer_count: 8, Height: 48, Drawer_1_height: 0 }, { Runner_style: 'side_hung' }]) {
+  for (const changes of [{}, { Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] }, { Runner_style: 'side_hung' }]) {
     const result = compile(changes);
-    const n = changes.Drawer_count ?? 4, runners = changes.Runner_style === 'side_hung' ? 2 * n : 2 * (n - 1);
+    const n = changes.Drawers?.length ?? 4, runners = changes.Runner_style === 'side_hung' ? 2 * n : 2 * (n - 1);
     expect(result.groups).toHaveLength(5 + runners + 5 * n);
     const keys = result.groups.map(g => pieceKey(g.color));
     expect(new Set(keys).size).toBe(keys.length);
@@ -288,4 +286,21 @@ test('every physical piece is individually selectable and labeled in its legend 
   const labels = parsePieceLabels(compile().echo);
   expect([...labels.values()].slice(0, 2)).toEqual(['Runner R1 · left', 'Runner R1 · right']);
   expect([...labels.values()]).toContain('Drawer 3 front');
+});
+
+test('drawer count is limited only by the opening, not a fixed maximum', () => {
+  // Twenty 1 1/4 inch drawers in a 30 inch case leave a 2 3/16 inch auto drawer at the bottom.
+  const rows = [...Array.from({ length: 20 }, () => [1.25, 0]), [0, 0]];
+  const result = compile({ Drawers: rows, Runner_height: 0.25, Runner_clearance: 0 });
+  expect(result.ok).toBe(true);
+  expect(result.echo).toContain('Drawer 21: front 22 3/8″ x 2 3/16″');
+  expect(result.groups).toHaveLength(5 + 2 * 20 + 5 * 21);
+  expect(new Set(result.groups.map(g => pieceKey(g.color))).size).toBe(result.groups.length);
+  const labels = parsePieceLabels(result.echo);
+  expect(labels.size).toBe(2 * 20 + 5 * 21);
+  expect([...labels.values()]).toContain('Drawer 21 bottom');
+  for (const group of result.groups) if (!labels.has(pieceKey(group.color))) expect(legendPart(group.color, metadata.customizer.parts).id).toMatch(/^case-/);
+  // The opening, not the list length, is the real limit.
+  expect(compile({ Drawers: Array.from({ length: 30 }, () => [1, 0]), Runner_height: 0.25, Runner_clearance: 0 }).error)
+    .toContain('the fronts must total');
 });
