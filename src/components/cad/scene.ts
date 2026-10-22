@@ -71,8 +71,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // below), Ctrl- (or Cmd-/Shift-) right-drag and middle-drag pan, and left-click
   // selects. The controls keep panning, wheel/pinch zoom and two-finger gestures;
   // with their own rotation disabled, a plain right-drag is left to orbitAbout.
+  // One finger is unmapped too, so a pinch that ends with a finger still down
+  // resets them instead of leaving that finger zooming against a lifted one.
   controls.enableRotate = false;
   controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+  controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
@@ -546,7 +549,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // jumps. Speed and the pole limits match the orbit controls.
   const up = new THREE.Vector3(0, 0, 1);
   const pivot = new THREE.Vector3();
-  const pointers = new Set<number>();
+  const pointers = new Map<number, { x: number; y: number }>();
   let orbiting: { id: number; x: number; y: number } | null = null;
   const surfaceAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -574,26 +577,34 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     orbiting = null;
     if (pivotMarker.visible) { pivotMarker.visible = false; render(); }
   };
+  const startOrbit = (id: number, x: number, y: number) => {
+    orbiting = { id, x, y };
+    // A point on the part under the cursor, else a snapped corner or edge, else the center.
+    const grabbed = surfaceAt(x, y) ?? snapAt(x, y)?.point ?? null;
+    pivot.copy(grabbed ?? controls.target);
+    pivotMarker.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pivot.toArray(), 3));
+    pivotMarker.visible = !!grabbed;
+  };
   const onPointerDown = (event: PointerEvent) => {
-    pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+    // Only a lone pointer can tap; a second finger makes it a gesture.
+    pressed = event.button === 0 && !pointers.size ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
-    pointers.add(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const orbitButton = event.pointerType === 'touch' ? event.button === 0
       : event.button === 2 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
-    if (orbitButton && pointers.size === 1) {
-      orbiting = { id: event.pointerId, x: event.clientX, y: event.clientY };
-      // A point on the part under the cursor, else a snapped corner or edge, else the center.
-      const grabbed = surfaceAt(event.clientX, event.clientY) ?? snapAt(event.clientX, event.clientY)?.point ?? null;
-      pivot.copy(grabbed ?? controls.target);
-      pivotMarker.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pivot.toArray(), 3));
-      pivotMarker.visible = !!grabbed;
-    } else stopOrbit(); // A second finger hands over to pinch and pan.
+    if (orbitButton && pointers.size === 1) startOrbit(event.pointerId, event.clientX, event.clientY);
+    else stopOrbit(); // A second finger hands over to pinch and pan.
     scheduleHover();
   };
-  const onPointerCancel = (event: PointerEvent) => { pointers.delete(event.pointerId); stopOrbit(); };
-  const onPointerUp = (event: PointerEvent) => {
+  // When a pinch ends with one finger still down, that finger orbits again from where it is.
+  const release = (event: PointerEvent) => {
     pointers.delete(event.pointerId);
     stopOrbit();
+    if (event.pointerType === 'touch' && pointers.size === 1) for (const [id, at] of pointers) startOrbit(id, at.x, at.y);
+  };
+  const onPointerCancel = release;
+  const onPointerUp = (event: PointerEvent) => {
+    release(event);
     dragging = false;
     scheduleHover();
     if (!onPick || !pressed || event.button !== 0 || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) return;
@@ -601,6 +612,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     onPick(pickEntityAt(event.clientX, event.clientY));
   };
   const onPointerMove = (event: PointerEvent) => {
+    if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (orbiting?.id === event.pointerId) {
       orbitAbout(event.clientX - orbiting.x, event.clientY - orbiting.y);
       orbiting.x = event.clientX;

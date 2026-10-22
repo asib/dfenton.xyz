@@ -337,7 +337,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · one finger rotates on touch. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
+          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
