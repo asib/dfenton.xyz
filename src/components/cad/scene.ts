@@ -67,9 +67,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   controls.minDistance = radius * 0.25;
   controls.maxDistance = radius * 15;
   controls.enableDamping = false;
-  // Left-drag orbits about the point under the cursor instead (see orbitAbout below);
-  // the controls keep right-drag panning, wheel/pinch zoom and two-finger gestures.
+  // Onshape's mouse: right-drag orbits about the point under the cursor (orbitAbout
+  // below), Ctrl- (or Cmd-/Shift-) right-drag and middle-drag pan, and left-click
+  // selects. The controls keep panning, wheel/pinch zoom and two-finger gestures;
+  // with their own rotation disabled, a plain right-drag is left to orbitAbout.
   controls.enableRotate = false;
+  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
@@ -537,10 +540,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     onHover?.(next);
   };
   const scheduleHover = () => { if (!frame && (pointer || pointerHover)) frame = requestAnimationFrame(updateHover); };
-  // Orbit about the grabbed point: the camera and its target rotate rigidly about
-  // the pivot, yaw about Z then pitch about the view's horizontal axis, so the
-  // pivot stays under the cursor and the view never jumps. Speed and the pole
-  // limits match the orbit controls.
+  // Orbit about the grabbed point (right-drag, or one finger on touch): the camera
+  // and its target rotate rigidly about the pivot, yaw about Z then pitch about the
+  // view's horizontal axis, so the pivot stays under the cursor and the view never
+  // jumps. Speed and the pole limits match the orbit controls.
   const up = new THREE.Vector3(0, 0, 1);
   const pivot = new THREE.Vector3();
   const pointers = new Set<number>();
@@ -575,7 +578,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
     pointers.add(event.pointerId);
-    if (event.button === 0 && pointers.size === 1) {
+    const orbitButton = event.pointerType === 'touch' ? event.button === 0
+      : event.button === 2 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    if (orbitButton && pointers.size === 1) {
       orbiting = { id: event.pointerId, x: event.clientX, y: event.clientY };
       // A point on the part under the cursor, else a snapped corner or edge, else the center.
       const grabbed = surfaceAt(event.clientX, event.clientY) ?? snapAt(event.clientX, event.clientY)?.point ?? null;
