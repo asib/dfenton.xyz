@@ -31,8 +31,8 @@
 .cad-measure dd span { margin-left: 8px; opacity: .6; }
 .cad-measure p { margin: 0; opacity: .8; }
 .cad-measure-label { position: absolute; left: 0; top: 0; padding: 2px 6px; font-size: 12px; white-space: nowrap; pointer-events: none; color: var(--cad-selected); background: var(--cad-surface); border: 1px solid var(--cad-selected); border-radius: 3px; }
-.cad-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-.cad-canvas canvas:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.cad-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+.cad-canvas canvas:focus-visible:not([data-pointer-focus]) { outline: 2px solid currentColor; outline-offset: 3px; }
 .cad-stage-label { position: absolute; left: 0; bottom: 0; font-size: 12px; opacity: .65; pointer-events: none; }
 .cad-fallback { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 12px; }
 .cad-fallback img { width: 220px; max-height: 200px; object-fit: contain; margin: 0 auto; }
