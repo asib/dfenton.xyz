@@ -4,7 +4,7 @@ import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
 import type { DrawingOutput, DrawingSheet } from './drawings';
-import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type Values } from './parameters';
+import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type ListValue, type ParameterValue, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
@@ -46,7 +46,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         const text = await response.text();
         const schema = await compileJob({ kind: 'parameters', source: text }, controller.signal);
         if (controller.signal.aborted || schema.kind !== 'parameters') return;
-        const parameters = parseParameters(schema.json);
+        const parameters = parseParameters(schema.json, text);
         const values = defaults(parameters);
         // Verify that configured downloads can preserve these literal assignments.
         configuredSource(text, parameters, values);
@@ -102,7 +102,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     window.clearTimeout(updateTimer.current);
     updateTimer.current = undefined;
   };
-  const edit = (name: string, value: string | number | boolean) => {
+  const edit = (name: string, value: ParameterValue) => {
     cancelAutoUpdate();
     job.current?.abort();
     setPhase('');
@@ -113,7 +113,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], next);
       if (options?.length && !options.some(option => option.value === next[parameter.name])) next[parameter.name] = options[0].value;
       // An empty field must not prevent switching to a mode that ignores it.
-      if (condition && !conditionMatches(condition, next) && typeof next[parameter.name] !== parameter.type) {
+      if (condition && !conditionMatches(condition, next) && parameter.type !== 'list' && typeof next[parameter.name] !== parameter.type) {
         next[parameter.name] = parameter.value;
       }
     }
@@ -158,7 +158,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     edited.current = false;
     if (!form.checkValidity()) {
       const invalid = form.querySelector<HTMLInputElement | HTMLSelectElement>('input:invalid, select:invalid');
-      setError(invalid ? `${parameterLabel(invalid.name)}: ${invalid.validationMessage}` : 'Enter valid parameter values.');
+      // List cells name their row and column; other fields use their parameter name.
+      setError(invalid ? `${invalid.getAttribute('aria-label') ?? parameterLabel(invalid.name)}: ${invalid.validationMessage}` : 'Enter valid parameter values.');
       return;
     }
     const values = draftValues.current;
@@ -204,6 +205,42 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
             const disabled = !!condition && !conditionMatches(condition, draft);
             if (disabled && condition.hide) return null;
             const value = draft[parameter.name];
+            if (parameter.type === 'list') {
+              const rows = Array.isArray(value) ? value : [];
+              const { columns = [], minRows = 1, maxRows, rowLabel = 'Row' } = parameter.control;
+              const defaultRows = parameter.value as ListValue;
+              const setRows = (next: ListValue) => { edit(parameter.name, next); };
+              const row = rowLabel.toLowerCase();
+              return <div key={parameter.name} className="cad-parameter cad-list-parameter" data-inactive={disabled || undefined}>
+                <span id={`${id}-label`} className="cad-list-title">{parameterLabel(parameter.name)}</span>
+                <p id={`${id}-help`}>{parameter.description}</p>
+                <div className="cad-list-scroll">
+                  <table className="cad-list-table" aria-labelledby={`${id}-label`} aria-describedby={`${id}-help`}>
+                    <thead><tr>
+                      <th scope="col">{rowLabel}</th>
+                      {columns.map(column => <th key={column.label} scope="col">{column.label}</th>)}
+                      <th scope="col"><span className="sr-only">Remove</span></th>
+                    </tr></thead>
+                    <tbody>{rows.map((cells, r) => <tr key={r}>
+                      <th scope="row">{r + 1}</th>
+                      {cells.map((cell, c) => <td key={c}>
+                        <input type="number" name={parameter.name} aria-label={`${rowLabel} ${String(r + 1)} ${columns[c].label.toLowerCase()}`}
+                          value={String(cell)} min={columns[c].min} max={columns[c].max} step={columns[c].step ?? 'any'} required disabled={disabled}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            setRows(rows.map((other, i) => i === r ? other.map((item, j) => j === c ? (raw === '' ? '' : Number(raw)) : item) : other));
+                          }} />
+                      </td>)}
+                      <td><button type="button" className="cad-list-remove" aria-label={`Remove ${row} ${String(r + 1)}`}
+                        disabled={disabled || rows.length <= minRows} onClick={() => { setRows(rows.filter((_, i) => i !== r)); }}>×</button></td>
+                    </tr>)}</tbody>
+                  </table>
+                </div>
+                {/* New rows copy the source's last default row. */}
+                <button type="button" className="cad-list-add" disabled={disabled || (maxRows !== undefined && rows.length >= maxRows)}
+                  onClick={() => { setRows([...rows, [...defaultRows[defaultRows.length - 1]]]); }}>Add {row}</button>
+              </div>;
+            }
             const { min, max, step } = parameter.control;
             const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], draft);
             const changeNumber = (raw: string) => { edit(parameter.name, raw === '' ? '' : Number(raw)); };

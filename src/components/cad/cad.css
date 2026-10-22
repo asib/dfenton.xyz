@@ -134,6 +134,20 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .cad-parameter :is(select, input:not([type=checkbox])) { width: 100%; min-width: 0; }
 .cad-parameter input[type=range] { display: block; min-height: 28px; accent-color: var(--cad-body); }
 .cad-parameter input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--cad-body); }
+.cad-list-title { display: block; margin-bottom: 6px; font-size: 12px; }
+.cad-list-scroll { overflow-x: auto; margin: 8px 0; }
+.cad-list-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cad-list-table th { font-weight: 500; text-align: left; padding: 4px 6px 4px 0; white-space: nowrap; }
+.cad-list-table tbody th { opacity: .75; width: 1%; }
+.cad-list-table td { padding: 3px 6px 3px 0; }
+.cad-list-table td:last-child { width: 1%; padding-right: 0; }
+.cad-parameter .cad-list-table input { width: 100%; min-width: 64px; }
+.cad-list-remove, .cad-list-add { color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 3px; font: inherit; font-size: 12px; cursor: pointer; }
+.cad-list-remove { width: 32px; min-height: 32px; }
+.cad-list-add { padding: 6px 10px; min-height: 32px; }
+.cad-list-remove:enabled:hover, .cad-list-add:enabled:hover { border-color: currentColor; }
+.cad-list-remove:disabled, .cad-list-add:disabled { opacity: .45; cursor: default; }
+.cad-list-remove:focus-visible, .cad-list-add:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .cad-parameters :is(select, input, button, summary):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .cad-parameter-actions { display: grid; gap: 8px; border-top: 1px solid var(--cad-border); padding-top: 16px; }
 .cad-parameters button { cursor: pointer; }
