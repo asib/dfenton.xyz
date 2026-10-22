@@ -193,20 +193,16 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     setLooks(targets, () => ({ hidden: false, opacity: fade ? 0.3 : 1 }));
   };
   const anyHidden = Object.values(appearances).some(value => value?.hidden);
-  // Blender-style: H hides or shows, Shift+H isolates, Alt+H shows all parts, Escape clears.
-  // Onshape-style aliases: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
-  // transparency, and Space clears from the 3D view. Actions apply to the selection or, with
-  // nothing selected, to the part under the cursor. Returns whether the key was used.
+  // Onshape-style keys: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
+  // transparency, and Space (from the 3D view) or Escape clears the selection. Actions apply to
+  // the selection or, with nothing selected, to the part under the cursor. Returns whether the
+  // key was used.
   const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
-    // event.code: Alt+H types another character on macOS.
     const { code, shiftKey: shift, altKey: alt } = event;
     const hovered = () => resolve(viewer?.hovered() ?? null);
-    const targets = ['KeyH', 'KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
+    const targets = ['KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
       ? selection.length ? selection : [hovered()].filter((target): target is Target => !!target) : [];
     if ((event.key === 'Escape' || (code === 'Space' && fromCanvas)) && selection.length) setSelected([]);
-    else if (code === 'KeyH' && alt && !shift && changedParts > 0) setAppearances({});
-    else if (code === 'KeyH' && shift && !alt && (targets.length || isolated('hide'))) toggleIsolation('hide', targets);
-    else if (code === 'KeyH' && !shift && !alt && targets.length) hideOrShow(targets);
     else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
     else if (code === 'KeyY' && shift && (anyHidden || targets.some(target => look(target.key).hidden))) showHidden(targets);
     else if (code === 'KeyI' && shift && (targets.length || isolated('ghost'))) toggleIsolation('ghost', targets);
@@ -285,7 +281,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts to add them to the selection or remove them; click empty space to clear it. H or Y hides and H or Shift+Y shows; Shift+H isolates and Shift+I fades everything else, restoring them when pressed again; Shift+T toggles transparency; Alt+H shows all parts; Space or Esc clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space or Esc clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -351,12 +347,12 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   onChange={(event) => { const opacity = Number(event.target.value) / 100; setLooks(selection, () => ({ opacity, hidden: false })); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={() => { hideOrShow(selection); }} title={allHidden(selection) ? 'Show (H or Shift+Y)' : 'Hide (H or Y)'}
-                  aria-keyshortcuts={allHidden(selection) ? 'H Shift+Y' : 'H Y'}>
+                <button type="button" onClick={() => { hideOrShow(selection); }} title={allHidden(selection) ? 'Show (Shift+Y)' : 'Hide (Y)'}
+                  aria-keyshortcuts={allHidden(selection) ? 'Shift+Y' : 'Y'}>
                   {allHidden(selection) ? 'Show' : 'Hide'}
                 </button>
                 <button type="button" onClick={() => { toggleIsolation('hide', selection); }} aria-pressed={isolated('hide')}
-                  title={isolated('hide') ? 'Restore the other parts (Shift+H)' : 'Hide everything else (Shift+H)'} aria-keyshortcuts="Shift+H">{isolated('hide') ? 'Unisolate' : 'Isolate'}</button>
+                  title={isolated('hide') ? 'Restore the other parts' : 'Hide everything else'}>{isolated('hide') ? 'Unisolate' : 'Isolate'}</button>
                 <button type="button" onClick={() => { toggleIsolation('ghost', selection); }} aria-pressed={isolated('ghost')}
                   title={isolated('ghost') ? 'Restore the other parts (Shift+I)' : 'Fade everything else (Shift+I)'} aria-keyshortcuts="Shift+I">{isolated('ghost') ? 'Unghost others' : 'Ghost others'}</button>
                 <button type="button" onClick={() => { setSelected([]); }} title="Clear the selection (Space or Esc)" aria-keyshortcuts="Space Escape">Clear selection</button>
@@ -371,7 +367,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   </li>)}
                 </ul>)}
             </div>}
-            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts and clear fades (Alt+H)" aria-keyshortcuts="Alt+H">Show all parts ({changedParts} changed)</button>}
+            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts and clear fades">Show all parts ({changedParts} changed)</button>}
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>
