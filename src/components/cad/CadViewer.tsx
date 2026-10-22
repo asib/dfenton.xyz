@@ -243,7 +243,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   // Onshape-style keys: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
   // transparency, and Space (from the 3D view) clears the selection. Actions apply to
   // the selection or, with nothing selected, to the part under the cursor. Returns whether the
-  // key was used.
+  // key was used. From the 3D view Space is always used, so it never scrolls the page.
   const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
     const { code, shiftKey: shift, altKey: alt } = event;
     const hovered = () => resolve(viewer?.hovered() ?? null);
@@ -252,7 +252,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
       .filter((target, i, all) => all.findIndex(other => other.key === target.key) === i);
     const targets = ['KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
       ? owners.length ? owners : [hovered()].filter((target): target is Target => !!target) : [];
-    if (code === 'Space' && fromCanvas && items.length) setSelected([]);
+    if (code === 'Space' && fromCanvas) setSelected(current => current.length ? [] : current);
     else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
     else if (code === 'KeyY' && shift && (anyHidden || targets.some(target => look(target.key).hidden))) showHidden(targets);
     else if (code === 'KeyI' && shift && (targets.length || isolated('ghost'))) toggleIsolation('ghost', targets);
