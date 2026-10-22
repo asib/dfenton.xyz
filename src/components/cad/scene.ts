@@ -67,6 +67,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   controls.minDistance = radius * 0.25;
   controls.maxDistance = radius * 15;
   controls.enableDamping = false;
+  // Left-drag orbits about the point under the cursor instead (see orbitAbout below);
+  // the controls keep right-drag panning, wheel/pinch zoom and two-finger gestures.
+  controls.enableRotate = false;
   // Render only on interaction; idle models don't consume an animation loop.
   const render = () => { renderer.render(scene, camera); };
   controls.addEventListener('change', render);
@@ -168,7 +171,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     points.visible = false;
     return points;
   });
-  scene.add(...edgeOverlays, ...vertexOverlays);
+  // While orbiting about a point on a part, a marker shows the pivot.
+  const pivotMaterial = new THREE.PointsMaterial({ size: 9, sizeAttenuation: false, map: dotTexture, transparent: true, alphaTest: 0.5, depthTest: false });
+  const pivotMarker = new THREE.Points(new THREE.BufferGeometry(), pivotMaterial);
+  pivotMarker.renderOrder = 8;
+  pivotMarker.visible = false;
+  scene.add(...edgeOverlays, ...vertexOverlays, pivotMarker);
 
   // Edges and vertices are keyed "edge:<version>:<layer>:<index>"; regenerating the
   // model bumps the version, so a stale key can never name a different edge.
@@ -225,6 +233,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     }
     lineMaterials[0].color.set(colors.selected);
     lineMaterials[1].color.set(colors.hover);
+    pivotMaterial.color.set(colors.edge);
     pointMaterials[0].color.set(colors.selected);
     pointMaterials[1].color.set(colors.hover);
     drawEntities(selected, 0);
@@ -426,7 +435,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     }
     return true;
   };
-  const pickEntityAt = (x: number, y: number): string | null => {
+  // The nearest unobstructed vertex or edge within its snap distance, with the snapped point.
+  const snapAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
     const vertices: { key: string; distance: number; point: THREE.Vector3 }[] = [];
     const edges: typeof vertices = [];
@@ -454,10 +464,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     });
     for (const candidates of [vertices, edges]) {
       candidates.sort((a, b) => a.distance - b.distance);
-      for (const candidate of candidates.slice(0, 8)) if (unobstructed(candidate.point)) return candidate.key;
+      for (const candidate of candidates.slice(0, 8)) if (unobstructed(candidate.point)) return candidate;
     }
-    return pickAt(x, y);
+    return null;
   };
+  const pickEntityAt = (x: number, y: number): string | null => snapAt(x, y)?.key ?? pickAt(x, y);
   // A click (not an orbit or pan drag) selects. Hover is picked at most once per
   // animation frame, not while dragging or for touch, and again after the view
   // or appearance changes; keyboard shortcuts also use the last pointer position.
@@ -474,12 +485,58 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     onHover?.(next);
   };
   const scheduleHover = () => { if (!frame && (pointer || pointerHover)) frame = requestAnimationFrame(updateHover); };
+  // Orbit about the grabbed point: the camera and its target rotate rigidly about
+  // the pivot, yaw about Z then pitch about the view's horizontal axis, so the
+  // pivot stays under the cursor and the view never jumps. Speed and the pole
+  // limits match the orbit controls.
+  const up = new THREE.Vector3(0, 0, 1);
+  const pivot = new THREE.Vector3();
+  const pointers = new Set<number>();
+  let orbiting: { id: number; x: number; y: number } | null = null;
+  const surfaceAt = (x: number, y: number) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
+    for (const hit of raycaster.intersectObject(mesh, false)) {
+      const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
+      if (!layer || visible(layer).hidden || (settings.axis !== 'off' && plane.distanceToPoint(hit.point) < 0)) continue;
+      return hit.point;
+    }
+    return null;
+  };
+  const orbitAbout = (dx: number, dy: number) => {
+    const height = renderer.domElement.clientHeight || 1;
+    const offset = camera.position.clone().sub(controls.target);
+    const polar = Math.acos(Math.min(1, Math.max(-1, offset.z / offset.length())));
+    // Positive pitch lowers the polar angle (looks down more), as dragging down does.
+    const pitch = Math.min(polar - 1e-3, Math.max(polar - (Math.PI - 1e-3), 2 * Math.PI * dy / height));
+    const rotation = new THREE.Quaternion().setFromAxisAngle(up, -2 * Math.PI * dx / height);
+    const axis = offset.clone().cross(up);
+    if (axis.lengthSq() > 1e-12) rotation.multiply(new THREE.Quaternion().setFromAxisAngle(axis.normalize(), pitch));
+    for (const point of [camera.position, controls.target]) point.sub(pivot).applyQuaternion(rotation).add(pivot);
+    controls.update();
+  };
+  const stopOrbit = () => {
+    orbiting = null;
+    if (pivotMarker.visible) { pivotMarker.visible = false; render(); }
+  };
   const onPointerDown = (event: PointerEvent) => {
     pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
+    pointers.add(event.pointerId);
+    if (event.button === 0 && pointers.size === 1) {
+      orbiting = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      // A point on the part under the cursor, else a snapped corner or edge, else the center.
+      const grabbed = surfaceAt(event.clientX, event.clientY) ?? snapAt(event.clientX, event.clientY)?.point ?? null;
+      pivot.copy(grabbed ?? controls.target);
+      pivotMarker.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pivot.toArray(), 3));
+      pivotMarker.visible = !!grabbed;
+    } else stopOrbit(); // A second finger hands over to pinch and pan.
     scheduleHover();
   };
+  const onPointerCancel = (event: PointerEvent) => { pointers.delete(event.pointerId); stopOrbit(); };
   const onPointerUp = (event: PointerEvent) => {
+    pointers.delete(event.pointerId);
+    stopOrbit();
     dragging = false;
     scheduleHover();
     if (!onPick || !pressed || event.button !== 0 || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) return;
@@ -487,6 +544,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     onPick(pickEntityAt(event.clientX, event.clientY));
   };
   const onPointerMove = (event: PointerEvent) => {
+    if (orbiting?.id === event.pointerId) {
+      orbitAbout(event.clientX - orbiting.x, event.clientY - orbiting.y);
+      orbiting.x = event.clientX;
+      orbiting.y = event.clientY;
+    }
     pointer = { x: event.clientX, y: event.clientY };
     touch = event.pointerType === 'touch';
     dragging = event.buttons !== 0;
@@ -499,6 +561,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   renderer.domElement.addEventListener('pointerup', onPointerUp);
   renderer.domElement.addEventListener('pointermove', onPointerMove);
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
+  renderer.domElement.addEventListener('pointercancel', onPointerCancel);
   setTheme();
   setSettings({ mode: 'edges', axis: 'off', position: 50, flipped: false });
   resize();
@@ -527,6 +590,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+      renderer.domElement.removeEventListener('pointercancel', onPointerCancel);
+      pivotMarker.geometry.dispose();
+      pivotMaterial.dispose();
       controls.removeEventListener('change', scheduleHover);
       cancelAnimationFrame(frame);
       controls.removeEventListener('change', render);
