@@ -204,10 +204,18 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const found = keys.map(entityAt).filter((item) => !!item && !visible(item.layer).hidden);
     const segments = found.flatMap((item) => item?.kind === 'edge' ? edgeSegments(item.edge.points) : []);
     const dots = found.flatMap((item) => item?.kind === 'vertex' ? item.vertex : []);
+    // Fresh geometries each time: a refilled instanced line geometry keeps the
+    // renderer's first instance count, so only the first selected edge would draw.
+    const lines = new LineSegmentsGeometry();
+    if (segments.length) lines.setPositions(segments);
+    edgeOverlays[overlay].geometry.dispose();
+    edgeOverlays[overlay].geometry = lines;
     edgeOverlays[overlay].visible = segments.length > 0;
-    if (segments.length) edgeOverlays[overlay].geometry.setPositions(segments);
+    const points = new THREE.BufferGeometry();
+    points.setAttribute('position', new THREE.Float32BufferAttribute(dots, 3));
+    vertexOverlays[overlay].geometry.dispose();
+    vertexOverlays[overlay].geometry = points;
     vertexOverlays[overlay].visible = dots.length > 0;
-    vertexOverlays[overlay].geometry.setAttribute('position', new THREE.Float32BufferAttribute(dots, 3));
   };
 
   let settings: ViewSettings = { mode: 'edges', axis: 'off', position: 50, flipped: false };
