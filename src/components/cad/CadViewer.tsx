@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type PartAppearances, type RenderMode, type SectionAxis } from './scene';
@@ -284,6 +284,29 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     return () => { document.removeEventListener('keydown', onKey); };
   }, [hasLegend, viewer]);
 
+  // Mouse use of the viewer's own controls (toolbar, display controls, legend and the panel
+  // headings) hands focus back to the 3D view, so keys keep their viewer meaning: Space clears
+  // the selection instead of pressing the clicked button again. Keyboard use and the parameter
+  // form keep their focus.
+  const pointerTarget = useRef<EventTarget | null>(null);
+  const focusView = () => { if (!status) viewer?.focus(); };
+  const viewerControl = (target: EventTarget | null, controls: string) => {
+    const control = target instanceof Element ? target.closest(controls) : null;
+    return !!control?.closest('.cad-workspace-toolbar, .cad-viewer, #cad-legend, .cad-panel > summary');
+  };
+  // Immediately for a control, before fullscreen records the focus to restore on exit. A label
+  // focuses its checkbox or slider only after the click, so other clicks check focus then.
+  const onWorkspaceClick = (event: MouseEvent<HTMLDivElement>) => {
+    const controls = 'button, summary, input[type=checkbox], input[type=range]';
+    if (event.detail === 0) return;
+    if (viewerControl(event.target, controls)) focusView();
+    else setTimeout(() => { if (viewerControl(document.activeElement, controls)) focusView(); });
+  };
+  // A dropdown hands focus back only when the pointer opened it, so arrow keys can still change it.
+  const onWorkspaceChange = (event: ChangeEvent<HTMLDivElement>) => {
+    if (event.target === pointerTarget.current && viewerControl(event.target, 'select')) focusView();
+  };
+
   const coordinate = viewer && axis !== 'off'
     ? viewer.sourceMin[axis] + viewer.size[axis] * position / 100
     : 0;
@@ -308,7 +331,9 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     <section className="cad" aria-label="CAD model">
       <p className="cad-description">{entry.description}</p>
       {entry.customizer?.drawings && <p className="cad-drawing-jump"><a href="#cad-drawings-title">View drawings ↓</a></p>}
-      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined} onKeyDown={onShortcut}
+      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined}
+        onKeyDown={(event) => { pointerTarget.current = null; onShortcut(event); }} onPointerDown={(event) => { pointerTarget.current = event.target; }}
+        onClick={onWorkspaceClick} onChange={onWorkspaceChange}
         role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? `${entry.title} fullscreen viewer` : undefined}>
         <div className="cad-workspace-toolbar">
           <span className="cad-workspace-title">{entry.title}</span>

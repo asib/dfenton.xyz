@@ -646,6 +646,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     // The piece or part under the pointer, if it is over the canvas.
     hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
     pointerInside: () => !!pointer,
+    // Focus the 3D view after pointer use of the viewer's own controls, without the focus ring.
+    focus: () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); },
     // An edge or vertex in model coordinates, with the piece it belongs to.
     entity: (key: string) => {
       const found = entityAt(key);
