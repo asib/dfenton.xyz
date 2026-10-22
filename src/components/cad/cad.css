@@ -166,6 +166,7 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .cad-part-select[data-piece-selected] { border-style: dashed; border-color: var(--cad-selected); }
 .cad-piece-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .cad-piece-list .cad-part-select { margin: 0; }
+.cad-piece-list .cad-part-select > [aria-hidden=true] { margin-left: auto; opacity: .7; }
 .cad-piece-up { justify-self: start; }
 .cad-part-swatch { display: inline-block; flex-shrink: 0; width: 12px; height: 12px; border: 1px solid rgb(0 0 0 / 20%); background: var(--part-color); }
 .dark .cad-part-swatch { background: var(--part-dark-color); }

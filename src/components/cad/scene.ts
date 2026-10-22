@@ -140,7 +140,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
 
   let settings: ViewSettings = { mode: 'edges', axis: 'off', position: 50, flipped: false };
   let appearances: PartAppearances = {};
-  let selected: string | null = null;
+  let selected: string[] = [];
   const colors = { body: '', edge: '', selected: '' };
   const visible = (layer: Layer) => {
     const look = (layer.piece ? appearances[layer.piece] : undefined) ?? (layer.part ? appearances[layer.part] : undefined);
@@ -155,7 +155,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (const layer of layers) {
       const { hidden, opacity } = visible(layer);
       const translucent = opacity < 0.999;
-      const highlighted = !!selected && (layer.part === selected || layer.piece === selected);
+      const highlighted = selected.some(key => key === layer.part || key === layer.piece);
       layer.solid.visible = !hidden;
       layer.solid.vertexColors = colored;
       layer.solid.color.set(colored ? '#ffffff' : colors.body);
@@ -207,7 +207,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     apply();
   };
 
-  const setAppearance = (next: PartAppearances, nextSelected: string | null) => {
+  const setAppearance = (next: PartAppearances, nextSelected: string[]) => {
     appearances = next;
     selected = nextSelected;
     apply();

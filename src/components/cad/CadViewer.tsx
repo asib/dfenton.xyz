@@ -31,8 +31,8 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
   // View-only part appearance survives regeneration and theme changes; it never changes downloads.
   const [appearances, setAppearances] = useState<PartAppearances>({});
-  // A legend part ID, or a piece key when one piece of a multi-piece part is picked.
-  const [selected, setSelected] = useState<string | null>(null);
+  // Selected legend part IDs and piece keys; clicking toggles them, as in Onshape.
+  const [selected, setSelected] = useState<string[]>([]);
   const [pieces, setPieces] = useState<{ key: string; part: string }[]>([]);
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
@@ -72,7 +72,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
         setPieces(geometryPieces(geometry));
         try {
-          active = createScene(element, geometry, camera, setSelected);
+          active = createScene(element, geometry, camera, (key) => { pick.current(key); });
         } catch (error) {
           geometry.dispose();
           throw error;
@@ -112,10 +112,28 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     return piece && partPieces(part.id).length > 1 ? { key: piece.key, part, piece, label: pieceLabel(piece) } : { key: part.id, part, piece: undefined, label: part.label };
   };
   type Target = NonNullable<ReturnType<typeof resolve>>;
-  const selection = resolve(selected);
+  const selection = selected.map(resolve).filter((target): target is Target => !!target);
+  const selectionKey = selection.map(target => target.key).join(' ');
   useEffect(() => {
-    viewer?.setAppearance(appearances, selection?.key ?? null);
-  }, [viewer, appearances, selection?.key]);
+    viewer?.setAppearance(appearances, selectionKey ? selectionKey.split(' ') : []);
+  }, [viewer, appearances, selectionKey]);
+  // Clicking a part or piece adds it to the selection or removes it; empty space clears it.
+  // A whole group absorbs its selected pieces, and clicking one piece of a selected group
+  // leaves the group's other pieces selected.
+  const toggleSelect = (key: string | null) => {
+    const target = resolve(key);
+    if (!target) { setSelected([]); return; }
+    const siblings = partPieces(target.part.id).map(piece => piece.key);
+    setSelected(previous => {
+      const current = previous.map(item => resolve(item)?.key).filter((item): item is string => !!item);
+      if (current.includes(target.key)) return current.filter(item => item !== target.key);
+      if (target.piece && current.includes(target.part.id)) return [...current.filter(item => item !== target.part.id), ...siblings.filter(item => item !== target.key)];
+      if (!target.piece) return [...current.filter(item => !siblings.includes(item)), target.key];
+      return [...current, target.key];
+    });
+  };
+  const pick = useRef(toggleSelect);
+  pick.current = toggleSelect;
   // A piece's own setting overrides its legend part's.
   const look = (key: string) => {
     const piece = pieces.find(candidate => candidate.key === key);
@@ -134,51 +152,65 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
       return { ...Object.fromEntries(keep), [key]: { ...previous[key], ...change } };
     });
   };
-  // Isolate hides everything else; ghosting (Onshape's isolate) leaves it faint.
+  const setLooks = (targets: Target[], change: (key: string) => { hidden?: boolean; opacity?: number }) => {
+    for (const target of targets) setLook(target.key, change(target.key));
+  };
   // Isolate (hide everything else) and ghost (fade it) are toggles: repeating the same one
   // restores the appearance from before, unless something has changed since it was applied.
   const [isolation, setIsolation] = useState<{ mode: 'hide' | 'ghost'; previous: PartAppearances; applied: PartAppearances } | null>(null);
   const isolated = (mode: 'hide' | 'ghost') => isolation?.mode === mode && isolation.applied === appearances;
-  const toggleIsolation = (mode: 'hide' | 'ghost', target: Target | null) => {
+  const toggleIsolation = (mode: 'hide' | 'ghost', targets: Target[]) => {
     if (isolation && isolated(mode)) {
       setAppearances(isolation.previous);
       setIsolation(null);
-    } else if (target && visibleParts) isolate(target, mode, visibleParts);
+    } else if (targets.length && visibleParts) isolate(targets, mode, visibleParts);
   };
-  const isolate = (target: Target, mode: 'hide' | 'ghost', parts: NonNullable<typeof visibleParts>) => {
+  const isolate = (targets: Target[], mode: 'hide' | 'ghost', parts: NonNullable<typeof visibleParts>) => {
     const others = mode === 'hide' ? { hidden: true } : { opacity: 0.15 };
-    const next: PartAppearances = Object.fromEntries(parts.filter(part => part.id !== target.part.id).map(part => [part.id, others]));
-    if (target.piece) for (const piece of partPieces(target.part.id)) if (piece.key !== target.key) next[piece.key] = others;
+    const kept = new Set(targets.map(target => target.part.id));
+    const next: PartAppearances = Object.fromEntries(parts.filter(part => !kept.has(part.id)).map(part => [part.id, others]));
+    // Within a partly selected group, only its selected pieces stay.
+    for (const id of kept) if (!targets.some(target => target.key === id)) {
+      for (const piece of partPieces(id)) if (!targets.some(target => target.key === piece.key)) next[piece.key] = others;
+    }
     setAppearances(next);
     setIsolation({ mode, previous: isolated('hide') || isolated('ghost') ? isolation?.previous ?? {} : appearances, applied: next });
   };
   const changedParts = visibleParts?.filter(part => changed(part.id) || partPieces(part.id).some(piece => changed(piece.key))).length ?? 0;
-  const toggleHidden = (target: Target) => {
-    setLook(target.key, { hidden: !look(target.key).hidden, opacity: look(target.key).opacity || 1 });
+  const allHidden = (targets: Target[]) => targets.length > 0 && targets.every(target => look(target.key).hidden);
+  const hideOrShow = (targets: Target[]) => {
+    const show = allHidden(targets);
+    setLooks(targets, key => ({ hidden: !show, opacity: look(key).opacity || 1 }));
   };
-  // Shows the target if hidden, otherwise every hidden part and piece; fades are kept.
-  const showHidden = (target: Target | null) => {
-    if (target && look(target.key).hidden) { toggleHidden(target); return; }
+  // Shows the hidden targets, otherwise every hidden part and piece; fades are kept.
+  const showHidden = (targets: Target[]) => {
+    const hidden = targets.filter(target => look(target.key).hidden);
+    if (hidden.length) { setLooks(hidden, key => ({ hidden: false, opacity: look(key).opacity || 1 })); return; }
     setAppearances(previous => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, hidden: false }])));
   };
+  const toggleTransparent = (targets: Target[]) => {
+    const fade = targets.every(target => look(target.key).opacity >= 1);
+    setLooks(targets, () => ({ hidden: false, opacity: fade ? 0.3 : 1 }));
+  };
   const anyHidden = Object.values(appearances).some(value => value?.hidden);
-  // Blender-style: H hides or shows, Shift+H isolates, Alt+H shows all parts, Escape deselects.
+  // Blender-style: H hides or shows, Shift+H isolates, Alt+H shows all parts, Escape clears.
   // Onshape-style aliases: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
-  // transparency, and Space deselects from the 3D view. Actions apply to the selection or, with
+  // transparency, and Space clears from the 3D view. Actions apply to the selection or, with
   // nothing selected, to the part under the cursor. Returns whether the key was used.
   const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
     // event.code: Alt+H types another character on macOS.
-    const { code, shiftKey: shift, altKey: alt } = event, plain = !shift && !alt;
-    const acting = ['KeyH', 'KeyY', 'KeyI', 'KeyT'].includes(code) && !alt;
-    const target = acting ? selection ?? resolve(viewer?.hovered() ?? null) : null;
-    if ((event.key === 'Escape' || (code === 'Space' && fromCanvas)) && selection) setSelected(null);
+    const { code, shiftKey: shift, altKey: alt } = event;
+    const hovered = () => resolve(viewer?.hovered() ?? null);
+    const targets = ['KeyH', 'KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
+      ? selection.length ? selection : [hovered()].filter((target): target is Target => !!target) : [];
+    if ((event.key === 'Escape' || (code === 'Space' && fromCanvas)) && selection.length) setSelected([]);
     else if (code === 'KeyH' && alt && !shift && changedParts > 0) setAppearances({});
-    else if (code === 'KeyH' && shift && (target || isolated('hide'))) toggleIsolation('hide', target);
-    else if (code === 'KeyH' && plain && target) toggleHidden(target);
-    else if (code === 'KeyY' && plain && target && !look(target.key).hidden) toggleHidden(target);
-    else if (code === 'KeyY' && shift && !alt && (anyHidden || (target && look(target.key).hidden))) showHidden(target);
-    else if (code === 'KeyI' && shift && (target || isolated('ghost'))) toggleIsolation('ghost', target);
-    else if (code === 'KeyT' && shift && target) setLook(target.key, { hidden: false, opacity: look(target.key).opacity < 1 ? 1 : 0.3 });
+    else if (code === 'KeyH' && shift && !alt && (targets.length || isolated('hide'))) toggleIsolation('hide', targets);
+    else if (code === 'KeyH' && !shift && !alt && targets.length) hideOrShow(targets);
+    else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
+    else if (code === 'KeyY' && shift && (anyHidden || targets.some(target => look(target.key).hidden))) showHidden(targets);
+    else if (code === 'KeyI' && shift && (targets.length || isolated('ghost'))) toggleIsolation('ghost', targets);
+    else if (code === 'KeyT' && shift && targets.length) toggleTransparent(targets);
     else return false;
     return true;
   };
@@ -253,7 +285,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click a part to select it. Shortcuts act on the selection, or on the part under the cursor when nothing is selected: H or Y hides and H or Shift+Y shows; Shift+H isolates and Shift+I fades everything else; Shift+T toggles transparency; Alt+H shows all parts; Esc or Space deselects.'}</p>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts to add them to the selection or remove them; click empty space to clear it. H or Y hides and H or Shift+Y shows; Shift+H isolates and Shift+I fades everything else, restoring them when pressed again; Shift+T toggles transparency; Alt+H shows all parts; Space or Esc clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -295,39 +327,49 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             <p className="cad-part-hint">Click a part in the model or below to fade, hide or isolate it.</p>
             <ul className="cad-part-key" aria-label="Part colors">
               {visibleParts?.map((part) => <li key={part.id}>
-                <button type="button" className="cad-part-select" aria-pressed={selection?.key === part.id}
-                  data-hidden={look(part.id).hidden || undefined} data-piece-selected={selection?.piece && selection.part.id === part.id ? true : undefined}
-                  onClick={() => { setSelected(selection?.key === part.id ? null : part.id); }}>
+                <button type="button" className="cad-part-select" aria-pressed={selection.some(target => target.key === part.id)}
+                  data-hidden={look(part.id).hidden || undefined} data-piece-selected={selection.some(target => target.piece && target.part.id === part.id) || undefined}
+                  onClick={() => { toggleSelect(part.id); }}>
                   <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />
                   <span>{part.label}{changed(part.id) ? lookLabel(part.id) : partPieces(part.id).some(piece => changed(piece.key)) ? ' · pieces changed' : ''}</span>
                 </button>
               </li>)}
             </ul>
-            {selection && <div className="cad-part-controls" role="group" aria-label={`${selection.label} appearance`}>
-              <p>Selected: <strong>{selection.label}</strong>{selection.piece && <> · in {selection.part.label}</>}</p>
-              <label className="cad-slider">Opacity <output>{Math.round(look(selection.key).opacity * 100)}%</output>
-                <input type="range" min="0" max="100" step="5" value={Math.round(look(selection.key).opacity * 100)}
-                  onChange={(event) => { setLook(selection.key, { opacity: Number(event.target.value) / 100, hidden: false }); }} />
+            {selection.length > 0 && <div className="cad-part-controls" role="group" aria-label="Selection appearance">
+              <p>Selected: {selection.length === 1
+                ? <><strong>{selection[0].label}</strong>{selection[0].piece && <> · in {selection[0].part.label}</>}</>
+                : <strong>{selection.length} items</strong>}</p>
+              {selection.length > 1 && <ul className="cad-piece-list" aria-label="Selected items">
+                {selection.map(target => <li key={target.key}>
+                  <button type="button" className="cad-part-select" title="Remove from the selection" onClick={() => { toggleSelect(target.key); }}>
+                    <span>{target.label}{lookLabel(target.key)}</span><span aria-hidden="true">×</span>
+                  </button>
+                </li>)}
+              </ul>}
+              <label className="cad-slider">Opacity <output>{Math.round(look(selection[0].key).opacity * 100)}%</output>
+                <input type="range" min="0" max="100" step="5" value={Math.round(look(selection[0].key).opacity * 100)}
+                  onChange={(event) => { const opacity = Number(event.target.value) / 100; setLooks(selection, () => ({ opacity, hidden: false })); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={() => { toggleHidden(selection); }} title={look(selection.key).hidden ? 'Show (H or Shift+Y)' : 'Hide (H or Y)'}
-                  aria-keyshortcuts={look(selection.key).hidden ? 'H Shift+Y' : 'H Y'}>
-                  {look(selection.key).hidden ? 'Show' : 'Hide'}
+                <button type="button" onClick={() => { hideOrShow(selection); }} title={allHidden(selection) ? 'Show (H or Shift+Y)' : 'Hide (H or Y)'}
+                  aria-keyshortcuts={allHidden(selection) ? 'H Shift+Y' : 'H Y'}>
+                  {allHidden(selection) ? 'Show' : 'Hide'}
                 </button>
                 <button type="button" onClick={() => { toggleIsolation('hide', selection); }} aria-pressed={isolated('hide')}
                   title={isolated('hide') ? 'Restore the other parts (Shift+H)' : 'Hide everything else (Shift+H)'} aria-keyshortcuts="Shift+H">{isolated('hide') ? 'Unisolate' : 'Isolate'}</button>
                 <button type="button" onClick={() => { toggleIsolation('ghost', selection); }} aria-pressed={isolated('ghost')}
                   title={isolated('ghost') ? 'Restore the other parts (Shift+I)' : 'Fade everything else (Shift+I)'} aria-keyshortcuts="Shift+I">{isolated('ghost') ? 'Unghost others' : 'Ghost others'}</button>
-                <button type="button" onClick={() => { setSelected(null); }} title="Deselect (Esc or Space)" aria-keyshortcuts="Escape Space">Deselect</button>
+                <button type="button" onClick={() => { setSelected([]); }} title="Clear the selection (Space or Esc)" aria-keyshortcuts="Space Escape">Clear selection</button>
               </div>
-              {selection.piece ? <button type="button" className="cad-piece-up" onClick={() => { setSelected(selection.part.id); }}>Select all {selection.part.label}</button> :
-                partPieces(selection.part.id).length > 1 && <ul className="cad-piece-list" aria-label={`Pieces of ${selection.part.label}`}>
-                  {partPieces(selection.part.id).map(piece => <li key={piece.key}>
-                    <button type="button" className="cad-part-select" data-hidden={look(piece.key).hidden || undefined} onClick={() => { setSelected(piece.key); }}>
+              {selection.length === 1 && (selection[0].piece
+                ? <button type="button" className="cad-piece-up" onClick={() => { setSelected([selection[0].part.id]); }}>Select all {selection[0].part.label}</button>
+                : partPieces(selection[0].part.id).length > 1 && <ul className="cad-piece-list" aria-label={`Pieces of ${selection[0].part.label}`}>
+                  {partPieces(selection[0].part.id).map(piece => <li key={piece.key}>
+                    <button type="button" className="cad-part-select" data-hidden={look(piece.key).hidden || undefined} onClick={() => { setSelected([piece.key]); }}>
                       <span>{pieceLabel(piece)}{lookLabel(piece.key)}</span>
                     </button>
                   </li>)}
-                </ul>}
+                </ul>)}
             </div>}
             {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts and clear fades (Alt+H)" aria-keyshortcuts="Alt+H">Show all parts ({changedParts} changed)</button>}
           </details>}
