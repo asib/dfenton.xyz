@@ -194,7 +194,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   };
   const anyHidden = Object.values(appearances).some(value => value?.hidden);
   // Onshape-style keys: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
-  // transparency, and Space (from the 3D view) or Escape clears the selection. Actions apply to
+  // transparency, and Space (from the 3D view) clears the selection. Actions apply to
   // the selection or, with nothing selected, to the part under the cursor. Returns whether the
   // key was used.
   const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
@@ -202,7 +202,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     const hovered = () => resolve(viewer?.hovered() ?? null);
     const targets = ['KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
       ? selection.length ? selection : [hovered()].filter((target): target is Target => !!target) : [];
-    if ((event.key === 'Escape' || (code === 'Space' && fromCanvas)) && selection.length) setSelected([]);
+    if (code === 'Space' && fromCanvas && selection.length) setSelected([]);
     else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
     else if (code === 'KeyY' && shift && (anyHidden || targets.some(target => look(target.key).hidden))) showHidden(targets);
     else if (code === 'KeyI' && shift && (targets.length || isolated('ghost'))) toggleIsolation('ghost', targets);
@@ -216,7 +216,6 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     if (!hasLegend || event.ctrlKey || event.metaKey || !(target.tagName === 'CANVAS' || target.closest('#cad-legend')) ||
         target.matches('input:not([type=range]), select, textarea')) return;
     if (!runShortcut(event, target.tagName === 'CANVAS')) return;
-    // Consumed keys don't also reach the fullscreen workspace, so Escape deselects before it exits.
     event.preventDefault();
     event.stopPropagation();
   };
@@ -227,7 +226,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     if (!hasLegend || !viewer) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
       const active = document.activeElement;
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.key === 'Escape' ||
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey ||
           (active && active !== document.body) || !viewer.pointerInside()) return;
       if (latestShortcut.current(event, true)) event.preventDefault();
     };
@@ -281,7 +280,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space or Esc clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -355,7 +354,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   title={isolated('hide') ? 'Restore the other parts' : 'Hide everything else'}>{isolated('hide') ? 'Unisolate' : 'Isolate'}</button>
                 <button type="button" onClick={() => { toggleIsolation('ghost', selection); }} aria-pressed={isolated('ghost')}
                   title={isolated('ghost') ? 'Restore the other parts (Shift+I)' : 'Fade everything else (Shift+I)'} aria-keyshortcuts="Shift+I">{isolated('ghost') ? 'Unghost others' : 'Ghost others'}</button>
-                <button type="button" onClick={() => { setSelected([]); }} title="Clear the selection (Space or Esc)" aria-keyshortcuts="Space Escape">Clear selection</button>
+                <button type="button" onClick={() => { setSelected([]); }} title="Clear the selection (Space)" aria-keyshortcuts="Space">Clear selection</button>
               </div>
               {selection.length === 1 && (selection[0].piece
                 ? <button type="button" className="cad-piece-up" onClick={() => { setSelected([selection[0].part.id]); }}>Select all {selection[0].part.label}</button>
