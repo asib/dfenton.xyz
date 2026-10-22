@@ -155,6 +155,7 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .cad-configurations button:enabled:hover { border-color: currentColor; }
 .cad-configurations button:disabled { opacity: .45; cursor: default; }
 .cad-configurations :is(select, input, button):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.cad-configuration-link { width: 100%; margin-top: 8px; }
 .cad-configuration-danger { border-color: var(--cad-section) !important; color: var(--cad-section) !important; }
 .cad-list-title { display: block; margin-bottom: 6px; font-size: 12px; }
 .cad-list-scroll { overflow-x: auto; margin: 8px 0; }

@@ -4,7 +4,8 @@ import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
 import type { DrawingOutput, DrawingSheet } from './drawings';
-import { fingerprint, readConfigurations, reconcile, storageKey, writeConfigurations, type Configuration } from './configurations';
+import { changedValues, fingerprint, readConfigurations, reconcile, storageKey, writeConfigurations, type Configuration } from './configurations';
+import { configurationLink, decodeConfiguration, encodeConfiguration, readConfigurationHash } from './shareLink';
 import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type ListValue, type ParameterValue, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
@@ -33,6 +34,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [configurationNotice, setConfigurationNotice] = useState('');
   const [naming, setNaming] = useState<{ mode: 'save' | 'rename'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // A share link the clipboard refused, shown for copying by hand.
+  const [manualLink, setManualLink] = useState('');
   const job = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const updateTimer = useRef<number>();
@@ -206,7 +209,14 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     if (!name) { reset(); setConfigurationNotice(''); return; }
     const configuration = configurations.find(item => item.name === name);
     if (!configuration) return;
-    const { values, dropped } = reconcile(source.parameters, configuration.values);
+    applySaved(configuration.values, name, configuration.fingerprint !== fingerprint(source.parameters)
+      ? 'Saved for an earlier version of this model; every setting still applies.' : '');
+  };
+  // Shared by saved configurations and share links: values that still fit apply over
+  // the defaults, settle like an edit, and compile.
+  const applySaved = (saved: Record<string, unknown>, name: string, notice: string) => {
+    if (!source) return;
+    const { values, dropped } = reconcile(source.parameters, saved);
     const settled = settle(values);
     cancelAutoUpdate();
     job.current?.abort();
@@ -216,12 +226,51 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setError('');
     setPhase('');
     setActiveName(name);
-    setLoadedValues(settled);
+    setLoadedValues(name ? settled : null);
     setConfigurationNotice(dropped.length
-      ? `${String(dropped.length)} saved ${dropped.length === 1 ? 'setting no longer applies and was' : 'settings no longer apply and were'} reset to the source default: ${dropped.join(', ')}.`
-      : configuration.fingerprint !== fingerprint(source.parameters) ? 'Saved for an earlier version of this model; every setting still applies.' : '');
+      ? `${notice ? `${notice} ` : ''}${String(dropped.length)} ${dropped.length === 1 ? 'setting no longer applies and was' : 'settings no longer apply and were'} reset to the source default: ${dropped.join(', ')}.`
+      : notice);
     if (JSON.stringify(settled) !== JSON.stringify(result?.values)) void apply(settled);
   };
+  // Copy a link carrying the values that differ from the source defaults.
+  const copyLink = async () => {
+    if (!source) return;
+    setNaming(null);
+    setConfirmDelete(false);
+    if (form.current && !form.current.checkValidity()) {
+      setConfigurationNotice('Correct the invalid parameter values before sharing.');
+      return;
+    }
+    const link = configurationLink(window.location.href, await encodeConfiguration(changedValues(source.parameters, draftValues.current)));
+    try {
+      await navigator.clipboard.writeText(link);
+      setManualLink('');
+      setConfigurationNotice('Link copied. Opening it loads these parameters.');
+    } catch {
+      setManualLink(link);
+      setConfigurationNotice('Copy this link to share these parameters.');
+    }
+  };
+  // Opening a share link (or pasting one into this tab) loads it once the model is ready.
+  const ready = !!source && !!result && available;
+  const sharedRef = useRef(applySaved);
+  sharedRef.current = applySaved;
+  useEffect(() => {
+    if (!ready) return;
+    const loadShared = async () => {
+      const encoded = readConfigurationHash(window.location.hash);
+      if (!encoded) return;
+      const shared = await decodeConfiguration(decodeURIComponent(encoded));
+      // Keep the address clean: later edits would no longer match the link.
+      history.replaceState(history.state, '', window.location.pathname + window.location.search);
+      if (shared) sharedRef.current(shared, '', 'Loaded a shared configuration; use Save as to keep it.');
+      else setConfigurationNotice('The configuration link could not be read.');
+    };
+    void loadShared();
+    const onHash = () => { void loadShared(); };
+    window.addEventListener('hashchange', onHash);
+    return () => { window.removeEventListener('hashchange', onHash); };
+  }, [ready]);
   // Saves the values in the form, which must be valid; an existing name is replaced in place.
   const saveConfiguration = (name: string) => {
     if (!source) return;
@@ -268,7 +317,12 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model after a 1-second pause, or when you leave a field.</p>
     {source && <section className="cad-configurations" aria-labelledby="cad-configurations-title">
       <h3 id="cad-configurations-title">Saved configurations</h3>
-      {!storage ? <p>Saving configurations needs browser storage, which is unavailable here.</p> : <>
+      {!storage ? <>
+        <div className="cad-configuration-actions">
+          <button type="button" disabled={!available} onClick={() => { void copyLink(); }}>Copy link</button>
+        </div>
+        <p>Saving configurations needs browser storage, which is unavailable here; links still work.</p>
+      </> : <>
         <label className="cad-configuration-select">Configuration
           <select value={activeName} disabled={!available} onChange={(event) => { loadConfiguration(event.target.value); }}>
             <option value="">Source defaults</option>
@@ -291,11 +345,14 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
           {confirmDelete
             ? <button type="button" className="cad-configuration-danger" onClick={deleteConfiguration}>Confirm delete</button>
             : <button type="button" disabled={!activeName} onClick={() => { setConfirmDelete(true); }}>Delete</button>}
+          <button type="button" disabled={!available} onClick={() => { void copyLink(); }}>Copy link</button>
         </div>}
         {modified && <p>Changed since loading “{activeName}”; Update keeps the changes.</p>}
         {configurationNotice && <p role="status">{configurationNotice}</p>}
-        <p className="cad-configuration-help">Configurations are saved in this browser only.</p>
+        <p className="cad-configuration-help">Configurations are saved in this browser only; Copy link shares the current parameters.</p>
       </>}
+      {manualLink && <input className="cad-configuration-link" readOnly aria-label="Configuration link" value={manualLink}
+        onFocus={(event) => { event.currentTarget.select(); }} />}
     </section>}
     {source && <form ref={form}
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
