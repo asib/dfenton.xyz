@@ -47,13 +47,13 @@
   </style>
 
   <script>
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
-      window.localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      window.localStorage.setItem('theme', 'light');
-    }
+    // Storage can be blocked entirely (site data off) or refuse writes (private
+    // windows); fall back to the system preference for this visit.
+    var storedTheme = null;
+    try { storedTheme = window.localStorage.getItem('theme'); } catch (error) {}
+    var dark = storedTheme ? storedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+    try { window.localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (error) {}
 
     window.dispatchEvent(new Event('storage'));
   </script>
