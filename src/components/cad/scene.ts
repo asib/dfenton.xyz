@@ -29,7 +29,7 @@ interface Layer {
 }
 
 export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, cameraDirection = defaultCamera,
-  onPick?: (id: string | null) => void) {
+  onPick?: (id: string | null) => void, onHover?: (id: string | null) => void) {
   geometry.computeBoundingBox();
   const bounds = geometry.boundingBox;
   if (!bounds || bounds.isEmpty()) throw new Error('The model has no geometry.');
@@ -141,7 +141,26 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   let settings: ViewSettings = { mode: 'edges', axis: 'off', position: 50, flipped: false };
   let appearances: PartAppearances = {};
   let selected: string[] = [];
-  const colors = { body: '', edge: '', selected: '' };
+  // Hover comes from the pointer over the canvas, or from the legend; the pointer wins.
+  let pointerHover: string | null = null;
+  let externalHover: string | null = null;
+  const colors = { body: '', edge: '', selected: '', hover: '' };
+  const matches = (layer: Layer, key: string | null) => !!key && (key === layer.part || key === layer.piece);
+  // Selection and hover only change colors and edge visibility, so moving the
+  // pointer never recompiles materials.
+  const paint = () => {
+    const hover = pointerHover ?? externalHover;
+    for (const layer of layers) {
+      const selectedLayer = selected.some(key => matches(layer, key));
+      const hovered = !selectedLayer && matches(layer, hover);
+      const tint = selectedLayer ? colors.selected : hovered ? colors.hover : '#000000';
+      layer.solid.emissive.set(tint);
+      layer.solid.emissiveIntensity = selectedLayer ? 0.35 : hovered ? 0.22 : 0;
+      layer.edges.visible = !visible(layer).hidden && (settings.mode === 'edges' || selectedLayer || hovered);
+      layer.edges.material.color.set(selectedLayer ? colors.selected : hovered ? colors.hover : colors.edge);
+    }
+    render();
+  };
   const visible = (layer: Layer) => {
     const look = (layer.piece ? appearances[layer.piece] : undefined) ?? (layer.part ? appearances[layer.part] : undefined);
     return { hidden: !!look?.hidden || look?.opacity === 0, opacity: look?.opacity ?? 1 };
@@ -155,12 +174,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (const layer of layers) {
       const { hidden, opacity } = visible(layer);
       const translucent = opacity < 0.999;
-      const highlighted = selected.some(key => key === layer.part || key === layer.piece);
       layer.solid.visible = !hidden;
       layer.solid.vertexColors = colored;
       layer.solid.color.set(colored ? '#ffffff' : colors.body);
-      layer.solid.emissive.set(highlighted ? colors.selected : '#000000');
-      layer.solid.emissiveIntensity = highlighted ? 0.35 : 0;
       layer.solid.transparent = translucent;
       layer.solid.opacity = opacity;
       // Translucent parts let parts behind them show through.
@@ -168,8 +184,6 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       layer.solid.wireframe = mode === 'wireframe';
       layer.solid.clippingPlanes = planes;
       layer.solid.needsUpdate = true;
-      layer.edges.visible = !hidden && (mode === 'edges' || highlighted);
-      layer.edges.material.color.set(highlighted ? colors.selected : colors.edge);
       layer.edges.material.transparent = translucent;
       layer.edges.material.opacity = opacity;
       layer.edges.material.clippingPlanes = planes;
@@ -178,7 +192,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       layer.stencil.forEach((material) => { material.visible = !hidden && !translucent; });
     }
     stencilGroup.visible = cap.visible = clipping && mode !== 'wireframe';
-    render();
+    paint();
   };
 
   const setTheme = () => {
@@ -189,6 +203,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     colors.body = style.getPropertyValue('--cad-body').trim();
     colors.edge = style.getPropertyValue('--cad-edge').trim();
     colors.selected = style.getPropertyValue('--cad-selected').trim() || '#c2006b';
+    colors.hover = style.getPropertyValue('--cad-hover').trim() || '#e389c0';
     capMaterial.color.set(style.getPropertyValue('--cad-section').trim());
     apply();
   };
@@ -211,6 +226,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     appearances = next;
     selected = nextSelected;
     apply();
+    scheduleHover(); // A part may have been hidden under the pointer.
+  };
+  const setHover = (key: string | null) => {
+    if (key === externalHover) return;
+    externalHover = key;
+    paint();
   };
 
   const reset = () => {
@@ -263,6 +284,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     // Preserve camera/pan/zoom and part appearance; the section follows the new bounds.
     setTheme();
     setSettings(settings);
+    scheduleHover();
   };
   let previousWidth = 0;
   const resize = () => {
@@ -309,19 +331,42 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     }
     return null;
   };
-  // A click (not an orbit or pan drag) selects. The last pointer position over
-  // the canvas lets keyboard shortcuts act on the part under the cursor; it is
-  // picked only when asked, so moving the pointer costs nothing.
+  // A click (not an orbit or pan drag) selects. Hover is picked at most once per
+  // animation frame, not while dragging or for touch, and again after the view
+  // or appearance changes; keyboard shortcuts also use the last pointer position.
   let pressed: { x: number; y: number } | null = null;
   let pointer: { x: number; y: number } | null = null;
-  const onPointerDown = (event: PointerEvent) => { pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null; };
+  let dragging = false, touch = false, frame = 0;
+  const updateHover = () => {
+    frame = 0;
+    const next = pointer && !dragging && !touch ? pickAt(pointer.x, pointer.y) : null;
+    renderer.domElement.style.cursor = next ? 'pointer' : '';
+    if (next === pointerHover) return;
+    pointerHover = next;
+    paint();
+    onHover?.(next);
+  };
+  const scheduleHover = () => { if (!frame && (pointer || pointerHover)) frame = requestAnimationFrame(updateHover); };
+  const onPointerDown = (event: PointerEvent) => {
+    pressed = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+    dragging = true;
+    scheduleHover();
+  };
   const onPointerUp = (event: PointerEvent) => {
+    dragging = false;
+    scheduleHover();
     if (!onPick || !pressed || event.button !== 0 || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) return;
     pressed = null;
     onPick(pickAt(event.clientX, event.clientY));
   };
-  const onPointerMove = (event: PointerEvent) => { pointer = { x: event.clientX, y: event.clientY }; };
-  const onPointerLeave = () => { pointer = null; };
+  const onPointerMove = (event: PointerEvent) => {
+    pointer = { x: event.clientX, y: event.clientY };
+    touch = event.pointerType === 'touch';
+    dragging = event.buttons !== 0;
+    scheduleHover();
+  };
+  const onPointerLeave = () => { pointer = null; scheduleHover(); };
+  controls.addEventListener('change', scheduleHover);
   renderer.domElement.addEventListener('keydown', onKey);
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
   renderer.domElement.addEventListener('pointerup', onPointerUp);
@@ -332,7 +377,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   resize();
 
   return {
-    size, sourceMin, setSettings, setAppearance, reset, replaceGeometry,
+    size, sourceMin, setSettings, setAppearance, setHover, reset, replaceGeometry,
     // The piece or part under the pointer, if it is over the canvas.
     hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
     pointerInside: () => !!pointer,
@@ -344,6 +389,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
+      controls.removeEventListener('change', scheduleHover);
+      cancelAnimationFrame(frame);
       controls.removeEventListener('change', render);
       controls.dispose();
       geometry.dispose();

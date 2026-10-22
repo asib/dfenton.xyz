@@ -33,6 +33,8 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [appearances, setAppearances] = useState<PartAppearances>({});
   // Selected legend part IDs and piece keys; clicking toggles them, as in Onshape.
   const [selected, setSelected] = useState<string[]>([]);
+  // The piece or part under the pointer in the 3D view, mirrored in the legend.
+  const [canvasHover, setCanvasHover] = useState<string | null>(null);
   const [pieces, setPieces] = useState<{ key: string; part: string }[]>([]);
   const modelUrl = `${entry.href}${entry.model}`;
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
@@ -72,7 +74,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
         setPieces(geometryPieces(geometry));
         try {
-          active = createScene(element, geometry, camera, (key) => { pick.current(key); });
+          active = createScene(element, geometry, camera, (key) => { pick.current(key); }, setCanvasHover);
         } catch (error) {
           geometry.dispose();
           throw error;
@@ -134,6 +136,12 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   };
   const pick = useRef(toggleSelect);
   pick.current = toggleSelect;
+  const hoverTarget = resolve(canvasHover);
+  // Pointing at or focusing a legend entry, piece or selected item lights it in 3D.
+  const hoverProps = (key: string) => ({
+    onMouseEnter: () => { viewer?.setHover(key); }, onMouseLeave: () => { viewer?.setHover(null); },
+    onFocus: () => { viewer?.setHover(key); }, onBlur: () => { viewer?.setHover(null); },
+  });
   // A piece's own setting overrides its legend part's.
   const look = (key: string) => {
     const piece = pieces.find(candidate => candidate.key === key);
@@ -324,6 +332,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
               {visibleParts?.map((part) => <li key={part.id}>
                 <button type="button" className="cad-part-select" aria-pressed={selection.some(target => target.key === part.id)}
                   data-hidden={look(part.id).hidden || undefined} data-piece-selected={selection.some(target => target.piece && target.part.id === part.id) || undefined}
+                  data-hovered={hoverTarget?.part.id === part.id || undefined} {...hoverProps(part.id)}
                   onClick={() => { toggleSelect(part.id); }}>
                   <i className="cad-part-swatch" aria-hidden="true" style={{ '--part-color': part.color, '--part-dark-color': part.darkColor } as CSSProperties} />
                   <span>{part.label}{changed(part.id) ? lookLabel(part.id) : partPieces(part.id).some(piece => changed(piece.key)) ? ' · pieces changed' : ''}</span>
@@ -336,7 +345,8 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                 : <strong>{selection.length} items</strong>}</p>
               {selection.length > 1 && <ul className="cad-piece-list" aria-label="Selected items">
                 {selection.map(target => <li key={target.key}>
-                  <button type="button" className="cad-part-select" title="Remove from the selection" onClick={() => { toggleSelect(target.key); }}>
+                  <button type="button" className="cad-part-select" title="Remove from the selection" data-hovered={hoverTarget?.key === target.key || undefined}
+                    {...hoverProps(target.key)} onClick={() => { toggleSelect(target.key); }}>
                     <span>{target.label}{lookLabel(target.key)}</span><span aria-hidden="true">×</span>
                   </button>
                 </li>)}
@@ -360,7 +370,8 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                 ? <button type="button" className="cad-piece-up" onClick={() => { setSelected([selection[0].part.id]); }}>Select all {selection[0].part.label}</button>
                 : partPieces(selection[0].part.id).length > 1 && <ul className="cad-piece-list" aria-label={`Pieces of ${selection[0].part.label}`}>
                   {partPieces(selection[0].part.id).map(piece => <li key={piece.key}>
-                    <button type="button" className="cad-part-select" data-hidden={look(piece.key).hidden || undefined} onClick={() => { setSelected([piece.key]); }}>
+                    <button type="button" className="cad-part-select" data-hidden={look(piece.key).hidden || undefined}
+                      data-hovered={hoverTarget?.key === piece.key || undefined} {...hoverProps(piece.key)} onClick={() => { setSelected([piece.key]); }}>
                       <span>{pieceLabel(piece)}{lookLabel(piece.key)}</span>
                     </button>
                   </li>)}

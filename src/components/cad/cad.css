@@ -7,6 +7,7 @@
   --cad-control: transparent;
   --cad-surface: #efe6ee;
   --cad-selected: #c2006b;
+  --cad-hover: #e389c0;
   font-size: 14px;
 }
 .dark .cad {
@@ -16,6 +17,7 @@
   --cad-border: rgb(244 164 96 / 25%);
   --cad-surface: #1f1f1f;
   --cad-selected: #ff6cc0;
+  --cad-hover: #ffb3df;
 }
 .cad select option { background: var(--cad-surface); color: inherit; }
 .cad-description { line-height: 1.7; max-width: 70ch; }
@@ -169,6 +171,7 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .cad-part-select { display: flex; gap: 8px; align-items: center; width: 100%; padding: 4px 6px; margin: -4px -6px; text-align: left; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 3px; cursor: pointer; }
 .cad-part-select:hover { border-color: var(--cad-border); }
 .cad-part-select[aria-pressed=true] { border-color: var(--cad-selected); }
+.cad-part-select[data-hovered]:not([aria-pressed=true]) { border-color: var(--cad-hover); }
 .cad-part-select[data-hidden] span { opacity: .55; text-decoration: line-through; }
 .cad-part-select:focus-visible, .cad-part-controls :is(button, input):focus-visible, .cad-part-reset:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .cad-part-controls { display: grid; gap: 10px; margin: 0 0 16px; padding: 12px; border: 1px solid var(--cad-selected); border-radius: 3px; font-size: 12px; }
