@@ -114,8 +114,19 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     return piece && partPieces(part.id).length > 1 ? { key: piece.key, part, piece, label: pieceLabel(piece) } : { key: part.id, part, piece: undefined, label: part.label };
   };
   type Target = NonNullable<ReturnType<typeof resolve>>;
-  const selection = selected.map(resolve).filter((target): target is Target => !!target);
-  const selectionKey = selection.map(target => target.key).join(' ');
+  // Edges and vertices are measured, not hidden: they belong to a part for labels only.
+  const resolveEntity = (key: string | null) => {
+    const entity = key ? viewer?.entity(key) : undefined;
+    if (!key || !entity) return null;
+    const owner = resolve(entity.piece ?? entity.part);
+    const kind = entity.kind === 'edge' ? 'Edge' : 'Vertex';
+    return { key, entity, owner, label: owner ? `${kind} · ${owner.label}` : kind };
+  };
+  type EntityTarget = NonNullable<ReturnType<typeof resolveEntity>>;
+  const items = selected.map(key => resolve(key) ?? resolveEntity(key)).filter((item): item is Target | EntityTarget => !!item);
+  // Appearance actions apply to the selected parts and pieces.
+  const selection = items.filter((item): item is Target => 'part' in item);
+  const selectionKey = items.map(item => item.key).join(' ');
   useEffect(() => {
     viewer?.setAppearance(appearances, selectionKey ? selectionKey.split(' ') : []);
   }, [viewer, appearances, selectionKey]);
@@ -123,11 +134,15 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   // A whole group absorbs its selected pieces, and clicking one piece of a selected group
   // leaves the group's other pieces selected.
   const toggleSelect = (key: string | null) => {
+    if (resolveEntity(key)) {
+      setSelected(previous => previous.includes(key ?? '') ? previous.filter(item => item !== key) : [...previous, key ?? '']);
+      return;
+    }
     const target = resolve(key);
     if (!target) { setSelected([]); return; }
     const siblings = partPieces(target.part.id).map(piece => piece.key);
     setSelected(previous => {
-      const current = previous.map(item => resolve(item)?.key).filter((item): item is string => !!item);
+      const current = previous.map(item => resolve(item)?.key ?? (resolveEntity(item) ? item : undefined)).filter((item): item is string => !!item);
       if (current.includes(target.key)) return current.filter(item => item !== target.key);
       if (target.piece && current.includes(target.part.id)) return [...current.filter(item => item !== target.part.id), ...siblings.filter(item => item !== target.key)];
       if (!target.piece) return [...current.filter(item => !siblings.includes(item)), target.key];
@@ -136,7 +151,8 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   };
   const pick = useRef(toggleSelect);
   pick.current = toggleSelect;
-  const hoverTarget = resolve(canvasHover);
+  // Hovering an edge or vertex marks the part it belongs to in the legend.
+  const hoverTarget = resolve(canvasHover) ?? resolveEntity(canvasHover)?.owner ?? null;
   // Pointing at or focusing a legend entry, piece or selected item lights it in 3D.
   const hoverProps = (key: string) => ({
     onMouseEnter: () => { viewer?.setHover(key); }, onMouseLeave: () => { viewer?.setHover(null); },
@@ -208,9 +224,12 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
     const { code, shiftKey: shift, altKey: alt } = event;
     const hovered = () => resolve(viewer?.hovered() ?? null);
+    // A selected edge or vertex stands for the part it belongs to.
+    const owners = items.map(item => 'part' in item ? item : item.owner).filter((target): target is Target => !!target)
+      .filter((target, i, all) => all.findIndex(other => other.key === target.key) === i);
     const targets = ['KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
-      ? selection.length ? selection : [hovered()].filter((target): target is Target => !!target) : [];
-    if (code === 'Space' && fromCanvas && selection.length) setSelected([]);
+      ? owners.length ? owners : [hovered()].filter((target): target is Target => !!target) : [];
+    if (code === 'Space' && fromCanvas && items.length) setSelected([]);
     else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
     else if (code === 'KeyY' && shift && (anyHidden || targets.some(target => look(target.key).hidden))) showHidden(targets);
     else if (code === 'KeyI' && shift && (targets.length || isolated('ghost'))) toggleIsolation('ghost', targets);
@@ -288,7 +307,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
+          <p id="cad-help" className="cad-help">Drag to rotate · right-drag to pan · scroll or pinch to zoom. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -339,18 +358,19 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                 </button>
               </li>)}
             </ul>
-            {selection.length > 0 && <div className="cad-part-controls" role="group" aria-label="Selection appearance">
-              <p>Selected: {selection.length === 1
-                ? <><strong>{selection[0].label}</strong>{selection[0].piece && <> · in {selection[0].part.label}</>}</>
-                : <strong>{selection.length} items</strong>}</p>
-              {selection.length > 1 && <ul className="cad-piece-list" aria-label="Selected items">
-                {selection.map(target => <li key={target.key}>
-                  <button type="button" className="cad-part-select" title="Remove from the selection" data-hovered={hoverTarget?.key === target.key || undefined}
+            {items.length > 0 && <div className="cad-part-controls" role="group" aria-label="Selection">
+              <p>Selected: {items.length === 1
+                ? <><strong>{items[0].label}</strong>{'part' in items[0] && items[0].piece && <> · in {items[0].part.label}</>}</>
+                : <strong>{items.length} items</strong>}</p>
+              {items.length > 1 && <ul className="cad-piece-list" aria-label="Selected items">
+                {items.map(target => <li key={target.key}>
+                  <button type="button" className="cad-part-select" title="Remove from the selection" data-hovered={canvasHover === target.key || hoverTarget?.key === target.key || undefined}
                     {...hoverProps(target.key)} onClick={() => { toggleSelect(target.key); }}>
-                    <span>{target.label}{lookLabel(target.key)}</span><span aria-hidden="true">×</span>
+                    <span>{target.label}{'part' in target ? lookLabel(target.key) : ''}</span><span aria-hidden="true">×</span>
                   </button>
                 </li>)}
               </ul>}
+              {selection.length > 0 && <>
               <label className="cad-slider">Opacity <output>{Math.round(look(selection[0].key).opacity * 100)}%</output>
                 <input type="range" min="0" max="100" step="5" value={Math.round(look(selection[0].key).opacity * 100)}
                   onChange={(event) => { const opacity = Number(event.target.value) / 100; setLooks(selection, () => ({ opacity, hidden: false })); }} />
@@ -364,9 +384,12 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
                   title={isolated('hide') ? 'Restore the other parts' : 'Hide everything else'}>{isolated('hide') ? 'Unisolate' : 'Isolate'}</button>
                 <button type="button" onClick={() => { toggleIsolation('ghost', selection); }} aria-pressed={isolated('ghost')}
                   title={isolated('ghost') ? 'Restore the other parts (Shift+I)' : 'Fade everything else (Shift+I)'} aria-keyshortcuts="Shift+I">{isolated('ghost') ? 'Unghost others' : 'Ghost others'}</button>
+              </div>
+              </>}
+              <div className="cad-part-actions">
                 <button type="button" onClick={() => { setSelected([]); }} title="Clear the selection (Space)" aria-keyshortcuts="Space">Clear selection</button>
               </div>
-              {selection.length === 1 && (selection[0].piece
+              {selection.length === 1 && items.length === 1 && (selection[0].piece
                 ? <button type="button" className="cad-piece-up" onClick={() => { setSelected([selection[0].part.id]); }}>Select all {selection[0].part.label}</button>
                 : partPieces(selection[0].part.id).length > 1 && <ul className="cad-piece-list" aria-label={`Pieces of ${selection[0].part.label}`}>
                   {partPieces(selection[0].part.id).map(piece => <li key={piece.key}>
