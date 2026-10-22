@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CadEntry } from '../../misc';
 import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
 import type { DrawingOutput, DrawingSheet } from './drawings';
+import { fingerprint, readConfigurations, reconcile, storageKey, writeConfigurations, type Configuration } from './configurations';
 import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type ListValue, type ParameterValue, type Values } from './parameters';
 
 type Entry = CadEntry & { href: string; source: string };
@@ -23,6 +24,15 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [initialModel, setInitialModel] = useState<CompiledModel | null>(null);
+  // Named configurations saved in this browser for this item.
+  const storage = useMemo(() => { try { return window.localStorage; } catch { return null; } }, []);
+  const configurationKey = storageKey(entry.href);
+  const [configurations, setConfigurations] = useState<Configuration[]>(() => readConfigurations(storage, configurationKey));
+  const [activeName, setActiveName] = useState('');
+  const [loadedValues, setLoadedValues] = useState<Values | null>(null);
+  const [configurationNotice, setConfigurationNotice] = useState('');
+  const [naming, setNaming] = useState<{ mode: 'save' | 'rename'; text: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const job = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const updateTimer = useRef<number>();
@@ -102,12 +112,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     window.clearTimeout(updateTimer.current);
     updateTimer.current = undefined;
   };
-  const edit = (name: string, value: ParameterValue) => {
-    cancelAutoUpdate();
-    job.current?.abort();
-    setPhase('');
-    setError('');
-    const next = { ...draftValues.current, [name]: value };
+  // Keep choices and conditional fields consistent after any change of values.
+  const settle = (next: Values) => {
     for (const parameter of source?.parameters ?? []) {
       const condition = entry.customizer?.conditions?.[parameter.name];
       const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], next);
@@ -117,6 +123,14 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         next[parameter.name] = parameter.value;
       }
     }
+    return next;
+  };
+  const edit = (name: string, value: ParameterValue) => {
+    cancelAutoUpdate();
+    job.current?.abort();
+    setPhase('');
+    setError('');
+    const next = settle({ ...draftValues.current, [name]: value });
     // Blur can follow an input event before React renders the new draft.
     draftValues.current = next;
     edited.current = true;
@@ -168,6 +182,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const reset = () => {
     cancelAutoUpdate();
     if (!source) return;
+    setActiveName('');
+    setLoadedValues(null);
     job.current?.abort();
     const values = defaults(source.parameters);
     draftValues.current = values;
@@ -177,11 +193,110 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setPhase('');
     if (JSON.stringify(values) !== JSON.stringify(result?.values)) void apply(values);
   };
+  const persist = (next: Configuration[]) => {
+    if (writeConfigurations(storage, configurationKey, next)) { setConfigurations(next); return true; }
+    setConfigurationNotice('This browser did not allow saving; private windows and blocked site data prevent it.');
+    return false;
+  };
+  // Loading applies a configuration like Reset applies the defaults, then compiles it.
+  const loadConfiguration = (name: string) => {
+    setNaming(null);
+    setConfirmDelete(false);
+    if (!source) return;
+    if (!name) { reset(); setConfigurationNotice(''); return; }
+    const configuration = configurations.find(item => item.name === name);
+    if (!configuration) return;
+    const { values, dropped } = reconcile(source.parameters, configuration.values);
+    const settled = settle(values);
+    cancelAutoUpdate();
+    job.current?.abort();
+    draftValues.current = settled;
+    edited.current = false;
+    setDraft(settled);
+    setError('');
+    setPhase('');
+    setActiveName(name);
+    setLoadedValues(settled);
+    setConfigurationNotice(dropped.length
+      ? `${String(dropped.length)} saved ${dropped.length === 1 ? 'setting no longer applies and was' : 'settings no longer apply and were'} reset to the source default: ${dropped.join(', ')}.`
+      : configuration.fingerprint !== fingerprint(source.parameters) ? 'Saved for an earlier version of this model; every setting still applies.' : '');
+    if (JSON.stringify(settled) !== JSON.stringify(result?.values)) void apply(settled);
+  };
+  // Saves the values in the form, which must be valid; an existing name is replaced in place.
+  const saveConfiguration = (name: string) => {
+    if (!source) return;
+    if (form.current && !form.current.checkValidity()) {
+      setConfigurationNotice('Correct the invalid parameter values before saving.');
+      return;
+    }
+    const values = draftValues.current;
+    const configuration = { name, values, fingerprint: fingerprint(source.parameters), savedAt: new Date().toISOString() };
+    const exists = configurations.some(item => item.name === name);
+    if (!persist(exists ? configurations.map(item => item.name === name ? configuration : item) : [...configurations, configuration])) return;
+    setActiveName(name);
+    setLoadedValues(values);
+    setNaming(null);
+    setConfigurationNotice(exists ? `Saved over “${name}”.` : `Saved “${name}”.`);
+  };
+  const renameConfiguration = (name: string) => {
+    if (name !== activeName && configurations.some(item => item.name === name)) {
+      setConfigurationNotice(`A configuration named “${name}” already exists.`);
+      return;
+    }
+    if (!persist(configurations.map(item => item.name === activeName ? { ...item, name } : item))) return;
+    setActiveName(name);
+    setNaming(null);
+    setConfigurationNotice(`Renamed to “${name}”.`);
+  };
+  const deleteConfiguration = () => {
+    if (!persist(configurations.filter(item => item.name !== activeName))) return;
+    setConfigurationNotice(`Deleted “${activeName}”.`);
+    setActiveName('');
+    setLoadedValues(null);
+    setConfirmDelete(false);
+  };
+  const submitName = () => {
+    const name = naming?.text.trim() ?? '';
+    if (!name) { setConfigurationNotice('Enter a name for the configuration.'); return; }
+    if (naming?.mode === 'rename') renameConfiguration(name); else saveConfiguration(name);
+  };
+  const modified = !!activeName && !!loadedValues && JSON.stringify(draft) !== JSON.stringify(loadedValues);
   const groups = [...new Set(source?.parameters.map((parameter) => parameter.group))];
 
   return <aside className="cad-parameters" aria-label="Model parameters">
     <h2 className="sr-only">Model parameters</h2>
     <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model after a 1-second pause, or when you leave a field.</p>
+    {source && <section className="cad-configurations" aria-labelledby="cad-configurations-title">
+      <h3 id="cad-configurations-title">Saved configurations</h3>
+      {!storage ? <p>Saving configurations needs browser storage, which is unavailable here.</p> : <>
+        <label className="cad-configuration-select">Configuration
+          <select value={activeName} disabled={!available} onChange={(event) => { loadConfiguration(event.target.value); }}>
+            <option value="">Source defaults</option>
+            {configurations.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+          </select>
+        </label>
+        {naming ? <div className="cad-configuration-actions">
+          <input aria-label={naming.mode === 'rename' ? 'New configuration name' : 'Configuration name'} value={naming.text} maxLength={60} autoFocus
+            onChange={(event) => { setNaming({ ...naming, text: event.target.value }); }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); submitName(); }
+              if (event.key === 'Escape') { event.preventDefault(); setNaming(null); }
+            }} />
+          <button type="button" onClick={submitName}>{naming.mode === 'rename' ? 'Rename' : 'Save'}</button>
+          <button type="button" onClick={() => { setNaming(null); }}>Cancel</button>
+        </div> : <div className="cad-configuration-actions">
+          <button type="button" disabled={!available} onClick={() => { setConfirmDelete(false); setConfigurationNotice(''); setNaming({ mode: 'save', text: '' }); }}>Save as…</button>
+          <button type="button" disabled={!activeName || !modified} onClick={() => { saveConfiguration(activeName); }}>Update</button>
+          <button type="button" disabled={!activeName} onClick={() => { setConfirmDelete(false); setNaming({ mode: 'rename', text: activeName }); }}>Rename</button>
+          {confirmDelete
+            ? <button type="button" className="cad-configuration-danger" onClick={deleteConfiguration}>Confirm delete</button>
+            : <button type="button" disabled={!activeName} onClick={() => { setConfirmDelete(true); }}>Delete</button>}
+        </div>}
+        {modified && <p>Changed since loading “{activeName}”; Update keeps the changes.</p>}
+        {configurationNotice && <p role="status">{configurationNotice}</p>}
+        <p className="cad-configuration-help">Configurations are saved in this browser only.</p>
+      </>}
+    </section>}
     {source && <form ref={form}
       onInvalidCapture={(event) => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}
       onBlur={(event) => {

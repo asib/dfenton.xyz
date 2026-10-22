@@ -144,6 +144,18 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .cad-parameter :is(select, input:not([type=checkbox])) { width: 100%; min-width: 0; }
 .cad-parameter input[type=range] { display: block; min-height: 28px; accent-color: var(--cad-body); }
 .cad-parameter input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--cad-body); }
+.cad-configurations { margin: 0 0 20px; padding-bottom: 16px; border-bottom: 1px solid var(--cad-border); font-size: 12px; }
+.cad-configurations h3 { font-size: 13px; font-weight: 600; margin: 0 0 10px; }
+.cad-configurations p { font-size: 11px; line-height: 1.65; opacity: .75; margin: 8px 0 0; }
+.cad-configuration-select { display: grid; gap: 6px; }
+.cad-configuration-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.cad-configurations :is(select, input, button) { color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 3px; font: inherit; font-size: 12px; min-height: 32px; padding: 4px 8px; }
+.cad-configurations input { flex: 1 1 140px; min-width: 0; }
+.cad-configurations button { cursor: pointer; }
+.cad-configurations button:enabled:hover { border-color: currentColor; }
+.cad-configurations button:disabled { opacity: .45; cursor: default; }
+.cad-configurations :is(select, input, button):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.cad-configuration-danger { border-color: var(--cad-section) !important; color: var(--cad-section) !important; }
 .cad-list-title { display: block; margin-bottom: 6px; font-size: 12px; }
 .cad-list-scroll { overflow-x: auto; margin: 8px 0; }
 .cad-list-table { width: 100%; border-collapse: collapse; font-size: 12px; }
