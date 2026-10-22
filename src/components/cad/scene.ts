@@ -71,7 +71,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // the controls keep right-drag panning, wheel/pinch zoom and two-finger gestures.
   controls.enableRotate = false;
   // Render only on interaction; idle models don't consume an animation loop.
-  const render = () => { renderer.render(scene, camera); };
+  // The measurement label is HTML over the canvas, placed after every render.
+  let placeLabel: () => void = () => undefined;
+  const render = () => { renderer.render(scene, camera); placeLabel(); };
   controls.addEventListener('change', render);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.6));
@@ -176,7 +178,28 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const pivotMarker = new THREE.Points(new THREE.BufferGeometry(), pivotMaterial);
   pivotMarker.renderOrder = 8;
   pivotMarker.visible = false;
-  scene.add(...edgeOverlays, ...vertexOverlays, pivotMarker);
+  // A measurement's dimension line and end markers draw over everything.
+  const measureMaterial = new LineMaterial({ linewidth: 1.5, worldUnits: false, depthTest: false, transparent: true });
+  const measureLine = new LineSegments2(new LineSegmentsGeometry(), measureMaterial);
+  measureLine.renderOrder = 9;
+  measureLine.visible = false;
+  const measureEndsMaterial = new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, map: dotTexture, transparent: true, alphaTest: 0.5, depthTest: false });
+  const measureEnds = new THREE.Points(new THREE.BufferGeometry(), measureEndsMaterial);
+  measureEnds.renderOrder = 9;
+  measureEnds.visible = false;
+  const measureLabel = document.createElement('div');
+  measureLabel.className = 'cad-measure-label';
+  measureLabel.setAttribute('aria-hidden', 'true');
+  measureLabel.hidden = true;
+  host.appendChild(measureLabel);
+  const labelAnchor = new THREE.Vector3();
+  placeLabel = () => {
+    if (!measureLabel.textContent) return;
+    const p = labelAnchor.clone().project(camera);
+    measureLabel.hidden = p.z > 1;
+    measureLabel.style.transform = `translate(${String((p.x + 1) / 2 * host.clientWidth)}px, ${String((1 - p.y) / 2 * host.clientHeight)}px) translate(-50%, -135%)`;
+  };
+  scene.add(...edgeOverlays, ...vertexOverlays, pivotMarker, measureLine, measureEnds);
 
   // Edges and vertices are keyed "edge:<version>:<layer>:<index>"; regenerating the
   // model bumps the version, so a stale key can never name a different edge.
@@ -242,6 +265,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     lineMaterials[0].color.set(colors.selected);
     lineMaterials[1].color.set(colors.hover);
     pivotMaterial.color.set(colors.edge);
+    measureMaterial.color.set(colors.selected);
+    measureEndsMaterial.color.set(colors.selected);
     pointMaterials[0].color.set(colors.selected);
     pointMaterials[1].color.set(colors.hover);
     drawEntities(selected, 0);
@@ -315,6 +340,25 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     apply();
     scheduleHover(); // A part may have been hidden under the pointer.
   };
+  // Show a measurement from model coordinates: an optional dimension line and a label.
+  const setMeasurement = (measurement: { line?: [number[], number[]]; anchor: number[]; text: string } | null) => {
+    const toScene = (p: number[]) => p.map((n, i) => n - origin.getComponent(i));
+    const segment = measurement?.line ? [...toScene(measurement.line[0]), ...toScene(measurement.line[1])] : [];
+    const lines = new LineSegmentsGeometry();
+    if (segment.length) lines.setPositions(segment);
+    measureLine.geometry.dispose();
+    measureLine.geometry = lines;
+    measureLine.visible = segment.length > 0;
+    const ends = new THREE.BufferGeometry();
+    ends.setAttribute('position', new THREE.Float32BufferAttribute(segment, 3));
+    measureEnds.geometry.dispose();
+    measureEnds.geometry = ends;
+    measureEnds.visible = segment.length > 0;
+    measureLabel.textContent = measurement?.text ?? '';
+    measureLabel.hidden = !measurement;
+    if (measurement) labelAnchor.fromArray(toScene(measurement.anchor));
+    render();
+  };
   const setHover = (key: string | null) => {
     if (key === externalHover) return;
     externalHover = key;
@@ -382,7 +426,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
-    lineMaterials.forEach((material) => { material.resolution.set(width, height); });
+    [...lineMaterials, measureMaterial].forEach((material) => { material.resolution.set(width, height); });
     if (!previousWidth) reset();
     previousWidth = width;
     render();
@@ -575,7 +619,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   resize();
 
   return {
-    size, sourceMin, setSettings, setAppearance, setHover, reset, replaceGeometry,
+    size, sourceMin, setSettings, setAppearance, setHover, setMeasurement, reset, replaceGeometry,
     // The piece or part under the pointer, if it is over the canvas.
     hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
     pointerInside: () => !!pointer,
@@ -601,6 +645,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       renderer.domElement.removeEventListener('pointercancel', onPointerCancel);
       pivotMarker.geometry.dispose();
       pivotMaterial.dispose();
+      measureLine.geometry.dispose();
+      measureEnds.geometry.dispose();
+      measureMaterial.dispose();
+      measureEndsMaterial.dispose();
+      measureLabel.remove();
       controls.removeEventListener('change', scheduleHover);
       cancelAnimationFrame(frame);
       controls.removeEventListener('change', render);

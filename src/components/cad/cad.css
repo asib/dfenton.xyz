@@ -22,7 +22,15 @@
 .cad select option { background: var(--cad-surface); color: inherit; }
 .cad-description { line-height: 1.7; max-width: 70ch; }
 .cad-stage { position: relative; margin: 20px 0 12px; }
-.cad-canvas { width: 100%; height: clamp(320px, 60vw, 480px); }
+.cad-canvas { position: relative; width: 100%; height: clamp(320px, 60vw, 480px); }
+.cad-measure { position: absolute; top: 8px; left: 8px; max-width: calc(100% - 16px); padding: 8px 10px; font-size: 12px; line-height: 1.6; background: var(--cad-surface); border: 1px solid var(--cad-border); border-radius: 3px; pointer-events: none; }
+.cad-measure strong { display: block; margin-bottom: 2px; font-weight: 600; color: var(--cad-selected); }
+.cad-measure dl { display: grid; gap: 1px; margin: 0; }
+.cad-measure dl > div { display: flex; gap: 12px; justify-content: space-between; }
+.cad-measure dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cad-measure dd span { margin-left: 8px; opacity: .6; }
+.cad-measure p { margin: 0; opacity: .8; }
+.cad-measure-label { position: absolute; left: 0; top: 0; padding: 2px 6px; font-size: 12px; white-space: nowrap; pointer-events: none; color: var(--cad-selected); background: var(--cad-surface); border: 1px solid var(--cad-selected); border-radius: 3px; }
 .cad-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .cad-canvas canvas:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .cad-stage-label { position: absolute; left: 0; bottom: 0; font-size: 12px; opacity: .65; pointer-events: none; }

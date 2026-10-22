@@ -6,6 +6,8 @@ import ParametricControls from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
+import { inches } from './cutList';
+import { measure, type Measurable } from './measure';
 import SheetLayoutTable from './SheetLayoutTable';
 import type { CutListOutput } from './cutList';
 import { useFullscreen } from './useFullscreen';
@@ -126,6 +128,27 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const items = selected.map(key => resolve(key) ?? resolveEntity(key)).filter((item): item is Target | EntityTarget => !!item);
   // Appearance actions apply to the selected parts and pieces.
   const selection = items.filter((item): item is Target => 'part' in item);
+  // Selected edges and vertices are measured automatically, as in Onshape.
+  const measured = items.flatMap((item): Measurable[] => 'entity' in item ? [item.entity.kind === 'edge'
+    ? { kind: 'edge', points: item.entity.points, closed: item.entity.closed, length: item.entity.length }
+    : { kind: 'vertex', position: item.entity.position }] : []);
+  const measurement = measure(measured);
+  // Lengths in the entry's units first, then the other; inches snap to 64ths within float precision.
+  const formatLength = (mm: number) => {
+    const value = mm / 25.4, sixtyFourths = Math.round(value * 64);
+    const inchText = Math.abs(value - sixtyFourths / 64) < 2e-5 ? `${inches(sixtyFourths / 64)}″` : `${value.toFixed(3)}″`;
+    const mmText = `${mm.toFixed(2)} mm`;
+    return entry.customizer?.units === 'inches' ? [inchText, mmText] : [mmText, inchText];
+  };
+  const formatRow = (row: { value: number; unit: 'length' | 'angle' }) => row.unit === 'angle' ? [`${row.value.toFixed(2)}°`, ''] : formatLength(row.value);
+  const measurementKey = measurement ? JSON.stringify(measurement) : '';
+  useEffect(() => {
+    if (!viewer) return;
+    const shown = measurementKey ? JSON.parse(measurementKey) as NonNullable<typeof measurement> : null;
+    viewer.setMeasurement(shown ? { line: shown.line, anchor: shown.anchor, text: formatRow(shown.rows[0])[0] } : null);
+    // formatRow depends only on the entry's units.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, measurementKey]);
   const selectionKey = items.map(item => item.key).join(' ');
   useEffect(() => {
     viewer?.setAppearance(appearances, selectionKey ? selectionKey.split(' ') : []);
@@ -304,6 +327,13 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
               <img className={entry.previewDark ? 'cad-preview-light' : ''} src={`${entry.href}${entry.preview}`} alt={entry.title} />
               {entry.previewDark && <img className="cad-preview-dark" src={`${entry.href}${entry.previewDark}`} alt={entry.title} />}
               <p role="status">{status}</p>
+            </div>}
+            {!status && measured.length > 0 && <div className="cad-measure" role="status" aria-live="polite">
+              <strong>Measure</strong>
+              {measurement ? <dl>{measurement.rows.map(row => {
+                const [primary, secondary] = formatRow(row);
+                return <div key={row.label}><dt>{row.label}</dt><dd>{primary}{secondary && <span>{secondary}</span>}</dd></div>;
+              })}</dl> : <p>{measured.length === 1 ? 'Select another edge or vertex to measure a distance.' : 'Select up to two items, or only edges, to measure.'}</p>}
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
