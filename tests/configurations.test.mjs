@@ -55,6 +55,10 @@ test('storage round-trips and ignores corrupt or foreign data', () => {
     storage.setItem(key, raw);
     expect(readConfigurations(storage, key)).toEqual([]);
   }
+  // Worksheet settings are optional, but must be an object when present.
+  const withSheets = [{ ...saved[0], worksheets: { sheetLayout: { method: 'rip' } } }];
+  storage.setItem(key, JSON.stringify({ version: 1, configurations: [...withSheets, { ...saved[0], name: 'Bad sheets', worksheets: ['rip'] }] }));
+  expect(readConfigurations(storage, key)).toEqual(withSheets);
   // A mixed list keeps only the valid entries.
   storage.setItem(key, JSON.stringify({ version: 1, configurations: [...saved, { name: 'Bad', values: [] }] }));
   expect(readConfigurations(storage, key).map(c => c.name)).toEqual(['Wide']);

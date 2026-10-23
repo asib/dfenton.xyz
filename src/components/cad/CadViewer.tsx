@@ -13,6 +13,7 @@ import type { CutListOutput } from './cutList';
 import { useFullscreen } from './useFullscreen';
 import DrawingSheets from './DrawingSheets';
 import type { DrawingOutput } from './drawings';
+import { emptyWorksheets, type CutListDraft, type DraftUpdate, type SheetLayoutDraft, type WorksheetDrafts } from './worksheets';
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
@@ -31,6 +32,14 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
+  // Worksheet settings live here so saved configurations and share links can carry them.
+  const [worksheets, setWorksheets] = useState<WorksheetDrafts>(emptyWorksheets);
+  const onSheetLayout = useCallback<DraftUpdate<SheetLayoutDraft>>((update) => {
+    setWorksheets((previous) => ({ ...previous, sheetLayout: update(previous.sheetLayout) }));
+  }, []);
+  const onCutList = useCallback<DraftUpdate<CutListDraft>>((update) => {
+    setWorksheets((previous) => ({ ...previous, cutList: update(previous.cutList) }));
+  }, []);
   // View-only part appearance survives regeneration and theme changes; it never changes downloads.
   const [appearances, setAppearances] = useState<PartAppearances>({});
   // Selected legend part IDs and piece keys; clicking toggles them, as in Onshape.
@@ -459,14 +468,17 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>
-            <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onDrawings={setDrawings} onViewCutList={fullscreen ? viewCutList : undefined} />
+            <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onDrawings={setDrawings} onViewCutList={fullscreen ? viewCutList : undefined}
+              worksheets={worksheets} onWorksheets={setWorksheets} />
           </details>}
         </div>
         </div>
       </div>
       {entry.customizer?.drawings && <DrawingSheets output={drawings} title={entry.title} />}
-      {entry.customizer?.sheetLayout && <SheetLayoutTable output={cutList} title={entry.title} filename={entry.model.replace(/\.stl$/, '-sheet-layout.csv')} palette={entry.customizer.parts} />}
-      {entry.customizer?.cutList && <CutListTable output={cutList} title={entry.title} filename={entry.model.replace(/\.stl$/, '-cut-list.csv')} palette={entry.customizer.parts} />}
+      {entry.customizer?.sheetLayout && <SheetLayoutTable output={cutList} title={entry.title} filename={entry.model.replace(/\.stl$/, '-sheet-layout.csv')} palette={entry.customizer.parts}
+        draft={worksheets.sheetLayout} onDraft={onSheetLayout} />}
+      {entry.customizer?.cutList && <CutListTable output={cutList} title={entry.title} filename={entry.model.replace(/\.stl$/, '-cut-list.csv')} palette={entry.customizer.parts}
+        draft={worksheets.cutList} onDraft={onCutList} />}
       {entry.notes && <p className="cad-notes">{entry.notes}</p>}
       {entry.attribution && <p className="cad-attribution">{entry.attribution.text} <a href={entry.attribution.url}>Original design ↗</a></p>}
     </section>

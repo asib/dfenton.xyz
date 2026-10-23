@@ -1,25 +1,29 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import type { PartColor } from '../../misc';
-import { boardFeet, csvCell, groupCutList, inches, milledThickness, parseCutList, parseStockPreparation, roughDimensions, standardThickness, stockLabel, stockPlan, stockThicknesses, type CutListOutput, type CutPart, type StockLayoutMode, type StockPreparation } from './cutList';
+import { boardFeet, csvCell, groupCutList, inches, milledThickness, parseCutList, parseStockPreparation, roughDimensions, standardThickness, stockLabel, stockPlan, stockThicknesses, type CutListOutput, type CutPart, type StockLayoutMode } from './cutList';
+import { cutListDefaults, type CutListDraft, type DraftUpdate } from './worksheets';
 
 const number = (text: string) => text.trim() === '' ? NaN : Number(text);
 const feetFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Remove floating-point residue at rounding boundaries for display only.
 const feetText = (feet: number | null) => feet === null ? '—' : feetFormat.format(Number(feet.toPrecision(15)));
 
-export default function CutListTable({ output, title, filename, palette = [] }: { output: CutListOutput; title: string; filename: string; palette?: PartColor[] }) {
+export default function CutListTable({ output, title, filename, palette = [], draft, onDraft }: {
+  output: CutListOutput; title: string; filename: string; palette?: PartColor[];
+  draft: CutListDraft; onDraft: DraftUpdate<CutListDraft>;
+}) {
   const parsed = useMemo(() => {
     try { return { parts: parseCutList(output.text), preparation: parseStockPreparation(output.text), error: '' }; }
     catch { return { parts: [], preparation: null, error: 'The model’s cut list could not be read. Update the model to try again.' }; }
   }, [output.text]);
-  const [thicknesses, setThicknesses] = useState<Partial<Record<string, string>>>({});
-  const [layouts, setLayouts] = useState<Partial<Record<string, StockLayoutMode>>>({});
-  const [thicknessExtra, setThicknessExtra] = useState('0.25');
-  const [widthExtra, setWidthExtra] = useState('0.5');
-  const [lengthExtra, setLengthExtra] = useState('1');
-  const [extraPercent, setExtraPercent] = useState('20');
-  const [crosscutKerf, setCrosscutKerf] = useState('0.125');
-  const [preparationEdits, setPreparationEdits] = useState<Partial<Record<keyof StockPreparation, string>>>({});
+  // The viewer keeps the settings, as edits from the defaults.
+  const thicknesses = draft.thicknesses ?? {};
+  const layouts = draft.layouts ?? {};
+  const preparationEdits = draft.preparation ?? {};
+  const allowanceText = (key: keyof typeof cutListDefaults) => draft[key] ?? cutListDefaults[key];
+  const thicknessExtra = allowanceText('thicknessExtra'), widthExtra = allowanceText('widthExtra'), lengthExtra = allowanceText('lengthExtra');
+  const extraPercent = allowanceText('extraPercent'), crosscutKerf = allowanceText('crosscutKerf');
+  const editAllowance = (key: keyof typeof cutListDefaults) => (event: { target: { value: string } }) => { onDraft((previous) => ({ ...previous, [key]: event.target.value })); };
   if (parsed.error) return <p className="cad-error" role="alert">{parsed.error}</p>;
   if (!parsed.parts.length) return null;
   const hasResaw = parsed.parts.some(part => part.resawGroup);
@@ -58,7 +62,7 @@ export default function CutListTable({ output, title, filename, palette = [] }: 
   const valid = stockValid && totalWithExtra !== null;
   const extraHeading = percentageValid ? `With ${String(percentage)}% extra` : 'With extra';
   const editThickness = (ids: string[], value: string) => {
-    setThicknesses((previous) => ({ ...previous, ...Object.fromEntries(ids.map((id) => [id, value])) }));
+    onDraft((previous) => ({ ...previous, thicknesses: { ...previous.thicknesses, ...Object.fromEntries(ids.map((id) => [id, value])) } }));
   };
   const download = () => {
     const csv: (string | number)[][] = [
@@ -98,11 +102,11 @@ export default function CutListTable({ output, title, filename, palette = [] }: 
     <p className="cad-worksheet-help">Finished sizes are rectangular blanks before cutting the joinery. Matching blanks share a row; swatches identify their pieces. Rough quantities count parent boards: matching short pieces can share a longer board.{hasResaw && ' Each bookmatched pair shares one resaw parent.'}</p>
     <fieldset className="cad-stock-allowances">
       <legend>Rough-stock allowances</legend>
-      <label>Jointing/planing thickness (in, total)<input type="number" min="0" step="any" required value={thicknessExtra} onChange={(event) => { setThicknessExtra(event.target.value); }} /></label>
-      <label>Extra width (in)<input type="number" min="0" step="any" required value={widthExtra} onChange={(event) => { setWidthExtra(event.target.value); }} /></label>
-      <label>Extra length per blank (in)<input type="number" min="0" step="any" required value={lengthExtra} onChange={(event) => { setLengthExtra(event.target.value); }} /></label>
-      <label>Crosscut kerf (in)<input type="number" min="0" step="any" required value={crosscutKerf} onChange={(event) => { setCrosscutKerf(event.target.value); }} /></label>
-      <label>Extra board feet (%)<input type="number" min="0" step="any" required value={extraPercent} onChange={(event) => { setExtraPercent(event.target.value); }} /></label>
+      <label>Jointing/planing thickness (in, total)<input type="number" min="0" step="any" required value={thicknessExtra} onChange={editAllowance('thicknessExtra')} /></label>
+      <label>Extra width (in)<input type="number" min="0" step="any" required value={widthExtra} onChange={editAllowance('widthExtra')} /></label>
+      <label>Extra length per blank (in)<input type="number" min="0" step="any" required value={lengthExtra} onChange={editAllowance('lengthExtra')} /></label>
+      <label>Crosscut kerf (in)<input type="number" min="0" step="any" required value={crosscutKerf} onChange={editAllowance('crosscutKerf')} /></label>
+      <label>Extra board feet (%)<input type="number" min="0" step="any" required value={extraPercent} onChange={editAllowance('extraPercent')} /></label>
     </fieldset>
     {parsed.preparation && <fieldset className="cad-stock-allowances">
       <legend>{hasResaw ? 'Machine limits & resaw allowances' : 'Machine limits'}</legend>
@@ -113,10 +117,10 @@ export default function CutListTable({ output, title, filename, palette = [] }: 
         ['resawCleanup', 'Cleanup thickness per half (in)'],
       ] as const).filter(([key]) => hasResaw || !key.startsWith('resaw')).map(([key, label]) => <label key={key}>{label}<input type="number" min="0" step="any" required
         value={preparationEdits[key] ?? parsed.preparation?.[key]}
-        onChange={(event) => { setPreparationEdits((previous) => ({ ...previous, [key]: event.target.value })); }} /></label>)}
+        onChange={(event) => { onDraft((previous) => ({ ...previous, preparation: { ...previous.preparation, [key]: event.target.value } })); }} /></label>)}
     </fieldset>}
     <p className="cad-worksheet-help" id="stock-help">Machine minimum lengths apply to parent boards during jointing, planing and ripping. Auto compares separate blanks with one shared parent for each matching row and chooses the shorter total stock length. S3S the parent first, then crosscut it into shorter blanks. Parent length includes the allowance for each blank and a kerf between blanks. Each row also lets you choose separate blanks or one shared board.</p>
-    <p className="cad-worksheet-help">Auto thickness adds the total jointing/planing allowance to the required milled thickness, then rounds up to 4/4, 5/4, 6/4, 8/4, 10/4, 12/4 or 16/4 rough lumber. The allowance covers both faces together and is applied once to each parent board. Stock settings stay until you leave or reload this page.</p>
+    <p className="cad-worksheet-help">Auto thickness adds the total jointing/planing allowance to the required milled thickness, then rounds up to 4/4, 5/4, 6/4, 8/4, 10/4, 12/4 or 16/4 rough lumber. The allowance covers both faces together and is applied once to each parent board. Stock settings last until you leave or reload this page; saved configurations and copied links keep them.</p>
     {preparation && preparationValid && rows.filter((row) => row.part.resawGroup).map(({ part }) => <p className="cad-resaw-note" key={part.id}>
       <strong>Bottom parent: at least {inches(milledThickness(part, preparation))}″ thick after milling, before resawing.</strong>{' '}
       2 × {inches(part.thickness)}″ finished thickness + {inches(preparation.resawKerf)}″ kerf + 2 × {inches(preparation.resawCleanup)}″ cleanup.
@@ -137,7 +141,7 @@ export default function CutListTable({ output, title, filename, palette = [] }: 
             <th scope="row"><span className="cad-blank-swatches">{colors.map((color) => <i key={color.id} className="cad-part-swatch" aria-hidden="true" title={color.label} style={{ '--part-color': color.color, '--part-dark-color': color.darkColor } as CSSProperties} />)}</span><span>{part.name}</span>
               {!part.resawGroup && part.quantity > 1 && <select className="cad-stock-layout" aria-label={`${part.name} stock preparation`} value={layouts[part.id] ?? 'auto'} onChange={(event) => {
                 const value = event.target.value as StockLayoutMode;
-                setLayouts((previous) => ({ ...previous, ...Object.fromEntries(part.ids.map((id) => [id, value])) }));
+                onDraft((previous) => ({ ...previous, layouts: { ...previous.layouts, ...Object.fromEntries(part.ids.map((id) => [id, value])) } }));
               }}><option value="auto">Auto</option><option value="separate">Separate blanks</option><option value="together">One shared board</option></select>}
               {rough && <span className="cad-stock-plan">{stockPlan(rough)}</span>}
             </th>

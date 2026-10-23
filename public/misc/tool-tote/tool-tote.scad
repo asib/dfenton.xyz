@@ -135,45 +135,56 @@ handle_notch_x = riser_inner_x - Joint_fit/2;
 screw_z = handle_bottom_z + Handle_notch_depth * Screw_height_fraction;
 screw_inner_x = handle_notch_x - Screw_embedment;
 
+// One concern per assertion, so a failure names it and the web viewer can explain
+// which inputs conflict (MISC.md, conflict analysis).
 assert(Body_length > 0 && Body_width > 0 && Side_height > 0,
        "Body dimensions must be positive.");
-assert(Side_thickness > 0 && End_thickness > 0 && inner_l > 0 && inner_w > 0,
-       "Wall thicknesses/end placement leave no usable interior.");
-assert(End_setback >= 0 && End_dado_depth > 0 && End_dado_depth < Side_thickness,
-       "End dados must leave wood behind them.");
+assert(Side_thickness > 0 && End_thickness > 0, "Side and end thicknesses must be positive.");
+assert(inner_l > 0 && inner_w > 0, "The walls and end setback leave no usable interior.");
+assert(End_setback >= 0, "End setback cannot be negative.");
+assert(End_dado_depth > 0 && End_dado_depth < Side_thickness,
+       "End dados must be shallower than the sides, leaving wood behind them.");
 assert(End_setback == 0 || End_setback > Joint_fit / 2,
        "End dado fit breaks through the side end; increase End_setback.");
-assert(Riser_length > Side_height && Riser_width > Handle_width + Joint_fit &&
-       Riser_width + Joint_fit < inner_w && Riser_thickness > 0,
-       "Risers must fit the end panels and leave two bridle cheeks.");
+assert(Riser_length > Side_height, "Risers must be longer than the sides are tall.");
+assert(Riser_width > Handle_width + Joint_fit, "Risers must be wider than the handle, leaving two bridle cheeks.");
+assert(Riser_width + Joint_fit < inner_w, "Risers must fit between the sides.");
+assert(Riser_thickness > 0, "Riser thickness must be positive.");
 assert(Riser_dado_depth > 0 && Riser_dado_depth < End_thickness &&
        Riser_dado_depth < Riser_thickness,
        "Riser housing must be shallower than both mating boards.");
-assert(Bottom_groove_depth > 0 && Bottom_groove_depth < Side_thickness &&
-       Bottom_groove_depth + Riser_dado_depth < End_thickness,
+assert(Bottom_groove_depth > 0 && Bottom_groove_depth < Side_thickness,
+       "Bottom grooves must be shallower than the sides are thick.");
+assert(Bottom_groove_depth + Riser_dado_depth < End_thickness,
        "Leave a web between the end's bottom groove and riser housing.");
-assert(Bottom_thickness > 0 && Bottom_groove_height > 0 &&
-       Bottom_groove_height + Bottom_thickness + Bottom_groove_fit < Side_height,
+assert(Bottom_thickness > 0 && Bottom_groove_height > 0,
+       "Bottom thickness and groove height must be positive.");
+assert(Bottom_groove_height + Bottom_thickness + Bottom_groove_fit < Side_height,
        "Bottom groove must fit within the side height.");
-assert(Bottom_width_allowance >= 0 && Bottom_length_allowance >= 0 &&
-       Bottom_width_allowance < 2 * Bottom_groove_depth &&
+assert(Bottom_width_allowance >= 0 && Bottom_length_allowance >= 0,
+       "Bottom allowances cannot be negative.");
+assert(Bottom_width_allowance < 2 * Bottom_groove_depth &&
        Bottom_length_allowance < 2 * Bottom_groove_depth && bottom_w > 0 && bottom_l > 0,
        "Bottom panel must engage all four grooves.");
 assert(Joint_fit >= 0 && Bottom_groove_fit >= 0, "Fits cannot be negative.");
-assert(Handle_notch_depth > 0 && Handle_notch_depth < Handle_blank_height &&
-       handle_bottom_z > Side_height && bridle_engagement > 0 &&
-       handle_top_z >= Riser_length,
-       "Handle must clear sides, engage riser slots and cover riser tops.");
+assert(Handle_notch_depth > 0 && Handle_notch_depth < Handle_blank_height,
+       "Handle notches must be shallower than the handle blank is tall.");
+assert(handle_bottom_z > Side_height,
+       "The handle's underside must clear the side tops; its notch clearance must exceed its notch depth.");
+assert(bridle_engagement > 0, "Risers must reach above the handle's notch seats to engage the slots.");
+assert(handle_top_z >= Riser_length, "The handle top must reach the riser tops.");
 assert(Handle_length / 2 > riser_outer_x + Joint_fit / 2,
        "Handle ends must extend beyond both risers.");
 assert(Handle_lamination_fraction > 0 && Handle_lamination_fraction < 1,
        "Both handle laminations must have positive thickness.");
+assert(!End_grain_screw_bores || (Screw_bore_diameter > 0 && Screw_bore_diameter < Handle_width),
+       "Screw bores must be narrower than the handle.");
+assert(!End_grain_screw_bores || (Screw_embedment > 0 && screw_inner_x > 0),
+       "Screw bores must stop before the handle midpoint.");
 assert(!End_grain_screw_bores ||
-       (Screw_bore_diameter > 0 && Screw_bore_diameter < Handle_width &&
-        Screw_embedment > 0 && screw_inner_x > 0 &&
-        screw_z - Screw_bore_diameter / 2 > handle_bottom_z &&
+       (screw_z - Screw_bore_diameter / 2 > handle_bottom_z &&
         screw_z + Screw_bore_diameter / 2 < notch_seat_z),
-       "Screw bores must stay inside the notch shoulder and stop before the handle midpoint.");
+       "Screw bores must stay inside the notch shoulder.");
 
 // Coordinates and cutters below are INCHES, scaled once at the output.
 module box_at(p, s) { translate(p) cube(s); }
