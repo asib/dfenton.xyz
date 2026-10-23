@@ -46,12 +46,18 @@
       },
       "Groove_depth": {
         "parameter": "Box_construction",
-        "value": "sides_overlap_groove",
+        "values": [
+          "sides_overlap_groove",
+          "front_back_overlap_groove"
+        ],
         "hide": true
       },
       "Groove_offset": {
         "parameter": "Box_construction",
-        "value": "sides_overlap_groove",
+        "values": [
+          "sides_overlap_groove",
+          "front_back_overlap_groove"
+        ],
         "hide": true
       }
     },

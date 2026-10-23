@@ -104,7 +104,7 @@ test('defaults share the remaining opening between drawers left at zero', () => 
 
 const matrix = [];
 for (const Runner_style of ['strip', 'dado', 'side_hung'])
-  for (const Box_construction of ['sides_overlap', 'front_back_overlap', 'sides_overlap_groove'])
+  for (const Box_construction of ['sides_overlap', 'front_back_overlap', 'sides_overlap_groove', 'front_back_overlap_groove'])
     for (const Case_joinery of ['butt', 'rabbet']) matrix.push({ Runner_style, Box_construction, Case_joinery });
 
 test.each([...matrix, { Drawers: [[0, 0]] }, { Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] },
@@ -126,13 +126,13 @@ test.each([...matrix, { Drawers: [[0, 0]] }, { Height: 48, Drawers: [[0, 0], [6,
   });
 
 test('supported drawers bear on their runners or the case bottom and clear the strip above', () => {
-  for (const Runner_style of ['strip', 'dado']) for (const Box_construction of ['front_back_overlap', 'sides_overlap_groove']) {
+  for (const Runner_style of ['strip', 'dado']) for (const Box_construction of ['front_back_overlap', 'sides_overlap_groove', 'front_back_overlap_groove']) {
     const result = compile({ Runner_style, Box_construction });
     // Under a drawer side: case bottom top at 3/4; runner tops at the front bottoms.
     const x = 0.95, y = 10; // Drawer side outside any bottom groove.
     near(rayHits(piece(result, 'runners'), 2, x, y), [8.6875, 9.4375, 17.375, 18.125, 23.4375, 24.1875]);
     near(rayHits(piece(result, 'case-bottom'), 2, x, y), [0, 0.75]);
-    const grooved = Box_construction === 'sides_overlap_groove';
+    const grooved = Box_construction.endsWith('_groove');
     const sides = [...rayHits(piece(result, 'side-odd'), 2, x, y), ...rayHits(piece(result, 'side-even'), 2, x, y)].sort((a, b) => a - b);
     const lift = grooved ? 0 : 0.25;
     // Sides stop 1/32 below the runner carrying the drawer above; the top drawer's sides match its front.
@@ -235,7 +235,8 @@ test('plywood parts feed sheet layouts and hardwood runners feed the cut list', 
   for (const swatch of parts.flatMap(p => p.swatches)) expect(colors[swatch]).toBeDefined();
   expect(parseSheetStock(compile().echo)).toEqual({ sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0 });
   // Every physical piece is counted once.
-  for (const changes of [{}, { Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] }, { Runner_style: 'side_hung', Box_construction: 'sides_overlap_groove' }]) {
+  for (const changes of [{}, { Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] }, { Runner_style: 'side_hung', Box_construction: 'sides_overlap_groove' },
+    { Runner_style: 'side_hung', Box_construction: 'front_back_overlap_groove' }]) {
     const n = changes.Drawers?.length ?? 4, count = prefix => sheetParts(changes).filter(p => new RegExp(`^${prefix}\\d`).test(p.id)).reduce((s, p) => s + p.quantity, 0);
     expect([count('front-'), count('side-'), count('back-'), count('bottom-')]).toEqual([n, 2 * n, n, n]);
   }

@@ -66,10 +66,14 @@ are not modelled. The front is integral: it is the inset face.
 | `sides_overlap` | Sides run the full box depth; front and back fit between them. The bottom is nailed under all four. |
 | `front_back_overlap` | Front and back run the full box width; sides fit between them. The bottom is nailed under all four. |
 | `sides_overlap_groove` | Sides run the full depth; the bottom slides into a groove in the sides and front, under a back that sits on it. |
+| `front_back_overlap_groove` | Front and back run the full width; the bottom slides into a groove in the sides and front, under a back that sits on it. |
 
-A nailed-under bottom shows its edge below the front; the grooved bottom hides
-it. Side grooves for the bottom start at the front's groove and run out through
-the back; the front's groove runs through its ends, which the sides cover.
+A nailed-under bottom shows its edge below the front; a grooved bottom hides
+it. With full-length sides, the side grooves for the bottom start at the front's
+groove and run out through the back, and the front's groove runs through its
+ends, which the sides cover. With a full-width front, the front's groove stops
+under each side's inside face so it never shows at the front's ends, and the
+side grooves run through the sides, which sit between the front and back.
 
 ## Drawings
 
