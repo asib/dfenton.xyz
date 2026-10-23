@@ -53,6 +53,9 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const hasCutList = !!entry.customizer?.cutList;
   const hasSheetLayout = !!entry.customizer?.sheetLayout;
   const hasDrawings = !!entry.customizer?.drawings;
+  // What configurations and links carry, for their notices.
+  const carried = hasCutList && hasSheetLayout ? 'parameters, cut list and sheet layout settings'
+    : hasCutList ? 'parameters and cut list settings' : hasSheetLayout ? 'parameters and sheet layout settings' : 'parameters';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -243,7 +246,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       : notice);
     if (JSON.stringify(settled) !== JSON.stringify(result?.values)) void apply(settled);
   };
-  // Copy a link carrying the values that differ from the source defaults.
+  // Copy a link carrying the values that differ from the source defaults, and the
+  // worksheet settings that would be saved.
   const copyLink = async () => {
     if (!source) return;
     setNaming(null);
@@ -252,14 +256,20 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       setConfigurationNotice('Correct the invalid parameter values before sharing.');
       return;
     }
-    const link = configurationLink(window.location.href, await encodeConfiguration(changedValues(source.parameters, draftValues.current)));
+    if (savedWorksheets.invalid.length) {
+      setConfigurationNotice(`Correct the invalid worksheet settings before sharing: ${savedWorksheets.invalid.join(', ')}.`);
+      return;
+    }
+    const sheets = savedWorksheets.saved;
+    const link = configurationLink(window.location.href, await encodeConfiguration({
+      values: changedValues(source.parameters, draftValues.current), ...(Object.keys(sheets).length ? { worksheets: sheets } : {}) }));
     try {
       await navigator.clipboard.writeText(link);
       setManualLink('');
-      setConfigurationNotice('Link copied. Opening it loads these parameters.');
+      setConfigurationNotice(`Link copied. Opening it loads these ${carried}.`);
     } catch {
       setManualLink(link);
-      setConfigurationNotice('Copy this link to share these parameters.');
+      setConfigurationNotice(`Copy this link to share these ${carried}.`);
     }
   };
   // Opening a share link (or pasting one into this tab) loads it once the model is ready.
@@ -274,7 +284,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       const shared = await decodeConfiguration(decodeURIComponent(encoded));
       // Keep the address clean: later edits would no longer match the link.
       history.replaceState(history.state, '', window.location.pathname + window.location.search);
-      if (shared) sharedRef.current(shared, undefined, '', 'Loaded a shared configuration; use Save as to keep it.');
+      if (shared) sharedRef.current(shared.values, shared.worksheets, '', 'Loaded a shared configuration; use Save as to keep it.');
       else setConfigurationNotice('The configuration link could not be read.');
     };
     void loadShared();
@@ -370,7 +380,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         </div>}
         {modified && <p>Changed since loading “{activeName}”; Update keeps the changes.</p>}
         {configurationNotice && <p role="status">{configurationNotice}</p>}
-        <p className="cad-configuration-help">Configurations keep the parameters and any cut list or sheet layout settings, in this browser only; Copy link shares the current parameters.</p>
+        <p className="cad-configuration-help">Configurations keep the {carried} in this browser only; Copy link shares the current ones.</p>
       </>}
       {manualLink && <input className="cad-configuration-link" readOnly aria-label="Configuration link" value={manualLink}
         onFocus={(event) => { event.currentTarget.select(); }} />}
