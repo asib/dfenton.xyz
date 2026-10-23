@@ -8,6 +8,8 @@ import { changedValues, fingerprint, readConfigurations, reconcile, storageKey, 
 import { configurationLink, decodeConfiguration, encodeConfiguration, readConfigurationHash } from './shareLink';
 import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type ListValue, type ParameterValue, type Values } from './parameters';
 import { emptyWorksheets, loadWorksheets, saveWorksheets, type WorksheetDrafts } from './worksheets';
+import { conflictInputs, type Conflict, type Fix } from './conflicts';
+import { checkValues, fixText, listOf, readableCheck } from './conflictText';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
@@ -27,6 +29,10 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [phase, setPhase] = useState('Loading parameters…');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  // A failed assertion's explanation: the inputs involved and fixes (conflicts.ts). It
+  // stays while editing, so a tooltip can guide the edit, until the next update starts.
+  const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [initialModel, setInitialModel] = useState<CompiledModel | null>(null);
   // Named configurations saved in this browser for this item.
   const storage = useMemo(() => { try { return window.localStorage; } catch { return null; } }, []);
@@ -139,6 +145,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const edit = (name: string, value: ParameterValue) => {
     cancelAutoUpdate();
     job.current?.abort();
+    setAnalyzing(false);
     setPhase('');
     setError('');
     const next = settle({ ...draftValues.current, [name]: value });
@@ -156,9 +163,12 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     const controller = new AbortController();
     job.current = controller;
     setError('');
+    setConflicts(null);
+    setAnalyzing(false);
     setPhase('Loading geometry engine…');
+    let text = '';
     try {
-      const text = configuredSource(source.text, source.parameters, values);
+      text = configuredSource(source.text, source.parameters, values);
       const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal, () => {
         if (!controller.signal.aborted) setPhase('Updating model…');
       });
@@ -174,8 +184,27 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     } catch (failure) {
       if (controller.signal.aborted) return;
       setPhase('');
-      setError(failure instanceof Error ? failure.message : 'The model could not be generated.');
+      const message = failure instanceof Error ? failure.message : 'The model could not be generated.';
+      setError(message);
+      if (text && /assertion failed/i.test(message)) void explain(text, values, controller.signal);
     }
+  };
+  // Find which inputs a failed assertion involves and the nearest value of each that fixes
+  // it. Without an analysis (a check inside a module, say), the message stands alone.
+  const explain = async (text: string, values: Values, signal: AbortSignal) => {
+    if (!source) return;
+    setAnalyzing(true);
+    try {
+      const analysis = await compileJob({ kind: 'conflicts', source: text, inputs: conflictInputs(source.parameters, values),
+        precision: entry.customizer?.units === 'inches' ? 1 / 16 : 0.1 }, signal);
+      if (analysis.kind === 'conflicts' && analysis.conflicts?.length) setConflicts(analysis.conflicts);
+    } catch { /* Cancelled by an edit, or the analysis failed. */ }
+    if (!signal.aborted) setAnalyzing(false);
+  };
+  // A fix applies like an edit, then updates without waiting for a pause.
+  const applyFix = (fix: Fix) => {
+    edit(fix.input, fix.value);
+    if (form.current) commit(form.current);
   };
   const commit = (form: HTMLFormElement) => {
     cancelAutoUpdate();
@@ -196,6 +225,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setActiveName('');
     setLoadedValues(null);
     setLoadedWorksheets(null);
+    setConflicts(null);
     job.current?.abort();
     const values = defaults(source.parameters);
     draftValues.current = values;
@@ -229,6 +259,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     const { values, dropped: droppedValues } = reconcile(source.parameters, saved);
     const sheets = loadWorksheets(savedSheets);
     const dropped = [...droppedValues, ...sheets.dropped];
+    setConflicts(null);
     onWorksheets(sheets.drafts);
     setLoadedWorksheets(name ? JSON.stringify(saveWorksheets(sheets.drafts).saved) : null);
     const settled = settle(values);
@@ -339,6 +370,26 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     if (!name) { setConfigurationNotice('Enter a name for the configuration.'); return; }
     if (naming?.mode === 'rename') renameConfiguration(name); else saveConfiguration(name);
   };
+  // Groups holding a conflicting input open so its highlight can be seen.
+  useEffect(() => {
+    form.current?.querySelectorAll('[data-conflict]').forEach(row => { const group = row.closest('details'); if (group) group.open = true; });
+  }, [conflicts]);
+  const involving = (name: string) => conflicts?.filter(conflict => conflict.inputs.includes(name)) ?? [];
+  const failingCheck = (conflict: Conflict) => <>Failing check: {conflict.checks.map((check, i) => <span key={check}>{i > 0 && ' and '}<code>{readableCheck(check)}</code></span>)}
+    {conflict.values.length > 0 && ` with ${checkValues(conflict, source?.parameters ?? [])}`}.</>;
+  // Shown on hover or focus of a conflicting input: what conflicts, and how this input can fix it.
+  const conflictTip = (name: string, id: string, list: Conflict[]) => <div id={`${id}-conflict`} className="cad-conflict-tip" role="tooltip">
+    {list.map((conflict, i) => {
+      const own = conflict.fixes.filter(fix => fix.input === name);
+      const others = conflict.inputs.filter(input => input !== name).map(input => parameterLabel(input));
+      return <div key={i}>
+        <strong>{conflict.message}</strong>
+        <p>{failingCheck(conflict)}</p>
+        <p>{own.length ? `${own.map(fix => fixText(fix, source?.parameters ?? [], draft, !!fix.cell)).join(', or ')}.` : 'Changing this alone doesn’t resolve it.'}</p>
+        {others.length > 0 && <p>Also involves {listOf(others)}.</p>}
+      </div>;
+    })}
+  </div>;
   const modified = !!activeName && !!loadedValues && (JSON.stringify(draft) !== JSON.stringify(loadedValues) ||
     savedWorksheets.invalid.length > 0 || JSON.stringify(savedWorksheets.saved) !== loadedWorksheets);
   const groups = [...new Set(source?.parameters.map((parameter) => parameter.group))];
@@ -414,11 +465,12 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
               const defaultRows = parameter.value as ListValue;
               const setRows = (next: ListValue) => { edit(parameter.name, next); };
               const row = rowLabel.toLowerCase();
-              return <div key={parameter.name} className="cad-parameter cad-list-parameter" data-inactive={disabled || undefined}>
+              const conflicting = involving(parameter.name);
+              return <div key={parameter.name} className="cad-parameter cad-list-parameter" data-inactive={disabled || undefined} data-conflict={conflicting.length ? '' : undefined}>
                 <span id={`${id}-label`} className="cad-list-title">{parameterLabel(parameter.name)}</span>
                 <p id={`${id}-help`}>{parameter.description}</p>
                 <div className="cad-list-scroll">
-                  <table className="cad-list-table" aria-labelledby={`${id}-label`} aria-describedby={`${id}-help`}>
+                  <table className="cad-list-table" aria-labelledby={`${id}-label`} aria-describedby={`${id}-help${conflicting.length ? ` ${id}-conflict` : ''}`}>
                     <thead><tr>
                       <th scope="col">{rowLabel}</th>
                       {columns.map(column => <th key={column.label} scope="col">{column.label}</th>)}
@@ -442,24 +494,28 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
                 {/* New rows copy the source's last default row. */}
                 <button type="button" className="cad-list-add" disabled={disabled || (maxRows !== undefined && rows.length >= maxRows)}
                   onClick={() => { setRows([...rows, [...defaultRows[defaultRows.length - 1]]]); }}>Add {row}</button>
+                {conflicting.length > 0 && conflictTip(parameter.name, id, conflicting)}
               </div>;
             }
             const { min, max, step } = parameter.control;
             const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], draft);
             const changeNumber = (raw: string) => { edit(parameter.name, raw === '' ? '' : Number(raw)); };
-            return <div key={parameter.name} className="cad-parameter" data-inactive={disabled || undefined}>
+            const conflicting = involving(parameter.name);
+            const described = `${id}-help${conflicting.length ? ` ${id}-conflict` : ''}`;
+            const invalid = conflicting.length > 0 || undefined;
+            return <div key={parameter.name} className="cad-parameter" data-inactive={disabled || undefined} data-conflict={conflicting.length ? '' : undefined}>
               <label htmlFor={id}>{parameterLabel(parameter.name)}</label>
               {options ? <select id={id} name={parameter.name} value={String(value)} disabled={disabled}
-                aria-describedby={`${id}-help`} onChange={(event) => {
+                aria-describedby={described} aria-invalid={invalid} onChange={(event) => {
                   const option = options.find((candidate) => String(candidate.value) === event.target.value);
                   if (option) edit(parameter.name, option.value);
                 }}>
                 {options.map((option) => <option key={String(option.value)} value={String(option.value)}>{option.label}</option>)}
               </select> : parameter.type === 'boolean' ? <input id={id} name={parameter.name} type="checkbox" checked={value === true}
-                disabled={disabled} aria-describedby={`${id}-help`} onChange={(event) => { edit(parameter.name, event.target.checked); }} /> :
+                disabled={disabled} aria-describedby={described} aria-invalid={invalid} onChange={(event) => { edit(parameter.name, event.target.checked); }} /> :
                 <input id={id} name={parameter.name} type={parameter.type === 'number' ? 'number' : 'text'}
                   value={String(value)} min={min} max={max} step={step ?? 'any'} required disabled={disabled}
-                  aria-describedby={`${id}-help`} onChange={(event) => {
+                  aria-describedby={described} aria-invalid={invalid} onChange={(event) => {
                     if (parameter.type === 'number') changeNumber(event.target.value);
                     else edit(parameter.name, event.target.value);
                   }} />}
@@ -468,6 +524,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
                 value={value === '' ? parameter.value as number : Number(value)} disabled={disabled}
                 onChange={(event) => { changeNumber(event.target.value); }} />}
               <p id={`${id}-help`}>{parameter.description}</p>
+              {conflicting.length > 0 && conflictTip(parameter.name, id, conflicting)}
             </div>;
           })}
         </details>)}
@@ -478,10 +535,23 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       </div>
     </form>}
     <div className="cad-compile-status" aria-live="polite" aria-atomic="true">
-      {error ? <p className="cad-error">{error.replace(/^evaluation error:\s*/i, '')} {source ? 'The previous valid model is still shown.' : ''}</p> :
+      {error ? <p className="cad-error">{conflicts ? 'These settings conflict; the highlighted inputs explain how.' : error.replace(/^evaluation error:\s*/i, '')}
+        {source ? ' The previous valid model is still shown.' : ''}{analyzing ? ' Finding the conflicting settings…' : ''}</p> :
         <p>{phase ? `${phase}${source ? ' The previous valid model is still shown.' : ''}` :
           pending ? 'Waiting for a pause in editing… The previous valid model is still shown.' : source ? 'Model is up to date.' : ''}</p>}
     </div>
+    {conflicts && source && <section className="cad-conflicts" aria-label="Conflicting settings">
+      {conflicts.map((conflict, i) => <div key={i} className="cad-conflict">
+        <p><strong>{conflict.message}</strong></p>
+        <p>{failingCheck(conflict)}</p>
+        {conflict.fixes.length ? <>
+          <p>Change one setting:</p>
+          <ul>{conflict.fixes.map((fix, j) => <li key={j}>
+            <button type="button" disabled={!available} onClick={() => { applyFix(fix); }}>{fixText(fix, source.parameters, draft, true)}</button>
+          </li>)}</ul>
+        </> : <p>No single change resolves this; adjust {listOf(conflict.inputs.map(input => parameterLabel(input)))} together.</p>}
+      </div>)}
+    </section>}
     {outputLabel && result?.output && <details className="cad-model-output">
       <summary>{outputLabel}{!canDownload ? ' · previous settings' : ''}</summary>
       {/* Versioned machine-readable echoes (CUTLIST_V1, SHEET_PARTS_V1, ...) feed the worksheets, not this panel. */}

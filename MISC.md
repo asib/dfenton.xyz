@@ -189,7 +189,13 @@ Each failing sub-condition is traced, through assignments and function bodies, t
 - Booleans and dropdowns try their other values.
 - List inputs search each numeric cell within its column's range.
 
-A search stops after 4 seconds. Asserts inside modules or functions are out of reach, so a model whose checks are there (the magnetic saw guide) keeps the plain message. `tests/conflicts.test.mjs` covers:
+A search stops after 4 seconds. Asserts inside modules or functions are out of reach, so a model whose checks are there (the magnetic saw guide) keeps the plain message.
+
+When an update fails an assertion, the form runs the analysis: precision is 1/16 for `units: "inches"`, otherwise 0.1. It shares the update's cancel signal, so a new edit stops it, and the status reads "Finding the conflicting settings…" meanwhile.
+- **Highlighting:** each involved input gets `data-conflict`, `aria-invalid`, a `--cad-section` outline and a ⚠ after its label. Collapsed parameter groups holding one open.
+- **Tooltip:** hovering or focusing an involved input (focus covers touch) shows a tooltip, linked through `aria-describedby`. It gives the assertion's message and the failing check, with readable operators and the current values it uses. It also gives that input's fix with its change ("Lower to 10.25 (−0.5)"; list fixes name their cell), and the other inputs involved.
+- **Fix buttons:** below the status, each conflict lists one button per fix, which applies it and updates at once. A conflict with no single-input fix asks to adjust its inputs together.
+- **Lifetime:** the explanation stays while editing, so a tooltip can guide the edit, and clears when the next update starts. `conflictText.ts` words the checks, values and fixes. `tests/conflicts.test.mjs` covers:
 - no model conflicting at its defaults
 - the tote's shortened handle
 - a per-drawer cabinet check traced to its list cell

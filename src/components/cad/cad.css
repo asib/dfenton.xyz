@@ -140,6 +140,22 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .cad-parameter > label { display: block; margin-bottom: 6px; font-size: 12px; }
 .cad-parameter p { font-size: 11px; line-height: 1.65; opacity: .7; margin-top: 6px; }
 .cad-parameter[data-inactive] { opacity: .45; }
+.cad-parameter { position: relative; }
+/* Inputs a failed assertion involves (conflicts.ts): outlined, marked, and explained on hover or focus. */
+.cad-parameter[data-conflict] :is(select, input:not([type=range], [type=checkbox])) { border-color: var(--cad-section); box-shadow: 0 0 0 1px var(--cad-section); }
+.cad-parameter[data-conflict] input[type=checkbox] { outline: 2px solid var(--cad-section); outline-offset: 2px; }
+.cad-parameter[data-conflict] > :is(label, .cad-list-title)::after { content: ' ⚠'; color: var(--cad-section); }
+.cad-conflict-tip { display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 5; padding: 10px 12px; font-size: 12px; line-height: 1.6;
+  background: var(--cad-surface); border: 1px solid var(--cad-section); border-radius: 4px; box-shadow: 0 6px 18px rgb(0 0 0 / .18); }
+.cad-parameter[data-conflict]:is(:hover, :focus-within) .cad-conflict-tip { display: block; }
+.cad-parameter .cad-conflict-tip p { font-size: 12px; opacity: 1; margin-top: 4px; }
+.cad-conflict-tip > div + div { border-top: 1px solid var(--cad-border); margin-top: 8px; padding-top: 8px; }
+.cad-conflicts { display: grid; gap: 12px; margin-top: 8px; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.cad-conflict { border-left: 2px solid var(--cad-section); padding-left: 10px; }
+.cad-conflict p + p { margin-top: 4px; }
+.cad-conflict ul { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; }
+.cad-conflict button { text-align: left; padding: 6px 10px; }
+:is(.cad-conflict, .cad-conflict-tip) code { font-size: 11px; }
 .cad-parameters :is(select, input:not([type=range], [type=checkbox]), button) { background: var(--cad-control); color: inherit; border: 1px solid var(--cad-border); border-radius: 4px; min-height: 40px; padding: 8px 10px; font: inherit; font-size: 13px; }
 .cad-parameter :is(select, input:not([type=checkbox])) { width: 100%; min-width: 0; }
 .cad-parameter input[type=range] { display: block; min-height: 28px; accent-color: var(--cad-body); }
