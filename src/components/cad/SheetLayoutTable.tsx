@@ -1,7 +1,8 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import type { PartColor } from '../../misc';
 import { csvCell, inches, type CutListOutput } from './cutList';
 import { layoutSheets, parseSheetParts, parseSheetStock, partKey, type GrainMode, type LaidSheet, type LayoutMethod, type MaterialLayout } from './sheetLayout';
+import { sheetLayoutDefaults, type DraftUpdate, type SheetLayoutDraft } from './worksheets';
 
 const number = (text: string) => text.trim() === '' ? NaN : Number(text);
 const methods: Record<LayoutMethod, string> = { densest: 'Densest nesting', rip: 'Rip first, then crosscut' };
@@ -44,16 +45,19 @@ function ripSteps(sheet: LaidSheet) {
   });
 }
 
-export default function SheetLayoutTable({ output, title, filename, palette = [] }: { output: CutListOutput; title: string; filename: string; palette?: PartColor[] }) {
+export default function SheetLayoutTable({ output, title, filename, palette = [], draft, onDraft }: {
+  output: CutListOutput; title: string; filename: string; palette?: PartColor[];
+  draft: SheetLayoutDraft; onDraft: DraftUpdate<SheetLayoutDraft>;
+}) {
   const parsed = useMemo(() => {
     try { return { parts: parseSheetParts(output.text), stock: parseSheetStock(output.text), error: '' }; }
     catch { return { parts: [], stock: null, error: 'The model’s sheet-goods parts could not be read. Update the model to try again.' }; }
   }, [output.text]);
-  const [method, setMethod] = useState<LayoutMethod>('densest');
-  const [grain, setGrain] = useState<GrainMode>('visible');
-  const [edits, setEdits] = useState<Partial<Record<'sheetLength' | 'sheetWidth' | 'kerf' | 'trim', string>>>({});
+  // The viewer keeps the settings, as edits from the defaults.
+  const method = draft.method ?? sheetLayoutDefaults.method;
+  const grain = draft.grain ?? sheetLayoutDefaults.grain;
   const defaults = parsed.stock ?? { sheetLength: 96, sheetWidth: 48, kerf: 0.125, trim: 0 };
-  const field = (key: keyof typeof defaults) => edits[key] ?? String(defaults[key]);
+  const field = (key: keyof typeof defaults) => draft[key] ?? String(defaults[key]);
   const settings = { sheetLength: number(field('sheetLength')), sheetWidth: number(field('sheetWidth')),
     kerf: number(field('kerf')), trim: number(field('trim')), grain, method };
   const layout = useMemo(() => layoutSheets(parsed.parts, settings),
@@ -85,7 +89,7 @@ export default function SheetLayoutTable({ output, title, filename, palette = []
     link.href = url; link.download = filename; link.click();
     window.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
   };
-  const edit = (key: keyof typeof defaults) => (event: { target: { value: string } }) => { setEdits(previous => ({ ...previous, [key]: event.target.value })); };
+  const edit = (key: keyof typeof defaults) => (event: { target: { value: string } }) => { onDraft(previous => ({ ...previous, [key]: event.target.value })); };
 
   return <section className="cad-cut-list cad-sheet-layout" aria-labelledby="sheet-layout-title">
     <div className="cad-cut-list-heading">
@@ -96,10 +100,10 @@ export default function SheetLayoutTable({ output, title, filename, palette = []
     <p className="cad-worksheet-help">Plywood parts are laid out on full sheets at finished size, grouped by thickness. Densest nesting uses straight through-cuts in any order. Rip first cuts full-length strips along the sheet, then crosscuts each strip; a part narrower than its strip is trimmed to width last. Face grain runs along the sheet length. Layout settings stay until you leave or reload this page.</p>
     <fieldset className="cad-stock-allowances cad-sheet-options">
       <legend>Layout</legend>
-      <label>Method<select value={method} onChange={event => { setMethod(event.target.value as LayoutMethod); }}>
+      <label>Method<select value={method} onChange={event => { onDraft(previous => ({ ...previous, method: event.target.value as LayoutMethod })); }}>
         {Object.entries(methods).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
       </select></label>
-      <label>Grain<select value={grain} onChange={event => { setGrain(event.target.value as GrainMode); }}>
+      <label>Grain<select value={grain} onChange={event => { onDraft(previous => ({ ...previous, grain: event.target.value as GrainMode })); }}>
         {Object.entries(grains).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
       </select></label>
     </fieldset>
