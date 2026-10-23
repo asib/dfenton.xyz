@@ -585,7 +585,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     pivotMarker.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pivot.toArray(), 3));
     pivotMarker.visible = !!grabbed;
   };
+  // The focus ring shows only when the 3D view is reached from the keyboard. A click or
+  // tap marks the focus as the pointer's until the view loses it (not just the window).
+  const markPointerFocus = () => { renderer.domElement.dataset.pointerFocus = ''; };
+  const onBlur = () => { if (document.activeElement !== renderer.domElement) delete renderer.domElement.dataset.pointerFocus; };
   const onPointerDown = (event: PointerEvent) => {
+    markPointerFocus();
     // Only a lone pointer can tap; a second finger makes it a gesture.
     pressed = event.button === 0 && !pointers.size ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
@@ -631,6 +636,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   renderer.domElement.addEventListener('pointermove', onPointerMove);
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
   renderer.domElement.addEventListener('pointercancel', onPointerCancel);
+  renderer.domElement.addEventListener('blur', onBlur);
   setTheme();
   setSettings({ mode: 'edges', axis: 'off', position: 50, flipped: false });
   resize();
@@ -640,6 +646,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     // The piece or part under the pointer, if it is over the canvas.
     hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
     pointerInside: () => !!pointer,
+    // Focus the 3D view after pointer use of the viewer's own controls, without the focus ring.
+    focus: () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); },
     // An edge or vertex in model coordinates, with the piece it belongs to.
     entity: (key: string) => {
       const found = entityAt(key);
@@ -660,6 +668,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
       renderer.domElement.removeEventListener('pointercancel', onPointerCancel);
+      renderer.domElement.removeEventListener('blur', onBlur);
       pivotMarker.geometry.dispose();
       pivotMaterial.dispose();
       measureLine.geometry.dispose();

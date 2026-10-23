@@ -74,7 +74,8 @@ export function useFullscreen() {
       child = parent;
       parent = parent.parentElement;
     }
-    toggleButton.current?.focus({ preventScroll: true });
+    // Entering by mouse leaves focus in the 3D view, where Space can't exit by pressing the button.
+    if (!element.contains(document.activeElement)) toggleButton.current?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); void leave(); return; }
       if (event.key !== 'Tab') return;
