@@ -1,7 +1,9 @@
 import { defaults, validRows, type Parameter, type Values } from './parameters';
+import type { SavedWorksheets } from './worksheets';
 
-// Named parameter sets a viewer saves in their own browser, one list per Misc item.
-export interface Configuration { name: string; values: Record<string, unknown>; fingerprint: string; savedAt: string }
+// Named parameter sets a viewer saves in their own browser, one list per Misc item,
+// with any worksheet settings changed from their defaults.
+export interface Configuration { name: string; values: Record<string, unknown>; worksheets?: SavedWorksheets; fingerprint: string; savedAt: string }
 export interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void }
 
 export const storageKey = (href: string) => `cad-configurations:${href}`;
@@ -16,6 +18,7 @@ export function fingerprint(parameters: Parameter[]): string {
   return hash.toString(36);
 }
 
+const isRecord = (value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value);
 // Unreadable or foreign data yields an empty list; invalid entries are skipped.
 export function readConfigurations(storage: StorageLike | null, key: string): Configuration[] {
   let data: unknown;
@@ -24,7 +27,7 @@ export function readConfigurations(storage: StorageLike | null, key: string): Co
       !('configurations' in data) || !Array.isArray(data.configurations)) return [];
   return data.configurations.filter((item: unknown): item is Configuration => typeof item === 'object' && item !== null &&
     'name' in item && typeof item.name === 'string' && !!item.name.trim() &&
-    'values' in item && typeof item.values === 'object' && item.values !== null && !Array.isArray(item.values) &&
+    'values' in item && isRecord(item.values) && (!('worksheets' in item) || isRecord(item.worksheets)) &&
     'fingerprint' in item && typeof item.fingerprint === 'string' && 'savedAt' in item && typeof item.savedAt === 'string');
 }
 

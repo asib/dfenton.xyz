@@ -7,14 +7,17 @@ import type { DrawingOutput, DrawingSheet } from './drawings';
 import { changedValues, fingerprint, readConfigurations, reconcile, storageKey, writeConfigurations, type Configuration } from './configurations';
 import { configurationLink, decodeConfiguration, encodeConfiguration, readConfigurationHash } from './shareLink';
 import { availableOptions, conditionMatches, configuredSource, defaults, parameterLabel, parseParameters, type Parameter, type ListValue, type ParameterValue, type Values } from './parameters';
+import { emptyWorksheets, loadWorksheets, saveWorksheets, type WorksheetDrafts } from './worksheets';
 
 type Entry = CadEntry & { href: string; source: string };
 interface Source { text: string; parameters: Parameter[] }
 interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet }
 
-export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList, onDrawings }: {
+export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList, onDrawings, worksheets, onWorksheets }: {
   entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
   onOutput: (output: CutListOutput) => void;
+  // Cut list and sheet layout settings, saved and loaded with configurations.
+  worksheets: WorksheetDrafts; onWorksheets: (drafts: WorksheetDrafts) => void;
   onViewCutList?: (headingId: string) => void;
   onDrawings?: (output: DrawingOutput) => void;
 }) {
@@ -31,6 +34,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [configurations, setConfigurations] = useState<Configuration[]>(() => readConfigurations(storage, configurationKey));
   const [activeName, setActiveName] = useState('');
   const [loadedValues, setLoadedValues] = useState<Values | null>(null);
+  const [loadedWorksheets, setLoadedWorksheets] = useState<string | null>(null);
+  const savedWorksheets = useMemo(() => saveWorksheets(worksheets), [worksheets]);
   const [configurationNotice, setConfigurationNotice] = useState('');
   const [naming, setNaming] = useState<{ mode: 'save' | 'rename'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -187,6 +192,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     if (!source) return;
     setActiveName('');
     setLoadedValues(null);
+    setLoadedWorksheets(null);
     job.current?.abort();
     const values = defaults(source.parameters);
     draftValues.current = values;
@@ -206,17 +212,22 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setNaming(null);
     setConfirmDelete(false);
     if (!source) return;
-    if (!name) { reset(); setConfigurationNotice(''); return; }
+    if (!name) { reset(); onWorksheets(emptyWorksheets); setConfigurationNotice(''); return; }
     const configuration = configurations.find(item => item.name === name);
     if (!configuration) return;
-    applySaved(configuration.values, name, configuration.fingerprint !== fingerprint(source.parameters)
+    applySaved(configuration.values, configuration.worksheets, name, configuration.fingerprint !== fingerprint(source.parameters)
       ? 'Saved for an earlier version of this model; every setting still applies.' : '');
   };
   // Shared by saved configurations and share links: values that still fit apply over
-  // the defaults, settle like an edit, and compile.
-  const applySaved = (saved: Record<string, unknown>, name: string, notice: string) => {
+  // the defaults, settle like an edit, and compile. Worksheet settings replace the
+  // current ones, missing settings returning to their defaults.
+  const applySaved = (saved: Record<string, unknown>, savedSheets: unknown, name: string, notice: string) => {
     if (!source) return;
-    const { values, dropped } = reconcile(source.parameters, saved);
+    const { values, dropped: droppedValues } = reconcile(source.parameters, saved);
+    const sheets = loadWorksheets(savedSheets);
+    const dropped = [...droppedValues, ...sheets.dropped];
+    onWorksheets(sheets.drafts);
+    setLoadedWorksheets(name ? JSON.stringify(saveWorksheets(sheets.drafts).saved) : null);
     const settled = settle(values);
     cancelAutoUpdate();
     job.current?.abort();
@@ -228,7 +239,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setActiveName(name);
     setLoadedValues(name ? settled : null);
     setConfigurationNotice(dropped.length
-      ? `${notice ? `${notice} ` : ''}${String(dropped.length)} ${dropped.length === 1 ? 'setting no longer applies and was' : 'settings no longer apply and were'} reset to the source default: ${dropped.join(', ')}.`
+      ? `${notice ? `${notice} ` : ''}${String(dropped.length)} ${dropped.length === 1 ? 'setting no longer applies and was reset to its default' : 'settings no longer apply and were reset to their defaults'}: ${dropped.join(', ')}.`
       : notice);
     if (JSON.stringify(settled) !== JSON.stringify(result?.values)) void apply(settled);
   };
@@ -263,7 +274,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       const shared = await decodeConfiguration(decodeURIComponent(encoded));
       // Keep the address clean: later edits would no longer match the link.
       history.replaceState(history.state, '', window.location.pathname + window.location.search);
-      if (shared) sharedRef.current(shared, '', 'Loaded a shared configuration; use Save as to keep it.');
+      if (shared) sharedRef.current(shared, undefined, '', 'Loaded a shared configuration; use Save as to keep it.');
       else setConfigurationNotice('The configuration link could not be read.');
     };
     void loadShared();
@@ -271,19 +282,27 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     window.addEventListener('hashchange', onHash);
     return () => { window.removeEventListener('hashchange', onHash); };
   }, [ready]);
-  // Saves the values in the form, which must be valid; an existing name is replaced in place.
+  // Saves the values in the form and the worksheet settings, which must be valid; an
+  // existing name is replaced in place.
   const saveConfiguration = (name: string) => {
     if (!source) return;
     if (form.current && !form.current.checkValidity()) {
       setConfigurationNotice('Correct the invalid parameter values before saving.');
       return;
     }
+    if (savedWorksheets.invalid.length) {
+      setConfigurationNotice(`Correct the invalid worksheet settings before saving: ${savedWorksheets.invalid.join(', ')}.`);
+      return;
+    }
     const values = draftValues.current;
-    const configuration = { name, values, fingerprint: fingerprint(source.parameters), savedAt: new Date().toISOString() };
+    const sheets = savedWorksheets.saved;
+    const configuration = { name, values, ...(Object.keys(sheets).length ? { worksheets: sheets } : {}),
+      fingerprint: fingerprint(source.parameters), savedAt: new Date().toISOString() };
     const exists = configurations.some(item => item.name === name);
     if (!persist(exists ? configurations.map(item => item.name === name ? configuration : item) : [...configurations, configuration])) return;
     setActiveName(name);
     setLoadedValues(values);
+    setLoadedWorksheets(JSON.stringify(sheets));
     setNaming(null);
     setConfigurationNotice(exists ? `Saved over “${name}”.` : `Saved “${name}”.`);
   };
@@ -302,6 +321,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setConfigurationNotice(`Deleted “${activeName}”.`);
     setActiveName('');
     setLoadedValues(null);
+    setLoadedWorksheets(null);
     setConfirmDelete(false);
   };
   const submitName = () => {
@@ -309,7 +329,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     if (!name) { setConfigurationNotice('Enter a name for the configuration.'); return; }
     if (naming?.mode === 'rename') renameConfiguration(name); else saveConfiguration(name);
   };
-  const modified = !!activeName && !!loadedValues && JSON.stringify(draft) !== JSON.stringify(loadedValues);
+  const modified = !!activeName && !!loadedValues && (JSON.stringify(draft) !== JSON.stringify(loadedValues) ||
+    savedWorksheets.invalid.length > 0 || JSON.stringify(savedWorksheets.saved) !== loadedWorksheets);
   const groups = [...new Set(source?.parameters.map((parameter) => parameter.group))];
 
   return <aside className="cad-parameters" aria-label="Model parameters">
@@ -349,7 +370,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         </div>}
         {modified && <p>Changed since loading “{activeName}”; Update keeps the changes.</p>}
         {configurationNotice && <p role="status">{configurationNotice}</p>}
-        <p className="cad-configuration-help">Configurations are saved in this browser only; Copy link shares the current parameters.</p>
+        <p className="cad-configuration-help">Configurations keep the parameters and any cut list or sheet layout settings, in this browser only; Copy link shares the current parameters.</p>
       </>}
       {manualLink && <input className="cad-configuration-link" readOnly aria-label="Configuration link" value={manualLink}
         onFocus={(event) => { event.currentTarget.select(); }} />}

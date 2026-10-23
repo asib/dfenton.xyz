@@ -97,7 +97,7 @@ export default function SheetLayoutTable({ output, title, filename, palette = []
       <button type="button" onClick={download} disabled={output.stale || !layout.ok}>Download CSV ↓</button>
     </div>
     {output.stale && <p className="cad-error" role="status">Previous settings — these layouts will update after the model regenerates successfully.</p>}
-    <p className="cad-worksheet-help">Plywood parts are laid out on full sheets at finished size, grouped by thickness. Densest nesting uses straight through-cuts in any order. Rip first cuts full-length strips along the sheet, then crosscuts each strip; a part narrower than its strip is trimmed to width last. Face grain runs along the sheet length. Layout settings stay until you leave or reload this page.</p>
+    <p className="cad-worksheet-help">Plywood parts are laid out on full sheets at finished size, grouped by thickness. Densest nesting uses straight through-cuts in any order. Rip first cuts full-length strips along the sheet, then crosscuts each strip; a part narrower than its strip is trimmed to width last. Face grain runs along the sheet length. Layout settings last until you leave or reload this page; saved configurations keep them.</p>
     <fieldset className="cad-stock-allowances cad-sheet-options">
       <legend>Layout</legend>
       <label>Method<select value={method} onChange={event => { onDraft(previous => ({ ...previous, method: event.target.value as LayoutMethod })); }}>
