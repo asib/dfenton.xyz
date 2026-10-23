@@ -34,6 +34,7 @@ test('no model reports conflicts at its defaults; asserts inside modules are out
 test('a shortened tote handle names the riser and every input that can fix it', () => {
   const [conflict, ...rest] = analyze(model('tool-tote'), { Handle_blank_height: 2 });
   expect(rest).toEqual([]);
+  expect(conflict.message).toBe('The handle top must reach the riser tops.');
   expect(conflict.checks).toEqual(['handle_top_z >= Riser_length']);
   expect(conflict.values).toEqual([['Riser_length', '10.75'], ['handle_top_z', '10.25']]);
   expect(conflict.inputs).toEqual(['Side_height', 'Riser_length', 'Handle_blank_height', 'Notch_clearance_above_sides', 'Handle_notch_depth']);

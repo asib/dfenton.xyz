@@ -148,7 +148,7 @@ describe('tool tote customization', () => {
   test('preserves the source joinery assertions', () => {
     const invalid = tote({ Riser_length: 8 });
     expect(invalid.ok).toBe(false);
-    expect(invalid.error).toContain('Handle must clear sides');
+    expect(invalid.error).toContain("Risers must reach above the handle's notch seats");
   });
   test('seats one continuous handle shoulder on each riser notch floor, with no lower step at the outer face', () => {
     // Intersect a vertical ray with the actual triangles to measure the

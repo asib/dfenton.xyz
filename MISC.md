@@ -195,7 +195,9 @@ When an update fails an assertion, the form runs the analysis: precision is 1/16
 - **Highlighting:** each involved input gets `data-conflict`, `aria-invalid`, a `--cad-section` outline and a ⚠ after its label. Collapsed parameter groups holding one open.
 - **Tooltip:** hovering or focusing an involved input (focus covers touch) shows a tooltip, linked through `aria-describedby`. It gives the assertion's message and the failing check, with readable operators and the current values it uses. It also gives that input's fix with its change ("Lower to 10.25 (−0.5)"; list fixes name their cell), and the other inputs involved.
 - **Fix buttons:** below the status, each conflict lists one button per fix, which applies it and updates at once. A conflict with no single-input fix asks to adjust its inputs together.
-- **Lifetime:** the explanation stays while editing, so a tooltip can guide the edit, and clears when the next update starts. `conflictText.ts` words the checks, values and fixes. `tests/conflicts.test.mjs` covers:
+- **Lifetime:** the explanation stays while editing, so a tooltip can guide the edit, and clears when the next update starts. `conflictText.ts` words the checks, values and fixes.
+
+For clear explanations, write SCAD checks as top-level asserts (or inside top-level `for`/`if` blocks) with one concern per assertion and a message naming it. Derive intermediate values in top-level assignments so a check reads in terms of them, and keep conditions that share no concern in separate asserts. A bundled assert still splits at `&&`, but it shares one message, so its tooltip can only quote the failing part. The tool tote follows this: its handle check, once "Handle must clear sides, engage riser slots and cover riser tops", is four asserts, ending with "The handle top must reach the riser tops." Its other bundled checks are split the same way, with unchanged conditions. Checks inside modules or functions keep working but aren't explained. `tests/conflicts.test.mjs` covers:
 - no model conflicting at its defaults
 - the tote's shortened handle
 - a per-drawer cabinet check traced to its list cell
