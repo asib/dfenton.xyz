@@ -4,11 +4,13 @@ import { binaryStl } from './stl';
 import { displayMesh, type DisplayMesh } from './displayMesh';
 import { compileDrawings } from './drawingCompiler';
 import type { DrawingSheet } from './drawings';
+import { analyzeConflicts, type Conflict, type ConflictInput } from './conflicts';
 
-export interface CompileRequest { kind: 'parameters' | 'compile'; source: string; drawings?: boolean }
+// A conflicts job explains a failed assertion in `source` (see conflicts.ts).
+export interface CompileRequest { kind: 'parameters' | 'compile' | 'conflicts'; source: string; drawings?: boolean; inputs?: ConflictInput[]; precision?: number }
 export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh; drawings?: DrawingSheet }
 export type CompileResponse = { kind: 'ready' } | { kind: 'parameters'; json: string } |
-  CompiledModel | { kind: 'error'; message: string };
+  CompiledModel | { kind: 'conflicts'; conflicts: Conflict[] | null } | { kind: 'error'; message: string };
 
 // Use the published raw API: 0.14.0's convenience wrapper has a mismatched
 // render_with_files signature. A fresh worker bounds each job's WASM memory.
@@ -18,6 +20,11 @@ self.onmessage = async ({ data }: MessageEvent<CompileRequest>) => {
     self.postMessage({ kind: 'ready' } satisfies CompileResponse);
     if (data.kind === 'parameters') {
       self.postMessage({ kind: 'parameters', json: parameters(data.source) } satisfies CompileResponse);
+      return;
+    }
+    if (data.kind === 'conflicts') {
+      const conflicts = analyzeConflicts(data.source, data.inputs ?? [], render, { precision: data.precision });
+      self.postMessage({ kind: 'conflicts', conflicts } satisfies CompileResponse);
       return;
     }
     const result = render(data.source);

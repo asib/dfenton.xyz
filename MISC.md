@@ -182,6 +182,19 @@ Compilation uses the exact configured source in a module worker with the pinned 
 
 The compiler rejects errors, warnings, degraded geometry, and empty/2D output. Assertion messages appear beside the controls while the previous valid model stays visible. Pending edits, running jobs, and failures disable configured downloads. A successful result replaces the mesh, edges, and section stencil geometry, disposing the old buffers while preserving camera, pan, zoom, display mode, section percentage/flip, and theme. Section coordinates follow the new bounds. `Reset parameters` restores source defaults and regenerates the model when necessary; `Reset view` remains separate.
 
+**Conflict analysis** (`conflicts.ts`) explains a failed assertion. The engine reports only an assertion's message and drops a failed run's echoes. So a `conflicts` worker job renders a geometry-free copy of the model: its assignments and functions, with every assert (top-level, or inside top-level `for` and `if` blocks) turned into `echo("__MISC_CHECK", [index, [sub-condition results], str(message)])`. Conditions split at top-level `&&`, unless a top-level `||`, `?:` or `let` would change their meaning. One run takes well under a millisecond.
+
+Each failing sub-condition is traced, through assignments and function bodies, to the inputs it depends on. For each input, an expanding search and then bisection find the nearest value above and below the current one that passes the check without failing a check that passed:
+- Numbers search on the input's step, or a precision grid (1/16 in for inch models, 0.1 mm otherwise), within the input's range.
+- Booleans and dropdowns try their other values.
+- List inputs search each numeric cell within its column's range.
+
+A search stops after 4 seconds. Asserts inside modules or functions are out of reach, so a model whose checks are there (the magnetic saw guide) keeps the plain message. `tests/conflicts.test.mjs` covers:
+- no model conflicting at its defaults
+- the tote's shortened handle
+- a per-drawer cabinet check traced to its list cell
+- strict limits, ranges and `str()` messages
+
 The STL download is encoded directly from the successful triangle soup, before viewer centering or clipping. The configured SCAD download is the exact source used for that render, with public literal assignments replaced and model logic/comments/attribution intact. The original source remains unchanged and downloadable. Self-contained sources with scalar literal defaults are supported; include/use libraries and imported assets require explicitly adding their dependencies to the compilation workflow before enabling a customizer.
 
 Run `bun test tests/cad.test.mjs` for schema/precision, source serialization, geometry changes across all four groups and slope modes, source assertion failures, closed-mesh checks, and default bounds/volume equivalence against the original OpenSCAD export. Browser acceptance also covers pending downloads, cancellation/stale jobs, failure recovery, reset, preserved viewing state, both themes, responsive controls, and compilation from a production build. When upgrading the engine, rerun these comparisons against the original export rather than assuming language compatibility.
