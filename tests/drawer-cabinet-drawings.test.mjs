@@ -110,7 +110,7 @@ test.each([
 });
 
 test.each(['strip', 'dado', 'side_hung'].flatMap(Runner_style =>
-  ['sides_overlap', 'front_back_overlap', 'sides_overlap_groove'].map(Box_construction => ({ Runner_style, Box_construction }))))(
+  ['sides_overlap', 'front_back_overlap', 'sides_overlap_groove', 'front_back_overlap_groove'].map(Box_construction => ({ Runner_style, Box_construction }))))(
   'drawings compile and ignore inspection controls for %j', changes => {
     const sheet = drawing(changes);
     expect(sheet.parts.every(p => p.views.every(v => v.lines.length > 0))).toBe(true);
@@ -134,6 +134,21 @@ test('grooved boxes dimension both grooves on the faces where they show', () => 
   const front = dimensions(part(sheet, 'front-2').views);
   for (const [label, value] of Object.entries({ Height: [6], 'Groove offset': [0.25], Groove: [0.25], 'Groove depth': [0.25] }))
     close(front[label], value);
+});
+
+test('a full-width front stops its bottom groove; sides between the front and back carry it through', () => {
+  const sheet = drawing({ Box_construction: 'front_back_overlap_groove' });
+  const front = part(sheet, 'front-2');
+  expect(front.views.map(v => v.id)).toEqual(['part-front-2-face', 'part-front-2-edge', 'part-front-2-groove']);
+  // The groove ends under each side's inside face: 1/2 side less the 1/4 groove depth.
+  close(dimensions([front.views[2]])['Groove stop'], [0.25]);
+  close(dimensions([front.views[2]])['Groove depth'], [0.25]);
+  expect(front.notes).toContain('Stopped bottom groove 1/4″ wide x 1/4″ deep, 1/4″ up, ending 1/4″ short of each end.');
+  const side = part(sheet, 'side-2');
+  expect(dimensions(side.views)['Groove stop']).toBeUndefined();
+  expect(side.notes[0]).toBe('Left and right sides are identical.');
+  expect(side.notes).toContain('Bottom groove 1/4″ wide x 1/4″ deep, 1/4″ up, through the length.');
+  expect(part(sheet, 'back-2').notes).toContain('Sits on the bottom, which slides in beneath it; nail the bottom up into it.');
 });
 
 test('invalid configurations produce no drawings', () => {

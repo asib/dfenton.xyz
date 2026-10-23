@@ -30,7 +30,7 @@ Back_clearance = 0; // [0:6]
 
 /* [Drawer boxes] */
 // Butt-jointed box: glue with screws, pocket screws or brads. Fasteners are not modelled.
-Box_construction = "front_back_overlap"; // [sides_overlap:Sides full length / bottom nailed under, front_back_overlap:Front and back full width / bottom nailed under, sides_overlap_groove:Sides full length / bottom in a groove]
+Box_construction = "front_back_overlap"; // [sides_overlap:Sides full length / bottom nailed under, front_back_overlap:Front and back full width / bottom nailed under, sides_overlap_groove:Sides full length / bottom in a groove, front_back_overlap_groove:Front and back full width / bottom in a groove]
 // Integral drawer front; it is the inset face seen in the opening.
 Front_thickness = 0.75; // [0.25:1.5]
 // Drawer side thickness.
@@ -77,7 +77,9 @@ inner_h = Height - 2 * t;
 inner_d = Depth - Back_thickness; // Front face to the back panel.
 supported = Runner_style != "side_hung";
 dadoed = Runner_style == "dado";
-under_bottom = Box_construction != "sides_overlap_groove";
+under_bottom = Box_construction == "sides_overlap" || Box_construction == "front_back_overlap";
+// The front and back run the full box width, the sides fitting between them.
+full_width_ends = Box_construction == "front_back_overlap" || Box_construction == "front_back_overlap_groove";
 
 function sumv(v, i = 0) = i >= len(v) ? 0 : v[i] + sumv(v, i + 1);
 
@@ -125,7 +127,8 @@ assert(is_list(Drawers) && N >= 1 && len([for (row = Drawers) if (!(is_list(row)
 assert(Reveal >= 0 && Reveal <= 0.25, "Reveal must be between 0 and 1/4 inch.");
 assert(Back_clearance >= 0, "Back clearance cannot be negative.");
 assert(Box_construction == "sides_overlap" || Box_construction == "front_back_overlap" ||
-    Box_construction == "sides_overlap_groove", "Choose a drawer box construction.");
+    Box_construction == "sides_overlap_groove" || Box_construction == "front_back_overlap_groove",
+    "Choose a drawer box construction.");
 assert(Runner_style == "strip" || Runner_style == "dado" || Runner_style == "side_hung", "Choose a runner style.");
 assert(Runner_height > 0 && Runner_width > 0 && Runner_clearance >= 0, "Runner sizes must be positive.");
 assert(min([for (i = [0:N-1]) height_inputs[i]]) >= 0, "Drawer heights cannot be negative.");
@@ -248,7 +251,15 @@ function drawer_members(i) = let(
         ["front", [0, 0, tb], [w, tf, fh]],
         ["left", [0, tf, tb], [ts, d - tk, h]],
         ["right", [w - ts, tf, tb], [w, d - tk, h]],
-        ["back", [0, d - tk, tb], [w, d, h]]] : [
+        ["back", [0, d - tk, tb], [w, d, h]]] :
+    // Grooved bottoms slide in from the back, under a back that sits on them. A full-width
+    // front's groove stops short of its ends.
+    Box_construction == "front_back_overlap_groove" ? [
+        ["bottom", [ts - g, tf - g, o], [w - ts + g, d, o + tb]],
+        ["front", [0, 0, 0], [w, tf, fh]],
+        ["left", [0, tf, 0], [ts, d - tk, h]],
+        ["right", [w - ts, tf, 0], [w, d - tk, h]],
+        ["back", [0, d - tk, o + tb], [w, d, h]]] : [
         ["bottom", [ts - g, tf - g, o], [w - ts + g, d, o + tb]],
         ["front", [ts, 0, 0], [w - ts, tf, fh]],
         ["left", [0, 0, 0], [ts, d, h]],
@@ -508,14 +519,17 @@ function hi_of(i, k) = drawer_origin(i) + drawer_members(i)[k][2];
 box_material = "Plywood; butt joints glued with screws, pocket screws or brads.";
 
 function front_sheet(i) = let(set = matching(i, 1), lo = lo_of(i, 1), hi = hi_of(i, 1), xm = (lo[0] + hi[0]) / 2,
-    g = Groove_depth, o = Groove_offset, tb = Bottom_thickness, top = min(hi[2], lo[2] + 2))
+    g = Groove_depth, o = Groove_offset, tb = Bottom_thickness, top = min(hi[2], lo[2] + 2),
+    // A full-width front's groove stops short of its ends, under the sides' inside faces.
+    stop = Side_thickness - g, stopped = !under_bottom && full_width_ends)
     [str("front-", i + 1), drawers_title("Drawer front", set), len(set), [
         "Integral inset front; the visible face is shown.", box_material,
-        Box_construction == "front_back_overlap" ? "Runs the full box width; the sides butt into its back face." :
+        full_width_ends ? "Runs the full box width; the sides butt into its back face." :
             "Fits between the sides, whose ends show on the face.",
         under_bottom ? str("Sits on the bottom panel, whose edge shows below it: ", frac(front_h[i]), " overall.") :
+        stopped ? str("Stopped bottom groove ", frac(tb), " wide x ", frac(g), " deep, ", frac(o), " up, ending ", frac(stop), " short of each end.") :
             str("Bottom groove ", frac(tb), " wide x ", frac(g), " deep, ", frac(o), " up, through the length.")],
-     pc(member_piece(i, 1)), [
+     pc(member_piece(i, 1)), concat([
         ["face", "Face", FRONT, [
             dim("Width", [lo[0], lo[1], hi[2]], [hi[0], lo[1], hi[2]], "horizontal", 1),
             dim("Height", [lo[0], lo[1], lo[2]], [lo[0], lo[1], hi[2]], "vertical", -1)]],
@@ -525,24 +539,33 @@ function front_sheet(i) = let(set = matching(i, 1), lo = lo_of(i, 1), hi = hi_of
                 dim("Groove offset", [xm, hi[1], lo[2]], [xm, hi[1], lo[2] + o], "vertical", 1),
                 dim("Groove", [xm, hi[1], lo[2] + o], [xm, hi[1], lo[2] + o + tb], "vertical", 1, 2),
                 dim("Groove depth", [xm, hi[1] - g, lo[2] + o], [xm, hi[1], lo[2] + o], "horizontal", -1, 2)]),
-         section(xm, [lo[1] - 0.25, lo[2] - 0.25, hi[1] + 0.25, top + 0.25], top < hi[2] ? ["top"] : [])]]];
+         section(xm, [lo[1] - 0.25, lo[2] - 0.25, hi[1] + 0.25, top + 0.25], top < hi[2] ? ["top"] : [])]],
+        // A plan section through the groove, at the right end, shows where it stops.
+        stopped ? [["groove", "M-M / Section through the groove, right end", TOP, [
+            dim("Groove stop", [hi[0] - stop, hi[1], lo[2] + o], [hi[0], hi[1], lo[2] + o], "horizontal", 1),
+            dim("Groove depth", [hi[0] - stop, hi[1] - g, lo[2] + o], [hi[0] - stop, hi[1], lo[2] + o], "vertical", -1)],
+         section(lo[2] + o + tb / 2, [hi[0] - 1.75, lo[1] - 0.25, hi[0] + 0.25, hi[1] + 0.25], ["left"])]] : [])];
 
 function side_sheet(i) = let(set = matching(i, 2), lo = lo_of(i, 2), hi = hi_of(i, 2), oz = drawer_origin(i)[2],
     g = Groove_depth, o = Groove_offset, tb = Bottom_thickness, ym = (lo[1] + hi[1]) / 2,
     hung = !supported, hang_lo = oz + hang_center[i] - hang_groove_h / 2, hang_hi = oz + hang_center[i] + hang_groove_h / 2,
     hang_stop = hung && lo[1] < Front_thickness, grooved = !under_bottom,
+    // Full-depth sides stop the groove behind the front; sides between the front and back
+    // carry it through.
+    groove_stopped = grooved && Front_thickness - g > lo[1] + 1e-9,
     // Bottom-groove dimensions belong on the inside face, where the groove shows.
-    groove_dims = [
-        dim("Groove stop", [lo[0], lo[1], lo[2]], [lo[0], Front_thickness - g, lo[2]], "horizontal", -1),
+    groove_dims = concat(groove_stopped ? [
+        dim("Groove stop", [lo[0], lo[1], lo[2]], [lo[0], Front_thickness - g, lo[2]], "horizontal", -1)] : [], [
         dim("Groove offset", [lo[0], hi[1], lo[2]], [lo[0], hi[1], lo[2] + o], "vertical", 1),
-        dim("Groove", [lo[0], hi[1], lo[2] + o], [lo[0], hi[1], lo[2] + o + tb], "vertical", 1, 2)],
+        dim("Groove", [lo[0], hi[1], lo[2] + o], [lo[0], hi[1], lo[2] + o + tb], "vertical", 1, 2)]),
     top = min(hi[2], hung ? hang_hi + 0.75 : grooved ? lo[2] + o + tb + 0.75 : lo[2] + 1.5))
     [str("side-", i + 1), drawers_title("Drawer sides", set), 2 * len(set), concat([
-        grooved || hang_stop ? "Make mirrored left/right pairs; the left side is shown." : "Left and right sides are identical.",
+        groove_stopped || hang_stop ? "Make mirrored left/right pairs; the left side is shown." : "Left and right sides are identical.",
         box_material,
-        Box_construction == "front_back_overlap" ? "Fits between the front and back." : "Runs the full box depth; the front and back fit between the sides."],
+        full_width_ends ? "Fits between the front and back." : "Runs the full box depth; the front and back fit between the sides."],
         under_bottom ? ["Sits on the bottom panel."] :
-            [str("Stopped bottom groove ", frac(tb), " wide x ", frac(g), " deep, ", frac(o), " up, open at the back.")],
+        groove_stopped ? [str("Stopped bottom groove ", frac(tb), " wide x ", frac(g), " deep, ", frac(o), " up, open at the back.")] :
+            [str("Bottom groove ", frac(tb), " wide x ", frac(g), " deep, ", frac(o), " up, through the length.")],
         hung ? [str("Runner groove ", frac(hang_groove_h), " wide x ", frac(Hang_groove_depth), " deep in the outside face, open at the back.")] : [],
         supported && box_h[i] < front_h[i] - 1e-9 ? [str("Lower than the front so it clears the runner above by ", frac(Runner_clearance), ".")] : []),
      pc(member_piece(i, 2)), concat([
@@ -562,12 +585,12 @@ function side_sheet(i) = let(set = matching(i, 2), lo = lo_of(i, 2), hi = hi_of(
          section(-ym, [lo[0] - 0.25, lo[2] - 0.25, hi[0] + 0.25, top + 0.25], top < hi[2] ? ["top"] : [])]])];
 
 function back_member_sheet(i) = let(set = matching(i, 4), lo = lo_of(i, 4), hi = hi_of(i, 4), oz = drawer_origin(i)[2],
-    xm = (lo[0] + hi[0]) / 2, notched = !supported && Box_construction == "front_back_overlap",
+    xm = (lo[0] + hi[0]) / 2, notched = !supported && full_width_ends,
     hang_lo = oz + hang_center[i] - hang_groove_h / 2, hang_hi = oz + hang_center[i] + hang_groove_h / 2,
     top = min(hi[2], lo[2] + 1.5))
     [str("back-", i + 1), drawers_title("Drawer back", set), len(set), concat([
         box_material,
-        Box_construction == "front_back_overlap" ? "Runs the full box width; the sides butt into its front face." : "Fits between the sides.",
+        full_width_ends ? "Runs the full box width; the sides butt into its front face." : "Fits between the sides.",
         under_bottom ? "Sits on the bottom panel." : "Sits on the bottom, which slides in beneath it; nail the bottom up into it."],
         notched ? [str("Notch both ends for the runner grooves: ", frac(hang_groove_h), " high x ", frac(Hang_groove_depth), " deep.")] : []),
      pc(member_piece(i, 4)), [
