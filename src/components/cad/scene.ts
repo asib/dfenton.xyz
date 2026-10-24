@@ -4,6 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { edgeTopology, type Topology } from './topology';
+import { createViewCube } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
 export type SectionAxis = 'off' | 'x' | 'y' | 'z';
@@ -79,7 +80,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
-  const render = () => { renderer.render(scene, camera); placeLabel(); };
+  // Clicking the orientation cube turns the view and leaves keyboard focus on the canvas.
+  const viewCube = createViewCube(host, direction => {
+    orient(direction);
+    markPointerFocus();
+    renderer.domElement.focus({ preventScroll: true });
+  });
+  const render = () => { renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
   controls.addEventListener('change', render);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.6));
@@ -382,6 +389,31 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     render();
   };
 
+  // Look from `direction` toward the target, keeping the target and distance. Azimuth and
+  // polar angle ease together, so a view through a pole keeps Z up and ends in its standard
+  // orientation: a top view has the front at the bottom, a bottom view at the top.
+  let turning = 0;
+  const angles = (d: THREE.Vector3) => ({ azimuth: Math.atan2(d.y, d.x), polar: Math.acos(THREE.MathUtils.clamp(d.z, -1, 1)) });
+  const orient = (direction: THREE.Vector3) => {
+    const from = angles(camera.position.clone().sub(controls.target).normalize());
+    const pole = Math.hypot(direction.x, direction.y) < 1e-9;
+    const to = pole ? { azimuth: -Math.PI / 2, polar: direction.z > 0 ? 1e-4 : Math.PI - 1e-4 } : angles(direction.clone().normalize());
+    // The shorter way round.
+    const turn = Math.atan2(Math.sin(to.azimuth - from.azimuth), Math.cos(to.azimuth - from.azimuth));
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 350, start = performance.now();
+    cancelAnimationFrame(turning);
+    const step = (now: number) => {
+      const t = duration ? Math.min(1, (now - start) / duration) : 1, eased = t * t * (3 - 2 * t);
+      const azimuth = from.azimuth + turn * eased, polar = from.polar + (to.polar - from.polar) * eased;
+      // Zooming or panning meanwhile is kept.
+      const distance = camera.position.distanceTo(controls.target);
+      camera.position.copy(controls.target).add(new THREE.Vector3(Math.sin(polar) * Math.cos(azimuth), Math.sin(polar) * Math.sin(azimuth), Math.cos(polar)).multiplyScalar(distance));
+      controls.update();
+      turning = t < 1 ? requestAnimationFrame(step) : 0;
+    };
+    turning = requestAnimationFrame(step);
+  };
+
   const replaceGeometry = (next: THREE.BufferGeometry) => {
     next.computeBoundingBox();
     const nextBounds = next.boundingBox;
@@ -591,6 +623,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const onBlur = () => { if (document.activeElement !== renderer.domElement) delete renderer.domElement.dataset.pointerFocus; };
   const onPointerDown = (event: PointerEvent) => {
     markPointerFocus();
+    // Grabbing the model takes over from a turn to a named view.
+    cancelAnimationFrame(turning);
     // Only a lone pointer can tap; a second finger makes it a gesture.
     pressed = event.button === 0 && !pointers.size ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
@@ -676,6 +710,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       measureMaterial.dispose();
       measureEndsMaterial.dispose();
       measureLabel.remove();
+      viewCube.dispose();
+      cancelAnimationFrame(turning);
       controls.removeEventListener('change', scheduleHover);
       cancelAnimationFrame(frame);
       controls.removeEventListener('change', render);
