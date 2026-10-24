@@ -106,6 +106,10 @@ const matrix = [];
 for (const Runner_style of ['strip', 'dado', 'side_hung'])
   for (const Box_construction of ['sides_overlap', 'front_back_overlap', 'sides_overlap_groove', 'front_back_overlap_groove'])
     for (const Case_joinery of ['butt', 'rabbet']) matrix.push({ Runner_style, Box_construction, Case_joinery });
+// A back rabbeted all round, including rabbets deeper than the side end rabbets.
+for (const Runner_style of ['strip', 'dado', 'side_hung'])
+  for (const Case_joinery of ['butt', 'rabbet']) matrix.push({ Runner_style, Case_joinery, Back_fit: 'all_round' });
+matrix.push({ Back_fit: 'all_round', Back_rabbet_width: 0.5 }, { Back_fit: 'all_round', Case_joinery: 'butt', Back_rabbet_width: 0.625 });
 
 test.each([...matrix, { Drawers: [[0, 0]] }, { Height: 48, Drawers: [[0, 0], [6, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] },
   { Drawers: [[5, 0], [6, 12], [0, 0], [0, 0]], Back_clearance: 1 }, { Runner_height: 2, Reveal: 0 }])(
@@ -124,6 +128,27 @@ test.each([...matrix, { Drawers: [[0, 0]] }, { Height: 48, Drawers: [[0, 0], [6,
       expect(Math.abs(exploded.volume / result.volume - 1)).toBeLessThan(1e-6);
     }
   });
+
+test('a back rabbeted all round is hidden above and below; in side rabbets it covers the panels', () => {
+  // Down through the back panel, 1/8 in from the case back.
+  const x = 12, y = 17.875;
+  const sides = compile();
+  near(rayHits(piece(sides, 'case-back'), 2, x, y), [0, 30]);
+  expect(rayHits(piece(sides, 'case-top'), 2, x, y)).toEqual([]);
+  for (const Case_joinery of ['butt', 'rabbet']) {
+    const all = compile({ Back_fit: 'all_round', Case_joinery });
+    // The back stops 3/8 into the top and bottom, which run the full depth over it.
+    near(rayHits(piece(all, 'case-back'), 2, x, y), [0.375, 29.625]);
+    near(rayHits(piece(all, 'case-top'), 2, x, y), [29.625, 30]);
+    near(rayHits(piece(all, 'case-bottom'), 2, x, y), [0, 0.375]);
+    // The side's back rabbet is stopped: halfway up it takes 3/8 of the side; above the
+    // back it leaves the side whole (or only the end rabbet, which the top fills).
+    near(rayHits(piece(all, 'case-left'), 0, y, 15), [0, 0.375]);
+    near(rayHits(piece(all, 'case-left'), 0, y, 29.9), Case_joinery === 'butt' ? [0, 0.75] : [0, 0.375]);
+  }
+  const parts = parseSheetParts(compile({ Back_fit: 'all_round' }).echo);
+  expect([parts.find(p => p.id === 'case-panels').width, parts.find(p => p.id === 'back-panel').length]).toEqual([18, 29.25]);
+});
 
 test('supported drawers bear on their runners or the case bottom and clear the strip above', () => {
   for (const Runner_style of ['strip', 'dado']) for (const Box_construction of ['front_back_overlap', 'sides_overlap_groove', 'front_back_overlap_groove']) {
