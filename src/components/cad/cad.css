@@ -8,6 +8,8 @@
   --cad-surface: #efe6ee;
   --cad-selected: #c2006b;
   --cad-hover: #e389c0;
+  /* Orientation cube outlines and labels. */
+  --cad-cube: var(--cad-edge);
   font-size: 14px;
 }
 .dark .cad {
@@ -18,12 +20,13 @@
   --cad-surface: #1f1f1f;
   --cad-selected: #ff6cc0;
   --cad-hover: #ffb3df;
+  --cad-cube: var(--cad-body);
 }
 .cad select option { background: var(--cad-surface); color: inherit; }
 .cad-description { line-height: 1.7; max-width: 70ch; }
 .cad-stage { position: relative; margin: 20px 0 12px; }
 .cad-canvas { position: relative; width: 100%; height: clamp(320px, 60vw, 480px); }
-.cad-measure { position: absolute; top: 8px; left: 8px; max-width: calc(100% - 16px); padding: 8px 10px; font-size: 12px; line-height: 1.6; background: var(--cad-surface); border: 1px solid var(--cad-border); border-radius: 3px; pointer-events: none; }
+.cad-measure { position: absolute; top: 8px; left: 8px; max-width: calc(100% - 128px); padding: 8px 10px; font-size: 12px; line-height: 1.6; background: var(--cad-surface); border: 1px solid var(--cad-border); border-radius: 3px; pointer-events: none; }
 .cad-measure strong { display: block; margin-bottom: 2px; font-weight: 600; color: var(--cad-selected); }
 .cad-measure dl { display: grid; gap: 1px; margin: 0; }
 .cad-measure dl > div { display: flex; gap: 12px; justify-content: space-between; }
@@ -34,6 +37,20 @@
 .cad-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
 .cad-canvas canvas:focus-visible:not([data-pointer-focus]) { outline: 2px solid currentColor; outline-offset: 3px; }
 .cad-stage-label { position: absolute; left: 0; bottom: 0; font-size: 12px; opacity: .65; pointer-events: none; }
+/* Orientation cube (viewCube.ts): faces turn with the camera; a 3 x 3 grid of zones picks a face, edge or corner. */
+.cad-view-cube { position: absolute; top: 8px; right: 8px; width: 104px; height: 104px; user-select: none; -webkit-user-select: none; touch-action: none; }
+.cad-view-cube-face { position: absolute; left: 24px; top: 16px; width: 56px; height: 56px; box-sizing: border-box; display: grid; grid-template: 12px 1fr 12px / 12px 1fr 12px;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden; background: var(--cad-surface); border: 1px solid var(--cad-cube); font-size: 10px; letter-spacing: .02em; color: var(--cad-cube); }
+.cad-view-cube-face > span { display: grid; place-items: center; cursor: pointer; }
+.cad-view-cube-face > span:hover { background: var(--cad-hover); color: var(--cad-surface); }
+.cad-view-cube-triad { position: absolute; left: -6px; bottom: -6px; width: 56px; height: 56px; overflow: visible; pointer-events: none; }
+.cad-view-cube-triad line { stroke-width: 1.5; stroke-linecap: round; }
+.cad-view-cube-triad text { font-size: 9px; text-anchor: middle; dominant-baseline: central; }
+.cad-view-cube-triad [data-axis=X] { stroke: #d1453b; fill: #d1453b; }
+.cad-view-cube-triad [data-axis=Y] { stroke: #3c9a4b; fill: #3c9a4b; }
+.cad-view-cube-triad [data-axis=Z] { stroke: #3a6fd8; fill: #3a6fd8; }
+.cad-view-cube-triad text { stroke: none; }
+.cad-view-cube-triad [data-away] { opacity: .45; }
 .cad-fallback { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 12px; }
 .cad-fallback img { width: 220px; max-height: 200px; object-fit: contain; margin: 0 auto; }
 .cad-preview-dark { display: none; }
