@@ -12,11 +12,16 @@ Drawer 1 is the top drawer.
 
 The sides run the full height and depth. `Case_joinery` either butts the top
 and bottom between the sides (for screws or pocket screws) or houses them in
-rabbets half the case thickness deep in the side ends. The back panel sits in
-rabbets along the back of both sides, `Back_rabbet_width` deep, and covers the
-back edges of the top and bottom, so those panels are `Depth - Back_thickness`
-deep. Interior width and height are the outside sizes less two case
-thicknesses.
+rabbets half the case thickness deep in the side ends. Interior width and
+height are the outside sizes less two case thicknesses.
+
+`Back_fit` sets how the back panel fits. Its rabbets are `Back_rabbet_width`
+deep.
+
+| `Back_fit` | Arrangement |
+| --- | --- |
+| `sides` (default) | The back sits in full-height rabbets along the back of both sides and covers the back edges of the top and bottom, which are `Depth - Back_thickness` deep. Its edges show at the top and bottom. |
+| `all_round` | The top and bottom run the full depth with a back rabbet along their inside faces. The back fits between them, `Height - 2 × (Case_thickness - Back_rabbet_width)` tall, with every edge hidden. With rabbeted case joints, the side end rabbets run through to the back and already clear the side back rabbets, which run the full height. With butt joints, or back rabbets deeper than the end rabbets, the side rabbets stop inside the top and bottom's thickness so no notch shows. |
 
 ## Drawer layout
 

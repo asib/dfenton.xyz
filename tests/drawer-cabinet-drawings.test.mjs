@@ -151,6 +151,32 @@ test('a full-width front stops its bottom groove; sides between the front and ba
   expect(part(sheet, 'back-2').notes).toContain('Sits on the bottom, which slides in beneath it; nail the bottom up into it.');
 });
 
+test('a back rabbeted all round is dimensioned on the sides, the top and bottom, and the back', () => {
+  const sheet = drawing({ Back_fit: 'all_round' });
+  for (const other of [sheet, drawing({ Back_fit: 'all_round', Case_joinery: 'butt', Runner_style: 'dado' })])
+    expect(other.parts.every(p => p.views.every(v => v.lines.length > 0))).toBe(true);
+  // Rabbeted end joints clear the side's back rabbet, so it runs through; with butt joints it stops.
+  expect(part(sheet, 'case-side').notes).toContain('Back rabbet 3/8″ into the side x 1/4″, full height.');
+  expect(dimensions(part(sheet, 'case-side').views)['Rabbet stop']).toBeUndefined();
+  const butt = part(drawing({ Back_fit: 'all_round', Case_joinery: 'butt' }), 'case-side');
+  expect(butt.notes).toContain('Stopped back rabbet 3/8″ into the side x 1/4″, ending 3/8″ short of each end, inside the top and bottom.');
+  close(dimensions(butt.views)['Rabbet stop'], [0.375]);
+  const panels = part(sheet, 'case-panels');
+  expect(panels.views.map(v => v.id)).toEqual(['part-case-panels-plan', 'part-case-panels-edge', 'part-case-panels-back-edge']);
+  expect(panels.notes).toContain('Back rabbet 1/4″ wide x 3/8″ deep along the back edge of the inside face, through the length.');
+  close(dimensions(panels.views).Depth, [18]);
+  close(dimensions([panels.views[2]])['Back rabbet'], [0.25]);
+  close(dimensions([panels.views[2]])['Rabbet depth'], [0.375]);
+  const back = part(sheet, 'back-panel');
+  close(dimensions(back.views).Height, [29.25]);
+  expect(back.notes[0]).toBe('1/4″ plywood, set in rabbets in the sides, top and bottom.');
+  // In side rabbets, the back runs the full height over panels a back's thickness shallower.
+  const sides = drawing();
+  close(dimensions(part(sides, 'back-panel').views).Height, [30]);
+  close(dimensions(part(sides, 'case-panels').views).Depth, [17.75]);
+  expect(dimensions(part(sides, 'case-side').views)['Rabbet stop']).toBeUndefined();
+});
+
 test('invalid configurations produce no drawings', () => {
   expect(() => drawing({ Drawers: [[5, 0], [6, 0], [20, 0], [0, 0]] })).toThrow('drawer set to 0');
 });

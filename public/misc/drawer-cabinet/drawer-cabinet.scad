@@ -15,10 +15,12 @@ Depth = 18; // [6:36]
 Case_thickness = 0.75; // [0.25:1.5]
 // How the top and bottom meet the sides. Butt joints suit screws or pocket screws; rabbets house the panels in the side ends.
 Case_joinery = "rabbet"; // [butt:Butt joints between the sides, rabbet:Top and bottom in side rabbets]
-// Back panel thickness. It sits in rabbets along the back of both sides and covers the back edges of the top and bottom.
+// Back panel thickness. It sits in rabbets along the back of the case.
 Back_thickness = 0.25; // [0.125:0.75]
-// Depth of each back rabbet into the side, measured across the side's thickness.
+// Depth of each back rabbet, measured across the case thickness.
 Back_rabbet_width = 0.375; // [0.0625:1.25]
+// In side rabbets, the back runs the full height and covers the back edges of the top and bottom. Rabbeted all round, the top and bottom are rabbeted too, so its edges are hidden.
+Back_fit = "sides"; // [sides:In side rabbets / over the top and bottom, all_round:Rabbeted all round]
 
 /* [Drawer layout] */
 // One row per drawer in the single column, top drawer first. Front height is the inset front; 0 shares the remaining opening equally with the other 0-height drawers. Depth is the box depth from the front face; 0 fills the case less the back clearance.
@@ -75,6 +77,15 @@ end_rabbet = t / 2; // Side-end rabbet depth when the top and bottom are housed.
 inner_w = Width - 2 * t;
 inner_h = Height - 2 * t;
 inner_d = Depth - Back_thickness; // Front face to the back panel.
+// Rabbeted all round, the top and bottom run the full depth with a back rabbet each and
+// the back fits between them.
+back_all_round = Back_fit == "all_round";
+r_back = Back_rabbet_width;
+back_z = back_all_round ? [t - r_back, Height - t + r_back] : [0, Height];
+panel_d = back_all_round ? Depth : inner_d;
+// Rabbeted end joints already clear a side back rabbet no deeper than they are, so it can
+// run through; otherwise it stops inside the top and bottom so no notch shows.
+stopped_back = back_all_round && (Case_joinery == "butt" || r_back > end_rabbet + 1e-9);
 supported = Runner_style != "side_hung";
 dadoed = Runner_style == "dado";
 under_bottom = Box_construction == "sides_overlap" || Box_construction == "front_back_overlap";
@@ -122,6 +133,7 @@ assert(Case_joinery == "butt" || Case_joinery == "rabbet", "Choose a case joint.
 assert(Back_thickness >= 0.125 && Back_thickness <= 0.75 && Back_thickness < Depth / 2,
     "Back thickness must be between 1/8 and 3/4 inch.");
 assert(Back_rabbet_width > 0 && Back_rabbet_width < t, "Back rabbet width must be less than the case thickness.");
+assert(Back_fit == "sides" || Back_fit == "all_round", "Choose how the back panel fits.");
 assert(is_list(Drawers) && N >= 1 && len([for (row = Drawers) if (!(is_list(row) && len(row) == 2 && is_num(row[0]) && is_num(row[1]))) 1]) == 0,
     "Each drawer needs a front height and a depth.");
 assert(Reveal >= 0 && Reveal <= 0.25, "Reveal must be between 0 and 1/4 inch.");
@@ -203,12 +215,13 @@ module case_side(right) {
     x0 = right ? Width - t : 0;
     difference() {
         box([x0, 0, 0], [x0 + t, Depth, Height]);
-        // Back rabbet, through the full height.
+        // Back rabbet: through the full height, or stopped inside the top and bottom's
+        // thickness when they are rabbeted too and the end joints don't clear it.
         let(x = into_side(right, Back_rabbet_width))
-            box([x[0], inner_d, -eps], [x[1], Depth + eps, Height + eps]);
-        // End rabbets stop at the back rabbet; the back panel covers the panels' back edges.
+            box([x[0], inner_d, stopped_back ? back_z[0] : -eps], [x[1], Depth + eps, stopped_back ? back_z[1] : Height + eps]);
+        // End rabbets run back to the panels' back edges: the back rabbet, or through.
         if (Case_joinery == "rabbet") for (z = [[-eps, t], [Height - t, Height + eps]])
-            let(x = into_side(right, end_rabbet)) box([x[0], -eps, z[0]], [x[1], inner_d, z[1]]);
+            let(x = into_side(right, end_rabbet)) box([x[0], -eps, z[0]], [x[1], back_all_round ? Depth + eps : inner_d, z[1]]);
         // Stopped runner dados, hidden behind the drawer fronts.
         if (dadoed) for (i = [0:1:N-2])
             let(x = into_side(right, dado_depth))
@@ -218,9 +231,14 @@ module case_side(right) {
 module case_panel(top) {
     overlap = Case_joinery == "rabbet" ? end_rabbet : 0;
     z = top ? Height - t : 0;
-    box([t - overlap, 0, z], [Width - t + overlap, inner_d, z + t]);
+    difference() {
+        box([t - overlap, 0, z], [Width - t + overlap, panel_d, z + t]);
+        // The back rabbet runs through the panel's length, on its inside face.
+        if (back_all_round)
+            box([t - overlap - eps, inner_d, top ? z - eps : z + t - r_back], [Width - t + overlap + eps, Depth + eps, top ? z + r_back : z + t + eps]);
+    }
 }
-module case_back() box([t - Back_rabbet_width, inner_d, 0], [Width - t + Back_rabbet_width, Depth, Height]);
+module case_back() box([t - Back_rabbet_width, inner_d, back_z[0]], [Width - t + Back_rabbet_width, Depth, back_z[1]]);
 
 // Bearing height of drawer i's runners: a supported drawer's underside rests on
 // the strip top; a side-hung drawer's groove ceiling rests on it.
@@ -426,7 +444,9 @@ function case_side_sheet() = let(x = t, rabbeted = Case_joinery == "rabbet", n =
         str(frac(t), " plywood. The left side is shown; make the right side its mirror image."),
         rabbeted ? str("End rabbets: the top and bottom sit ", frac(end_rabbet), " into each side, ", frac(t), " high.")
                  : "The top and bottom butt between the sides.",
-        str("Back rabbet ", frac(Back_rabbet_width), " into the side x ", frac(Back_thickness), ", full height.")],
+        stopped_back ? str("Stopped back rabbet ", frac(Back_rabbet_width), " into the side x ", frac(Back_thickness),
+            ", ending ", frac(t - r_back), " short of each end, inside the top and bottom.")
+                       : str("Back rabbet ", frac(Back_rabbet_width), " into the side x ", frac(Back_thickness), ", full height.")],
         n == 0 ? [] : [
             str("Runner tops above the bottom edge: ", join([for (k = [n-1:-1:0]) str(runner_names[k], " ", frac(runner_tops[k]))]),
                 ". Rk carries drawer k."),
@@ -437,9 +457,12 @@ function case_side_sheet() = let(x = t, rabbeted = Case_joinery == "rabbet", n =
         ["inside", "Inside face, laid flat / bottom edge at left, front edge up", FLAT, concat([
             dim("Height", [x, Depth, 0], [x, Depth, Height], "horizontal", -1, 2),
             dim("Depth", [x, 0, 0], [x, Depth, 0], "vertical", -1),
-            dim("Back rabbet", [x, inner_d, Height], [x, Depth, Height], "vertical", 1)],
+            dim("Back rabbet", [x, inner_d, stopped_back ? back_z[1] : Height], [x, Depth, stopped_back ? back_z[1] : Height], "vertical", 1)],
             rabbeted ? [dim("Rabbet", [x, Depth, 0], [x, Depth, t], "horizontal", -1),
                         dim("Rabbet", [x, Depth, Height - t], [x, Depth, Height], "horizontal", -1)] : [],
+            // Along the back edge, unless end-rabbet dimensions are there.
+            stopped_back ? [rabbeted ? dim("Rabbet stop", [x, inner_d, back_z[1]], [x, inner_d, Height], "horizontal", 1)
+                                     : dim("Rabbet stop", [x, Depth, back_z[1]], [x, Depth, Height], "horizontal", -1)] : [],
             n > 0 ? [dim("Runner start", [x, 0, Height], [x, Front_thickness, Height], "vertical", 1, 2)] : [],
             // Chained from the bottom edge to each runner top.
             [for (k = [0:1:n-1]) dim(k == 0 ? str("To ", runner_names[k]) : str(runner_names[k-1], "–", runner_names[k]),
@@ -465,28 +488,36 @@ function case_side_sheet() = let(x = t, rabbeted = Case_joinery == "rabbet", n =
 
 function panel_sheet() = let(o = Case_joinery == "rabbet" ? end_rabbet : 0, z = Height, xm = Width / 2)
     ["case-panels", "Case top and bottom", 2, [
-        str(frac(t), " plywood. The top and bottom are identical."),
+        str(frac(t), " plywood. The top and bottom are identical", back_all_round ? "; the top is shown, and the bottom is the same panel rabbet up." : "."),
         o > 0 ? str("Their ends fit the side rabbets, ", frac(o), " each side.") : "They butt between the sides.",
-        "The back panel covers their back edges."],
-     pc(2), [
+        back_all_round ? str("Back rabbet ", frac(Back_thickness), " wide x ", frac(r_back), " deep along the back edge of the inside face, through the length.")
+                       : "The back panel covers their back edges."],
+     pc(2), concat([
         ["plan", "Plan", TOP, [
             dim("Width", [t - o, 0, z], [Width - t + o, 0, z], "horizontal", -1),
-            dim("Depth", [t - o, 0, z], [t - o, inner_d, z], "vertical", -1)]],
+            dim("Depth", [t - o, 0, z], [t - o, panel_d, z], "vertical", -1)]],
         ["edge", "E-E / Section at the front edge", RIGHT, [
             dim("Thickness", [xm, 0, z - t], [xm, 0, z], "vertical", -1)],
-         section(xm, [-0.25, z - t - 0.25, 1.5, z + 0.25], ["right"])]]];
+         section(xm, [-0.25, z - t - 0.25, 1.5, z + 0.25], ["right"])]],
+        // The back rabbet shows on the underside of the top, at its back edge.
+        back_all_round ? [["back-edge", "G-G / Section at the back edge", RIGHT, [
+            dim("Back rabbet", [xm, inner_d, z - t], [xm, Depth, z - t], "horizontal", -1),
+            dim("Rabbet depth", [xm, Depth, z - t], [xm, Depth, z - t + r_back], "vertical", 1)],
+         section(xm, [Depth - 1.5, z - t - 0.25, Depth + 0.25, z + 0.25], ["left"])]] : [])];
 
-function back_sheet() = let(xm = Width / 2)
+function back_sheet() = let(xm = Width / 2, top = back_z[1])
     ["back-panel", "Back panel", 1, [
-        str(frac(Back_thickness), " plywood, set in the side rabbets."),
-        "It covers the back edges of the top and bottom; glue and nail it on."],
+        back_all_round ? str(frac(Back_thickness), " plywood, set in rabbets in the sides, top and bottom.")
+                       : str(frac(Back_thickness), " plywood, set in the side rabbets."),
+        back_all_round ? "Its edges are hidden in the rabbets; glue and nail it in."
+                       : "It covers the back edges of the top and bottom; glue and nail it on."],
      pc(4), [
         ["face", "Face", FRONT, [
-            dim("Width", [t - Back_rabbet_width, Depth, Height], [Width - t + Back_rabbet_width, Depth, Height], "horizontal", 1),
-            dim("Height", [t - Back_rabbet_width, Depth, 0], [t - Back_rabbet_width, Depth, Height], "vertical", -1)]],
+            dim("Width", [t - Back_rabbet_width, Depth, top], [Width - t + Back_rabbet_width, Depth, top], "horizontal", 1),
+            dim("Height", [t - Back_rabbet_width, Depth, back_z[0]], [t - Back_rabbet_width, Depth, top], "vertical", -1)]],
         ["edge", "F-F / Section at the top edge", RIGHT, [
-            dim("Thickness", [xm, inner_d, Height], [xm, Depth, Height], "horizontal", 1)],
-         section(xm, [inner_d - 0.25, Height - 1.5, Depth + 0.25, Height + 0.25], ["bottom"])]]];
+            dim("Thickness", [xm, inner_d, top], [xm, Depth, top], "horizontal", 1)],
+         section(xm, [inner_d - 0.25, top - 1.5, Depth + 0.25, top + 0.25], ["bottom"])]]];
 
 function runner_sheet() = let(i = runner_drawers[0], z = runner_top(i), x0 = t - dado_depth, x1 = t + runner_reach)
     ["runner", "Runner strip", 2 * len(runner_drawers), [
@@ -630,8 +661,8 @@ function member_size(i, k) = hi_of(i, k) - lo_of(i, k);
 sheet_parts = concat([
     ["case-sides", "Case sides", plywood(t), 2, t, Depth, Height, "length", ["case-left", "case-right"]],
     let(o = Case_joinery == "rabbet" ? end_rabbet : 0)
-    ["case-panels", "Case top and bottom", plywood(t), 2, t, inner_d, inner_w + 2 * o, "length", ["case-top", "case-bottom"]],
-    ["back-panel", "Back panel", plywood(Back_thickness), 1, Back_thickness, inner_w + 2 * Back_rabbet_width, Height, "any", ["case-back"]]],
+    ["case-panels", "Case top and bottom", plywood(t), 2, t, panel_d, inner_w + 2 * o, "length", ["case-top", "case-bottom"]],
+    ["back-panel", "Back panel", plywood(Back_thickness), 1, Back_thickness, inner_w + 2 * Back_rabbet_width, back_z[1] - back_z[0], "any", ["case-back"]]],
     [for (i = representatives(1)) let(set = matching(i, 1), z = member_size(i, 1))
         [str("front-", i + 1), drawers_title("Drawer front", set), plywood(Front_thickness), len(set), Front_thickness, z[2], z[0], "length", parity_ids("front", set)]],
     [for (i = representatives(2)) let(set = matching(i, 2), z = member_size(i, 2))
