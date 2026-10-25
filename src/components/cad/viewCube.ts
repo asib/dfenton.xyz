@@ -18,33 +18,82 @@ const faces = [
   face('Top', [0, 0, 1], [0, 1, 0]), face('Bottom', [0, 0, -1], [0, -1, 0]),
 ];
 const axes = [{ name: 'X', vector: new THREE.Vector3(1, 0, 0) }, { name: 'Y', vector: new THREE.Vector3(0, 1, 0) }, { name: 'Z', vector: new THREE.Vector3(0, 0, 1) }];
-const SIZE = 56, TRIAD = 20;
+const SIZE = 52, TRIAD = 18;
 
-export function createViewCube(host: HTMLElement, onPick: (direction: THREE.Vector3) => void) {
+// Named views look from these directions; Onshape's Shift+1 to Shift+7 pick them.
+export const namedViews = {
+  front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0], top: [0, 0, 1], bottom: [0, 0, -1], isometric: [1, -1, 1],
+} as const satisfies Record<string, readonly [number, number, number]>;
+export type NamedView = keyof typeof namedViews;
+const viewNames = Object.keys(namedViews) as NamedView[];
+export const viewKeys: Partial<Record<string, NamedView>> = Object.fromEntries(viewNames.map((name, i) => [`Digit${String(i + 1)}`, name]));
+const title = (name: string) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+// The arrows point to the face they turn to: right from the front shows the right side, up the top.
+const turns = [
+  { name: 'up', azimuth: 0, polar: -Math.PI / 2 }, { name: 'down', azimuth: 0, polar: Math.PI / 2 },
+  { name: 'left', azimuth: -Math.PI / 2, polar: 0 }, { name: 'right', azimuth: Math.PI / 2, polar: 0 },
+];
+
+export interface ViewCubeActions {
+  // Look from a direction (a face, edge or corner).
+  pick: (direction: THREE.Vector3) => void;
+  // Turn the view by azimuth and polar angle.
+  turn: (azimuth: number, polar: number) => void;
+  view: (name: NamedView) => void;
+}
+
+export function createViewCube(host: HTMLElement, actions: ViewCubeActions) {
   const root = document.createElement('div');
   root.className = 'cad-view-cube';
-  // Pointer-only; the arrow keys and named views cover the keyboard.
-  root.setAttribute('aria-hidden', 'true');
-  // Keep focus (and the pick under the pointer) with the canvas.
-  root.addEventListener('pointerdown', event => { event.preventDefault(); });
+  // Keep focus (and the pick under the pointer) with the canvas; the views menu opens normally.
+  root.addEventListener('pointerdown', event => { if (!(event.target instanceof HTMLSelectElement)) event.preventDefault(); });
+  // The cube and arrows are pointer-only; the views menu and Shift+1 to Shift+7 cover the keyboard.
+  const hide = (element: Element) => { element.setAttribute('aria-hidden', 'true'); return element; };
   const elements = faces.map(({ name, normal, up, right }) => {
     const element = document.createElement('div');
     element.className = 'cad-view-cube-face';
+    hide(element);
     for (let row = 0; row < 3; row++) for (let column = 0; column < 3; column++) {
       const zone = document.createElement('span');
       if (row === 1 && column === 1) zone.textContent = name;
       // The centre looks at the face; the rest add the neighbouring faces' normals.
       const direction = normal.clone().addScaledVector(right, column - 1).addScaledVector(up, 1 - row).normalize();
-      zone.addEventListener('click', () => { onPick(direction); });
+      zone.addEventListener('click', () => { actions.pick(direction); });
       element.appendChild(zone);
     }
     root.appendChild(element);
     return element;
   });
+  for (const { name, azimuth, polar } of turns) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cad-view-cube-turn';
+    button.dataset.turn = name;
+    button.tabIndex = -1;
+    button.title = `Turn the view ${name} 90°`;
+    button.innerHTML = '<svg viewBox="0 0 10 10"><path d="M5 1.5 9 8.5H1z"/></svg>';
+    button.addEventListener('click', () => { actions.turn(azimuth, polar); });
+    root.appendChild(hide(button));
+  }
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('class', 'cad-view-cube-triad');
   svg.setAttribute('viewBox', '-30 -30 60 60');
-  root.appendChild(svg);
+  root.appendChild(hide(svg));
+  // A native menu: keyboard, screen-reader and touch friendly. It shows "Views" again after each pick.
+  const select = document.createElement('select');
+  select.className = 'cad-view-cube-views';
+  select.setAttribute('aria-label', 'Named view');
+  select.title = 'Named views (Shift+1 to Shift+7)';
+  const placeholder = new Option('Views', '');
+  placeholder.hidden = true;
+  select.add(placeholder);
+  viewNames.forEach((name, i) => { select.add(new Option(`${title(name)} · Shift+${String(i + 1)}`, name)); });
+  select.addEventListener('change', () => {
+    const name = select.value as NamedView | '';
+    select.value = '';
+    if (name) actions.view(name);
+  });
+  root.appendChild(select);
   host.appendChild(root);
 
   // World vectors in CSS space: the camera's rotation, with y pointing down.

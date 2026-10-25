@@ -4,7 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { edgeTopology, type Topology } from './topology';
-import { createViewCube } from './viewCube';
+import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
 export type SectionAxis = 'off' | 'x' | 'y' | 'z';
@@ -80,11 +80,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
-  // Clicking the orientation cube turns the view and leaves keyboard focus on the canvas.
-  const viewCube = createViewCube(host, direction => {
-    orient(direction);
-    markPointerFocus();
-    renderer.domElement.focus({ preventScroll: true });
+  // Clicking the orientation cube or its arrows turns the view and leaves keyboard focus on
+  // the canvas; the views menu keeps focus for keyboard use.
+  const focusCanvas = () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); };
+  const viewCube = createViewCube(host, {
+    pick: direction => { orient(direction); focusCanvas(); },
+    turn: (azimuth, polar) => { turn(azimuth, polar); focusCanvas(); },
+    view: name => { view(name); },
   });
   const render = () => { renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
   controls.addEventListener('change', render);
@@ -414,6 +416,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     turning = requestAnimationFrame(step);
   };
 
+  // Turn 90° steps from the current view: left and right about Z, up and down toward the top
+  // or bottom, stopping there. At a pole, left and right spin the plan view.
+  const turn = (azimuthTurn: number, polarTurn: number) => {
+    const { azimuth, polar } = angles(camera.position.clone().sub(controls.target).normalize());
+    const a = azimuth + azimuthTurn, p = THREE.MathUtils.clamp(polar + polarTurn, 1e-4, Math.PI - 1e-4);
+    orient(new THREE.Vector3(Math.sin(p) * Math.cos(a), Math.sin(p) * Math.sin(a), Math.cos(p)));
+  };
+  const view = (name: NamedView) => { orient(new THREE.Vector3(...namedViews[name])); };
+
   const replaceGeometry = (next: THREE.BufferGeometry) => {
     next.computeBoundingBox();
     const nextBounds = next.boundingBox;
@@ -681,7 +692,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
     pointerInside: () => !!pointer,
     // Focus the 3D view after pointer use of the viewer's own controls, without the focus ring.
-    focus: () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); },
+    focus: focusCanvas,
+    // Look from a named direction, as the views menu and Shift+1 to Shift+7 do.
+    view,
     // An edge or vertex in model coordinates, with the piece it belongs to.
     entity: (key: string) => {
       const found = entityAt(key);
