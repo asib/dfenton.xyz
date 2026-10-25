@@ -1,3 +1,5 @@
+import { inches } from './cutList';
+
 // Sheet-goods layouts: finished parts packed onto stock sheets. Dimensions are
 // inches. X runs along the sheet length, Y across its width; plywood face grain
 // runs along the sheet length.
@@ -215,4 +217,14 @@ export function layoutSheets(parts: SheetPart[], settings: SheetSettings): Sheet
     result.push({ material, thickness, sheets, partArea: items.reduce((sum, item) => sum + item.part.width * item.part.length, 0) });
   }
   return { ok: true, materials: result.sort((a, b) => b.thickness - a.thickness || a.material.localeCompare(b.material)) };
+}
+
+// A rip-first sheet's cutting steps: each strip's width, then the parts crosscut from it in
+// order, with any trim to width. Shown on the page and printed in the PDF.
+export function ripSteps(sheet: LaidSheet) {
+  return (sheet.strips ?? []).map((strip, i) => {
+    const parts = sheet.placements.filter(p => Math.abs(p.y - strip.y) < 1e-6).sort((a, b) => a.x - b.x);
+    return `Strip ${String(i + 1)}, ${inches(strip.width)}″ wide: ${parts.map(p =>
+      `${p.key} ${inches(p.along)}″${strip.width - p.across > 1e-6 ? ` (trim to ${inches(p.across)}″)` : ''}`).join(', ')}`;
+  });
 }

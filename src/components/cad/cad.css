@@ -265,6 +265,7 @@ html[data-cad-fullscreen] [data-drawing-page] { --cad-page-shadow: none !importa
 .dark .cad-part-swatch { background: var(--part-dark-color); }
 .cad-cut-list { margin: 40px 0; padding-top: 24px; border-top: 1px solid var(--cad-border); min-width: 0; }
 .cad-cut-list-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0; }
+.cad-worksheet-downloads { display: flex; flex-wrap: wrap; gap: 8px; }
 .cad-cut-list h2 { font-size: 20px; font-weight: 600; }
 .cad-cut-list h2 span { font-size: 14px; font-weight: 400; opacity: .7; }
 .cad-worksheet-help { font-size: 12px; line-height: 1.8; margin: 12px 0; max-width: 100ch; opacity: .8; }

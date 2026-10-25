@@ -1,7 +1,7 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { PartColor } from '../../misc';
 import { csvCell, inches, type CutListOutput } from './cutList';
-import { layoutSheets, parseSheetParts, parseSheetStock, partKey, type GrainMode, type LaidSheet, type LayoutMethod, type MaterialLayout } from './sheetLayout';
+import { layoutSheets, parseSheetParts, parseSheetStock, partKey, ripSteps, type GrainMode, type LaidSheet, type LayoutMethod, type MaterialLayout } from './sheetLayout';
 import { sheetLayoutDefaults, type DraftUpdate, type SheetLayoutDraft } from './worksheets';
 
 const number = (text: string) => text.trim() === '' ? NaN : Number(text);
@@ -37,14 +37,6 @@ function SheetDiagram({ sheet, material, index, total, length, width, trim, pale
   </svg>;
 }
 
-function ripSteps(sheet: LaidSheet) {
-  return (sheet.strips ?? []).map((strip, i) => {
-    const parts = sheet.placements.filter(p => Math.abs(p.y - strip.y) < 1e-6).sort((a, b) => a.x - b.x);
-    return `Strip ${String(i + 1)}, ${inches(strip.width)}″ wide: ${parts.map(p =>
-      `${p.key} ${inches(p.along)}″${strip.width - p.across > 1e-6 ? ` (trim to ${inches(p.across)}″)` : ''}`).join(', ')}`;
-  });
-}
-
 export default function SheetLayoutTable({ output, title, filename, palette = [], draft, onDraft }: {
   output: CutListOutput; title: string; filename: string; palette?: PartColor[];
   draft: SheetLayoutDraft; onDraft: DraftUpdate<SheetLayoutDraft>;
@@ -63,6 +55,11 @@ export default function SheetLayoutTable({ output, title, filename, palette = []
   const layout = useMemo(() => layoutSheets(parsed.parts, settings),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settings is rebuilt from these values.
     [parsed.parts, settings.sheetLength, settings.sheetWidth, settings.kerf, settings.trim, grain, method]);
+  // A printable PDF, two sheets to a US Letter page; a changed layout cancels one in progress.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfStatus, setPdfStatus] = useState('');
+  const pdfJob = useRef<AbortController>();
+  useEffect(() => () => { pdfJob.current?.abort(); }, [layout, output.stale]);
   if (parsed.error) return <p className="cad-error" role="alert">{parsed.error}</p>;
   if (!parsed.parts.length) return null;
   const keys = parsed.parts.map((_, i) => partKey(i));
@@ -89,13 +86,45 @@ export default function SheetLayoutTable({ output, title, filename, palette = []
     link.href = url; link.download = filename; link.click();
     window.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
   };
+  const downloadPdf = async () => {
+    if (!layout.ok || output.stale || pdfJob.current) return;
+    const job = new AbortController();
+    pdfJob.current = job;
+    setPdfBusy(true);
+    setPdfStatus('Preparing the printable layout…');
+    try {
+      const { createSheetLayoutPdf } = await import('./sheetLayoutPdf');
+      const blob = await createSheetLayoutPdf({
+        title, materials: layout.materials, parts: parsed.parts, keys, palette, method, trim: settings.trim,
+        sheetLength: settings.sheetLength, sheetWidth: settings.sheetWidth,
+        settings: `${methods[method]} · ${grains[grain]} · ${inches(settings.sheetWidth)} × ${inches(settings.sheetLength)}″ sheets · ` +
+          `${inches(settings.kerf)}″ kerf · ${inches(settings.trim)}″ edge trim · inches`,
+      }, job.signal);
+      job.signal.throwIfAborted();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = filename.replace(/\.csv$/, '.pdf'); link.click();
+      window.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
+      setPdfStatus('PDF downloaded: two sheets to a US Letter page, ready to print.');
+    } catch {
+      setPdfStatus(job.signal.aborted ? 'The layout changed. Download again when it is up to date.' : 'Could not create the PDF. Please try again.');
+    } finally {
+      pdfJob.current = undefined;
+      setPdfBusy(false);
+    }
+  };
   const edit = (key: keyof typeof defaults) => (event: { target: { value: string } }) => { onDraft(previous => ({ ...previous, [key]: event.target.value })); };
 
   return <section className="cad-cut-list cad-sheet-layout" aria-labelledby="sheet-layout-title">
     <div className="cad-cut-list-heading">
       <h2 id="sheet-layout-title">Sheet layout <span>· inches</span></h2>
-      <button type="button" onClick={download} disabled={output.stale || !layout.ok}>Download CSV ↓</button>
+      <div className="cad-worksheet-downloads">
+        <button type="button" onClick={() => { void downloadPdf(); }} disabled={output.stale || !layout.ok || pdfBusy}
+          title="Two sheets to a US Letter page, with each page's parts and, ripping first, the cuts">{pdfBusy ? 'Preparing PDF…' : 'Download PDF ↓'}</button>
+        <button type="button" onClick={download} disabled={output.stale || !layout.ok}>Download CSV ↓</button>
+      </div>
     </div>
+    {pdfStatus && <p className="cad-worksheet-help" role="status">{pdfStatus}</p>}
     {output.stale && <p className="cad-error" role="status">Previous settings — these layouts will update after the model regenerates successfully.</p>}
     <p className="cad-worksheet-help">Plywood parts are laid out on full sheets at finished size, grouped by thickness. Densest nesting uses straight through-cuts in any order. Rip first cuts full-length strips along the sheet, then crosscuts each strip; a part narrower than its strip is trimmed to width last. Face grain runs along the sheet length. Layout settings last until you leave or reload this page; saved configurations and copied links keep them.</p>
     <fieldset className="cad-stock-allowances cad-sheet-options">
