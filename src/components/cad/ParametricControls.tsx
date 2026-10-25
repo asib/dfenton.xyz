@@ -46,7 +46,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [naming, setNaming] = useState<{ mode: 'save' | 'rename'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // A share link the clipboard refused, shown for copying by hand.
-  const [manualLink, setManualLink] = useState('');
+  const [manualShare, setManualShare] = useState<{ kind: 'link' | 'config'; text: string } | null>(null);
   const job = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const updateTimer = useRef<number>();
@@ -277,9 +277,10 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       : notice);
     if (JSON.stringify(settled) !== JSON.stringify(result?.values)) void apply(settled);
   };
-  // Copy a link carrying the values that differ from the source defaults, and the
-  // worksheet settings that would be saved.
-  const copyLink = async () => {
+  // Copy a link carrying the values that differ from the source defaults and the worksheet
+  // settings that would be saved; Copy config copies just that encoded configuration, the part
+  // after #config= in a link.
+  const copyShare = async (kind: 'link' | 'config') => {
     if (!source) return;
     setNaming(null);
     setConfirmDelete(false);
@@ -292,15 +293,17 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       return;
     }
     const sheets = savedWorksheets.saved;
-    const link = configurationLink(window.location.href, await encodeConfiguration({
-      values: changedValues(source.parameters, draftValues.current), ...(Object.keys(sheets).length ? { worksheets: sheets } : {}) }));
+    const encoded = await encodeConfiguration({
+      values: changedValues(source.parameters, draftValues.current), ...(Object.keys(sheets).length ? { worksheets: sheets } : {}) });
+    const text = kind === 'link' ? configurationLink(window.location.href, encoded) : encoded;
     try {
-      await navigator.clipboard.writeText(link);
-      setManualLink('');
-      setConfigurationNotice(`Link copied. Opening it loads these ${carried}.`);
+      await navigator.clipboard.writeText(text);
+      setManualShare(null);
+      setConfigurationNotice(kind === 'link' ? `Link copied. Opening it loads these ${carried}.`
+        : `Configuration copied. Added after #config= to this page's address, it loads these ${carried}.`);
     } catch {
-      setManualLink(link);
-      setConfigurationNotice(`Copy this link to share these ${carried}.`);
+      setManualShare({ kind, text });
+      setConfigurationNotice(`Copy this ${kind === 'link' ? 'link' : 'configuration'} to share these ${carried}.`);
     }
   };
   // Opening a share link (or pasting one into this tab) loads it once the model is ready.
@@ -401,7 +404,8 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       <h3 id="cad-configurations-title">Saved configurations</h3>
       {!storage ? <>
         <div className="cad-configuration-actions">
-          <button type="button" disabled={!available} onClick={() => { void copyLink(); }}>Copy link</button>
+          <button type="button" disabled={!available} onClick={() => { void copyShare('link'); }}>Copy link</button>
+          <button type="button" disabled={!available} onClick={() => { void copyShare('config'); }}>Copy config</button>
         </div>
         <p>Saving configurations needs browser storage, which is unavailable here; links still work.</p>
       </> : <>
@@ -427,13 +431,14 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
           {confirmDelete
             ? <button type="button" className="cad-configuration-danger" onClick={deleteConfiguration}>Confirm delete</button>
             : <button type="button" disabled={!activeName} onClick={() => { setConfirmDelete(true); }}>Delete</button>}
-          <button type="button" disabled={!available} onClick={() => { void copyLink(); }}>Copy link</button>
+          <button type="button" disabled={!available} onClick={() => { void copyShare('link'); }}>Copy link</button>
+          <button type="button" disabled={!available} onClick={() => { void copyShare('config'); }}>Copy config</button>
         </div>}
         {modified && <p>Changed since loading “{activeName}”; Update keeps the changes.</p>}
         {configurationNotice && <p role="status">{configurationNotice}</p>}
-        <p className="cad-configuration-help">Configurations keep the {carried} in this browser only; Copy link shares the current ones.</p>
+        <p className="cad-configuration-help">Configurations keep the {carried} in this browser only; Copy link shares the current ones, and Copy config copies just the configuration, the part after #config= in a link.</p>
       </>}
-      {manualLink && <input className="cad-configuration-link" readOnly aria-label="Configuration link" value={manualLink}
+      {manualShare && <input className="cad-configuration-link" readOnly aria-label={manualShare.kind === 'link' ? 'Configuration link' : 'Configuration'} value={manualShare.text}
         onFocus={(event) => { event.currentTarget.select(); }} />}
     </section>}
     {source && <form ref={form}
