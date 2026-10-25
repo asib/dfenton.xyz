@@ -4,6 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { edgeTopology, type Topology } from './topology';
+import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
 export type SectionAxis = 'off' | 'x' | 'y' | 'z';
@@ -79,7 +80,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
-  const render = () => { renderer.render(scene, camera); placeLabel(); };
+  // Clicking the orientation cube or its arrows turns the view and leaves keyboard focus on
+  // the canvas; the views menu keeps focus for keyboard use.
+  const focusCanvas = () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); };
+  const viewCube = createViewCube(host, {
+    pick: direction => { orient(direction); focusCanvas(); },
+    rotate: (axis, angle) => { rotate(axis, angle); focusCanvas(); },
+    view: name => { view(name); },
+  });
+  const render = () => { renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
   controls.addEventListener('change', render);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.6));
@@ -376,11 +385,51 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const vertical = THREE.MathUtils.degToRad(camera.fov / 2);
     const halfFov = Math.atan(Math.tan(vertical) * Math.min(camera.aspect, 1));
     const distance = radius / Math.sin(halfFov) * 1.12;
+    cancelAnimationFrame(turning);
+    camera.up.set(0, 0, 1);
     camera.position.copy(new THREE.Vector3(...cameraDirection).normalize().multiplyScalar(distance));
     controls.target.set(0, 0, 0);
     controls.update();
     render();
   };
+
+  // Turn the camera rigidly about the target to the orientation `end`, keeping the target and
+  // distance: its rotation eases (slerp), so turns, rolls and named views move without a jump.
+  // `up` is then the axis the orbit turns about.
+  let turning = 0;
+  const local = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+  const turnTo = (end: THREE.Quaternion, up: THREE.Vector3) => {
+    const start = camera.quaternion.clone();
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 350, begun = performance.now();
+    cancelAnimationFrame(turning);
+    const step = (now: number) => {
+      const t = duration ? Math.min(1, (now - begun) / duration) : 1, eased = t * t * (3 - 2 * t);
+      const q = start.clone().slerp(end, eased);
+      // Zooming or panning meanwhile is kept.
+      const distance = camera.position.distanceTo(controls.target);
+      camera.position.copy(controls.target).addScaledVector(local.z.clone().applyQuaternion(q), distance);
+      camera.up.copy(t < 1 ? local.y.clone().applyQuaternion(q) : up);
+      controls.update();
+      turning = t < 1 ? requestAnimationFrame(step) : 0;
+    };
+    turning = requestAnimationFrame(step);
+  };
+  // Look from `direction` toward the target, upright with Z up (the cube's faces, edges and
+  // corners, and named views). Top and bottom views lean a hair toward the front, so a top view
+  // has the front at the bottom and a bottom view at the top.
+  const orient = (direction: THREE.Vector3) => {
+    const eye = Math.hypot(direction.x, direction.y) < 1e-9 ? new THREE.Vector3(0, -1e-4, Math.sign(direction.z)) : direction.clone();
+    const up = local.z.clone();
+    turnTo(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye.normalize(), new THREE.Vector3(), up)), up);
+  };
+  // Turn the view 90° about one of the screen's axes, as the cube's arrows do: x (horizontal) and
+  // y (vertical) turn to a neighbouring side, z (the line of sight) rolls the view. The orbit then
+  // turns about the new screen-up, so the view can end up on its side until a named view rights it.
+  const rotate = (axis: 'x' | 'y' | 'z', angle: number) => {
+    const end = new THREE.Quaternion().setFromAxisAngle(local[axis].clone().applyQuaternion(camera.quaternion), angle).multiply(camera.quaternion);
+    turnTo(end, local.y.clone().applyQuaternion(end));
+  };
+  const view = (name: NamedView) => { orient(new THREE.Vector3(...namedViews[name])); };
 
   const replaceGeometry = (next: THREE.BufferGeometry) => {
     next.computeBoundingBox();
@@ -547,7 +596,6 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // and its target rotate rigidly about the pivot, yaw about Z then pitch about the
   // view's horizontal axis, so the pivot stays under the cursor and the view never
   // jumps. Speed and the pole limits match the orbit controls.
-  const up = new THREE.Vector3(0, 0, 1);
   const pivot = new THREE.Vector3();
   const pointers = new Map<number, { x: number; y: number }>();
   let orbiting: { id: number; x: number; y: number } | null = null;
@@ -564,7 +612,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const orbitAbout = (dx: number, dy: number) => {
     const height = renderer.domElement.clientHeight || 1;
     const offset = camera.position.clone().sub(controls.target);
-    const polar = Math.acos(Math.min(1, Math.max(-1, offset.z / offset.length())));
+    // The orbit turns about camera.up: Z, or the screen-up after the cube's arrows turn or roll the view.
+    const up = camera.up.clone().normalize();
+    const polar = Math.acos(Math.min(1, Math.max(-1, offset.dot(up) / offset.length())));
     // Positive pitch lowers the polar angle (looks down more), as dragging down does.
     const pitch = Math.min(polar - 1e-3, Math.max(polar - (Math.PI - 1e-3), 2 * Math.PI * dy / height));
     const rotation = new THREE.Quaternion().setFromAxisAngle(up, -2 * Math.PI * dx / height);
@@ -591,6 +641,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const onBlur = () => { if (document.activeElement !== renderer.domElement) delete renderer.domElement.dataset.pointerFocus; };
   const onPointerDown = (event: PointerEvent) => {
     markPointerFocus();
+    // Grabbing the model takes over from a turn to a named view.
+    cancelAnimationFrame(turning);
     // Only a lone pointer can tap; a second finger makes it a gesture.
     pressed = event.button === 0 && !pointers.size ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
@@ -647,7 +699,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
     pointerInside: () => !!pointer,
     // Focus the 3D view after pointer use of the viewer's own controls, without the focus ring.
-    focus: () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); },
+    focus: focusCanvas,
+    // Look from a named direction, as the views menu and Shift+1 to Shift+7 do.
+    view,
     // An edge or vertex in model coordinates, with the piece it belongs to.
     entity: (key: string) => {
       const found = entityAt(key);
@@ -676,6 +730,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       measureMaterial.dispose();
       measureEndsMaterial.dispose();
       measureLabel.remove();
+      viewCube.dispose();
+      cancelAnimationFrame(turning);
       controls.removeEventListener('change', scheduleHover);
       cancelAnimationFrame(frame);
       controls.removeEventListener('change', render);
