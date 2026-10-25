@@ -28,17 +28,25 @@ export type NamedView = keyof typeof namedViews;
 const viewNames = Object.keys(namedViews) as NamedView[];
 export const viewKeys: Partial<Record<string, NamedView>> = Object.fromEntries(viewNames.map((name, i) => [`Digit${String(i + 1)}`, name]));
 const title = (name: string) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
-// The arrows point to the face they turn to: right from the front shows the right side, up the top.
+// The arrows turn the view 90° about the screen's axes, toward the side they point to: right
+// from the front shows the right side, up the top. The curved arrows roll it about the line of
+// sight (z, toward the viewer); a positive roll turns the model clockwise on screen.
+const arrow = '<svg viewBox="0 0 10 10"><path d="M5 1.5 9 8.5H1z"/></svg>';
+const curved = '<svg viewBox="0 0 10 10"><path d="M1.8 6.4A3.3 3.3 0 0 1 8.2 6.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.6 5.7H9.8L8.2 8.6z"/></svg>';
 const turns = [
-  { name: 'up', azimuth: 0, polar: -Math.PI / 2 }, { name: 'down', azimuth: 0, polar: Math.PI / 2 },
-  { name: 'left', azimuth: -Math.PI / 2, polar: 0 }, { name: 'right', azimuth: Math.PI / 2, polar: 0 },
-];
+  { name: 'up', axis: 'x', angle: -Math.PI / 2, label: 'Turn the view up 90°', icon: arrow },
+  { name: 'down', axis: 'x', angle: Math.PI / 2, label: 'Turn the view down 90°', icon: arrow },
+  { name: 'left', axis: 'y', angle: -Math.PI / 2, label: 'Turn the view left 90°', icon: arrow },
+  { name: 'right', axis: 'y', angle: Math.PI / 2, label: 'Turn the view right 90°', icon: arrow },
+  { name: 'clockwise', axis: 'z', angle: Math.PI / 2, label: 'Roll the view 90° clockwise', icon: curved },
+  { name: 'anticlockwise', axis: 'z', angle: -Math.PI / 2, label: 'Roll the view 90° anticlockwise', icon: curved },
+] as const;
 
 export interface ViewCubeActions {
   // Look from a direction (a face, edge or corner).
   pick: (direction: THREE.Vector3) => void;
-  // Turn the view by azimuth and polar angle.
-  turn: (azimuth: number, polar: number) => void;
+  // Turn the view about a screen axis: x horizontal, y vertical, z the line of sight.
+  rotate: (axis: 'x' | 'y' | 'z', angle: number) => void;
   view: (name: NamedView) => void;
 }
 
@@ -64,15 +72,15 @@ export function createViewCube(host: HTMLElement, actions: ViewCubeActions) {
     root.appendChild(element);
     return element;
   });
-  for (const { name, azimuth, polar } of turns) {
+  for (const { name, axis, angle, label, icon } of turns) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'cad-view-cube-turn';
     button.dataset.turn = name;
     button.tabIndex = -1;
-    button.title = `Turn the view ${name} 90°`;
-    button.innerHTML = '<svg viewBox="0 0 10 10"><path d="M5 1.5 9 8.5H1z"/></svg>';
-    button.addEventListener('click', () => { actions.turn(azimuth, polar); });
+    button.title = label;
+    button.innerHTML = icon;
+    button.addEventListener('click', () => { actions.rotate(axis, angle); });
     root.appendChild(hide(button));
   }
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

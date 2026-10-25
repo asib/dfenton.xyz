@@ -55,6 +55,9 @@
 .cad-view-cube-turn[data-turn=left] svg { transform: rotate(-90deg); }
 .cad-view-cube-turn[data-turn=right] { left: 112px; top: 52px; }
 .cad-view-cube-turn[data-turn=right] svg { transform: rotate(90deg); }
+.cad-view-cube-turn[data-turn=anticlockwise] { left: 12px; top: 6px; }
+.cad-view-cube-turn[data-turn=anticlockwise] svg { transform: scaleX(-1); }
+.cad-view-cube-turn[data-turn=clockwise] { left: 100px; top: 6px; }
 .cad-view-cube-views { position: absolute; right: 0; bottom: 0; max-width: 72px; padding: 1px 2px; font: inherit; font-size: 11px; color: var(--cad-cube);
   background: var(--cad-surface); border: 1px solid var(--cad-border); border-radius: 3px; cursor: pointer; }
 .cad-view-cube-views:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

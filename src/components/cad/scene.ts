@@ -85,7 +85,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const focusCanvas = () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); };
   const viewCube = createViewCube(host, {
     pick: direction => { orient(direction); focusCanvas(); },
-    turn: (azimuth, polar) => { turn(azimuth, polar); focusCanvas(); },
+    rotate: (axis, angle) => { rotate(axis, angle); focusCanvas(); },
     view: name => { view(name); },
   });
   const render = () => { renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
@@ -385,43 +385,49 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const vertical = THREE.MathUtils.degToRad(camera.fov / 2);
     const halfFov = Math.atan(Math.tan(vertical) * Math.min(camera.aspect, 1));
     const distance = radius / Math.sin(halfFov) * 1.12;
+    cancelAnimationFrame(turning);
+    camera.up.set(0, 0, 1);
     camera.position.copy(new THREE.Vector3(...cameraDirection).normalize().multiplyScalar(distance));
     controls.target.set(0, 0, 0);
     controls.update();
     render();
   };
 
-  // Look from `direction` toward the target, keeping the target and distance. Azimuth and
-  // polar angle ease together, so a view through a pole keeps Z up and ends in its standard
-  // orientation: a top view has the front at the bottom, a bottom view at the top.
+  // Turn the camera rigidly about the target to the orientation `end`, keeping the target and
+  // distance: its rotation eases (slerp), so turns, rolls and named views move without a jump.
+  // `up` is then the axis the orbit turns about.
   let turning = 0;
-  const angles = (d: THREE.Vector3) => ({ azimuth: Math.atan2(d.y, d.x), polar: Math.acos(THREE.MathUtils.clamp(d.z, -1, 1)) });
-  const orient = (direction: THREE.Vector3) => {
-    const from = angles(camera.position.clone().sub(controls.target).normalize());
-    const pole = Math.hypot(direction.x, direction.y) < 1e-9;
-    const to = pole ? { azimuth: -Math.PI / 2, polar: direction.z > 0 ? 1e-4 : Math.PI - 1e-4 } : angles(direction.clone().normalize());
-    // The shorter way round.
-    const turn = Math.atan2(Math.sin(to.azimuth - from.azimuth), Math.cos(to.azimuth - from.azimuth));
-    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 350, start = performance.now();
+  const local = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+  const turnTo = (end: THREE.Quaternion, up: THREE.Vector3) => {
+    const start = camera.quaternion.clone();
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 350, begun = performance.now();
     cancelAnimationFrame(turning);
     const step = (now: number) => {
-      const t = duration ? Math.min(1, (now - start) / duration) : 1, eased = t * t * (3 - 2 * t);
-      const azimuth = from.azimuth + turn * eased, polar = from.polar + (to.polar - from.polar) * eased;
+      const t = duration ? Math.min(1, (now - begun) / duration) : 1, eased = t * t * (3 - 2 * t);
+      const q = start.clone().slerp(end, eased);
       // Zooming or panning meanwhile is kept.
       const distance = camera.position.distanceTo(controls.target);
-      camera.position.copy(controls.target).add(new THREE.Vector3(Math.sin(polar) * Math.cos(azimuth), Math.sin(polar) * Math.sin(azimuth), Math.cos(polar)).multiplyScalar(distance));
+      camera.position.copy(controls.target).addScaledVector(local.z.clone().applyQuaternion(q), distance);
+      camera.up.copy(t < 1 ? local.y.clone().applyQuaternion(q) : up);
       controls.update();
       turning = t < 1 ? requestAnimationFrame(step) : 0;
     };
     turning = requestAnimationFrame(step);
   };
-
-  // Turn 90° steps from the current view: left and right about Z, up and down toward the top
-  // or bottom, stopping there. At a pole, left and right spin the plan view.
-  const turn = (azimuthTurn: number, polarTurn: number) => {
-    const { azimuth, polar } = angles(camera.position.clone().sub(controls.target).normalize());
-    const a = azimuth + azimuthTurn, p = THREE.MathUtils.clamp(polar + polarTurn, 1e-4, Math.PI - 1e-4);
-    orient(new THREE.Vector3(Math.sin(p) * Math.cos(a), Math.sin(p) * Math.sin(a), Math.cos(p)));
+  // Look from `direction` toward the target, upright with Z up (the cube's faces, edges and
+  // corners, and named views). Top and bottom views lean a hair toward the front, so a top view
+  // has the front at the bottom and a bottom view at the top.
+  const orient = (direction: THREE.Vector3) => {
+    const eye = Math.hypot(direction.x, direction.y) < 1e-9 ? new THREE.Vector3(0, -1e-4, Math.sign(direction.z)) : direction.clone();
+    const up = local.z.clone();
+    turnTo(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye.normalize(), new THREE.Vector3(), up)), up);
+  };
+  // Turn the view 90° about one of the screen's axes, as the cube's arrows do: x (horizontal) and
+  // y (vertical) turn to a neighbouring side, z (the line of sight) rolls the view. The orbit then
+  // turns about the new screen-up, so the view can end up on its side until a named view rights it.
+  const rotate = (axis: 'x' | 'y' | 'z', angle: number) => {
+    const end = new THREE.Quaternion().setFromAxisAngle(local[axis].clone().applyQuaternion(camera.quaternion), angle).multiply(camera.quaternion);
+    turnTo(end, local.y.clone().applyQuaternion(end));
   };
   const view = (name: NamedView) => { orient(new THREE.Vector3(...namedViews[name])); };
 
@@ -590,7 +596,6 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // and its target rotate rigidly about the pivot, yaw about Z then pitch about the
   // view's horizontal axis, so the pivot stays under the cursor and the view never
   // jumps. Speed and the pole limits match the orbit controls.
-  const up = new THREE.Vector3(0, 0, 1);
   const pivot = new THREE.Vector3();
   const pointers = new Map<number, { x: number; y: number }>();
   let orbiting: { id: number; x: number; y: number } | null = null;
@@ -607,7 +612,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const orbitAbout = (dx: number, dy: number) => {
     const height = renderer.domElement.clientHeight || 1;
     const offset = camera.position.clone().sub(controls.target);
-    const polar = Math.acos(Math.min(1, Math.max(-1, offset.z / offset.length())));
+    // The orbit turns about camera.up: Z, or the screen-up after the cube's arrows turn or roll the view.
+    const up = camera.up.clone().normalize();
+    const polar = Math.acos(Math.min(1, Math.max(-1, offset.dot(up) / offset.length())));
     // Positive pitch lowers the polar angle (looks down more), as dragging down does.
     const pitch = Math.min(polar - 1e-3, Math.max(polar - (Math.PI - 1e-3), 2 * Math.PI * dy / height));
     const rotation = new THREE.Quaternion().setFromAxisAngle(up, -2 * Math.PI * dx / height);
