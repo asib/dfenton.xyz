@@ -1,7 +1,8 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import type { PartColor } from '../../misc';
 import { boardFeet, csvCell, groupCutList, inches, milledThickness, parseCutList, parseStockPreparation, roughDimensions, standardThickness, stockLabel, stockPlan, stockThicknesses, type CutListOutput, type CutPart, type StockLayoutMode } from './cutList';
 import { cutListDefaults, type CutListDraft, type DraftUpdate } from './worksheets';
+import { showTable } from './openFile';
 
 const number = (text: string) => text.trim() === '' ? NaN : Number(text);
 const feetFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -24,6 +25,7 @@ export default function CutListTable({ output, title, filename, palette = [], dr
   const thicknessExtra = allowanceText('thicknessExtra'), widthExtra = allowanceText('widthExtra'), lengthExtra = allowanceText('lengthExtra');
   const extraPercent = allowanceText('extraPercent'), crosscutKerf = allowanceText('crosscutKerf');
   const editAllowance = (key: keyof typeof cutListDefaults) => (event: { target: { value: string } }) => { onDraft((previous) => ({ ...previous, [key]: event.target.value })); };
+  const [csvStatus, setCsvStatus] = useState('');
   if (parsed.error) return <p className="cad-error" role="alert">{parsed.error}</p>;
   if (!parsed.parts.length) return null;
   const hasResaw = parsed.parts.some(part => part.resawGroup);
@@ -64,7 +66,8 @@ export default function CutListTable({ output, title, filename, palette = [], dr
   const editThickness = (ids: string[], value: string) => {
     onDraft((previous) => ({ ...previous, thicknesses: { ...previous.thicknesses, ...Object.fromEntries(ids.map((id) => [id, value])) } }));
   };
-  const download = () => {
+  // The CSV opens in a new tab as a printable table, with the file to download.
+  const openCsv = () => {
     const csv: (string | number)[][] = [
       [`${title} cut list — dimensions in inches`],
       ['Part name', 'Finish qty', 'Finish thickness', 'Finish width', 'Finish length', 'Parent qty', 'Parent thickness', 'Parent width', 'Parent length', 'Board feet', `Board feet ${extraHeading.toLowerCase()}`, 'Stock size', 'Stock preparation', 'Finished pieces per parent'],
@@ -87,17 +90,16 @@ export default function CutListTable({ output, title, filename, palette = [], dr
         csv.push([`${part.name}: one parent board yields two finished halves; minimum milled parent thickness before resaw`, milledThickness(part, preparation)]);
       }
     }
-    const url = URL.createObjectURL(new Blob([csv.map((row) => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url; link.download = filename; link.click();
-    window.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
+    const opened = showTable(csv, csv.map((row) => row.map(csvCell).join(',')).join('\r\n'), filename, `${title} cut list`);
+    setCsvStatus(opened === 'downloaded' ? 'Pop-ups are blocked, so the CSV was downloaded instead.' : '');
   };
 
   return <section className="cad-cut-list" aria-labelledby="cut-list-title">
     <div className="cad-cut-list-heading">
       <h2 id="cut-list-title">Cut list <span>· inches</span></h2>
-      <button type="button" onClick={download} disabled={output.stale || !valid}>Download CSV ↓</button>
+      <button type="button" onClick={openCsv} disabled={output.stale || !valid} title="Opens in a new tab, to print or download">Open CSV ↗</button>
     </div>
+    {csvStatus && <p className="cad-worksheet-help" role="status">{csvStatus}</p>}
     {output.stale && <p className="cad-error" role="status">Previous settings — this table will update after the model regenerates successfully.</p>}
     <p className="cad-worksheet-help">Finished sizes are rectangular blanks before cutting the joinery. Matching blanks share a row; swatches identify their pieces. Rough quantities count parent boards: matching short pieces can share a longer board.{hasResaw && ' Each bookmatched pair shares one resaw parent.'}</p>
     <fieldset className="cad-stock-allowances">
