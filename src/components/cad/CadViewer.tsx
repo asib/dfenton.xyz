@@ -11,6 +11,7 @@ import { measure, type Measurable } from './measure';
 import SheetLayoutTable from './SheetLayoutTable';
 import type { CutListOutput } from './cutList';
 import { useFullscreen } from './useFullscreen';
+import { viewKeys } from './viewCube';
 import DrawingSheets from './DrawingSheets';
 import type { DrawingOutput } from './drawings';
 import { emptyWorksheets, type CutListDraft, type DraftUpdate, type SheetLayoutDraft, type WorksheetDrafts } from './worksheets';
@@ -269,12 +270,16 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     else return false;
     return true;
   };
+  // Onshape's named views, Shift+1 to Shift+7, work for every model, with or without a legend.
+  const namedView = (event: { code: string; shiftKey: boolean; altKey: boolean }) => event.shiftKey && !event.altKey ? viewKeys[event.code] : undefined;
   // From the 3D view or the part legend, never while typing in a field.
   const onShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (!hasLegend || event.ctrlKey || event.metaKey || !(target.tagName === 'CANVAS' || target.closest('#cad-legend')) ||
+    if (event.ctrlKey || event.metaKey || !(target.tagName === 'CANVAS' || target.closest('#cad-legend')) ||
         target.matches('input:not([type=range]), select, textarea')) return;
-    if (!runShortcut(event, target.tagName === 'CANVAS')) return;
+    const view = namedView(event);
+    if (view) viewer?.view(view);
+    else if (!hasLegend || !runShortcut(event, target.tagName === 'CANVAS')) return;
     event.preventDefault();
     event.stopPropagation();
   };
@@ -282,12 +287,14 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
   const latestShortcut = useRef(runShortcut);
   latestShortcut.current = runShortcut;
   useEffect(() => {
-    if (!hasLegend || !viewer) return;
+    if (!viewer) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
       const active = document.activeElement;
       if (event.defaultPrevented || event.ctrlKey || event.metaKey ||
           (active && active !== document.body) || !viewer.pointerInside()) return;
-      if (latestShortcut.current(event, true)) event.preventDefault();
+      const view = namedView(event);
+      if (view) { viewer.view(view); event.preventDefault(); }
+      else if (hasLegend && latestShortcut.current(event, true)) event.preventDefault();
     };
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('keydown', onKey); };
@@ -371,7 +378,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
+          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90°, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
