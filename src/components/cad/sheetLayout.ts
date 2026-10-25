@@ -76,9 +76,12 @@ const partArea = (sheet: LaidSheet) => sheet.placements.reduce((sum, p) => sum +
 // Area cut away when parts are trimmed to width from wider rip strips.
 const trimmedArea = (packed: Packed) => packed.sheets.reduce((sum, sheet) => sum + sheet.placements.reduce((total, p) =>
   total + ((sheet.strips?.find(strip => Math.abs(strip.y - p.y) < eps)?.width ?? p.across) - p.across) * p.along, 0), 0);
-// Fewest sheets, then the least trimming waste, then the emptiest final sheet
-// (more of the work on earlier sheets).
-const score = (packed: Packed) => [packed.sheets.length, trimmedArea(packed),
+// Width ripped from each sheet: its strips' extent across it (none for densest layouts).
+const rippedWidth = (packed: Packed) => packed.sheets.reduce((sum, sheet) =>
+  sum + Math.max(0, ...(sheet.strips ?? []).map(strip => strip.y + strip.width)), 0);
+// Fewest sheets; then, ripping first, the least width ripped, which leaves the widest offcut;
+// then the least trimming waste, then the emptiest final sheet (more of the work on earlier sheets).
+const score = (packed: Packed) => [packed.sheets.length, rippedWidth(packed), trimmedArea(packed),
   partArea(packed.sheets[packed.sheets.length - 1] ?? { placements: [] })];
 
 type Split = 'shorter' | 'longer' | 'across' | 'along';
@@ -118,9 +121,10 @@ function guillotine(items: Item[], length: number, width: number, kerf: number, 
 }
 
 // Strip cutting: rip the sheet along its length into strips, then crosscut each
-// strip. A part narrower than its strip is trimmed to width after crosscutting;
-// exact-width strips are preferred so most parts need no third cut. With
-// "open", a new exact-width strip is ripped before trimming from a wider one.
+// strip. A part narrower than its strip is trimmed to width after crosscutting.
+// With "trim", parts fill partly used strips (the least trimming first) before a
+// new strip is ripped; with "open", a new exact-width strip is ripped first. The
+// score keeps whichever uses less of the sheet's width.
 interface Strip { y: number; width: number; used: number }
 function ripFirst(items: Item[], length: number, width: number, kerf: number, prefer: 'grain' | 'narrow' | 'wide', policy: 'trim' | 'open'): Packed {
   const sheets: { used: number; laid: LaidSheet; strips: Strip[] }[] = [];

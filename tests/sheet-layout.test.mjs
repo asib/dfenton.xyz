@@ -84,25 +84,36 @@ test('grain mode decides whether parts may turn', () => {
   expect(visible.materials[0].sheets[0].placements.some(p => p.turned)).toBe(true);
 });
 
-test('rip-first strips prefer exact widths and trim narrower parts', () => {
+test('rip-first fills partly used strips, trimming parts to width, before ripping new ones', () => {
   const parts = [part('a', 20, 40, 2), part('b', 10, 40, 2), part('c', 10, 15, 2)];
   for (const method of ['rip', 'densest']) {
     const settings = { ...stock, grain: 'aligned', method };
     check(parts, settings, layoutSheets(parts, settings));
   }
-  const trimmed = (sheet, strips) => sheet.placements.filter(p => strips.find(st => st.y === p.y).width > p.across);
-  // With room on the sheet, a new exact-width strip is ripped rather than trimming a part.
-  const roomy = layoutSheets(parts, { ...stock, grain: 'aligned', method: 'rip' }).materials[0].sheets[0];
-  expect(roomy.strips.map(st => st.width).sort((a, b) => a - b)).toEqual([10, 10, 20]);
-  expect(trimmed(roomy, roomy.strips)).toHaveLength(0);
-  // Without room for a third strip, one 10-inch part shares the 20-inch strip and is trimmed.
-  const narrow = { ...stock, sheetWidth: 30.25, grain: 'aligned', method: 'rip' };
-  const tight = layoutSheets(parts, narrow);
-  check(parts, narrow, tight);
-  const sheet = tight.materials[0].sheets[0];
-  expect(tight.materials[0].sheets).toHaveLength(1);
-  expect(sheet.strips.map(st => st.width).sort((a, b) => a - b)).toEqual([10, 20]);
-  expect(trimmed(sheet, sheet.strips)).toHaveLength(1);
+  const ripped = sheet => Math.max(...sheet.strips.map(st => st.y + st.width));
+  const trimmed = sheet => sheet.placements.filter(p => sheet.strips.find(st => st.y === p.y).width > p.across);
+  // Even with room for a third strip, one 10-inch part shares the 20-inch strip and is trimmed,
+  // so the strips take 30 1/8 inches of the sheet's width rather than 40 1/4.
+  for (const sheetWidth of [48, 30.25]) {
+    const settings = { ...stock, sheetWidth, grain: 'aligned', method: 'rip' };
+    const layout = layoutSheets(parts, settings);
+    check(parts, settings, layout);
+    const [sheet] = layout.materials[0].sheets;
+    expect(layout.materials[0].sheets).toHaveLength(1);
+    expect(sheet.strips.map(st => st.width).sort((a, b) => a - b)).toEqual([10, 20]);
+    expect(ripped(sheet)).toBeCloseTo(30.125, 6);
+    expect(trimmed(sheet)).toHaveLength(1);
+  }
+  // A drawer cabinet's 1/2-inch sides and backs: one strip per width took 25 3/8 inches; filling
+  // partly used strips takes four strips, 17.1354 inches.
+  const half = [part('side-1', 4.8542, 16.5, 2), part('side-2', 4.1354, 16.5, 10), part('back-1', 4.3542, 22.375, 1), part('back-2', 3.6354, 22.375, 5)]
+    .map(p => ({ ...p, material: '1/2″ plywood', thickness: 0.5 }));
+  const settings = { ...stock, grain: 'visible', method: 'rip' };
+  const layout = layoutSheets(half, settings);
+  check(half, settings, layout);
+  const [sheet] = layout.materials[0].sheets;
+  expect(sheet.strips).toHaveLength(4);
+  expect(ripped(sheet)).toBeCloseTo(4.8542 + 2 * 4.1354 + 3.6354 + 3 * 0.125, 6);
 });
 
 test('materials lay out separately, thickest first', () => {
