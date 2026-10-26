@@ -6,10 +6,11 @@ import { svg2pdf } from 'svg2pdf.js';
 import { DrawingDocument } from './DrawingSheetPages';
 import type { DrawingSheet } from './drawings';
 
-const fontFamily = 'Liberation Sans';
+export const fontFamily = 'Liberation Sans';
 const fontStyles = ['normal', 'bold'] as const;
 
-async function loadFonts(signal: AbortSignal) {
+// Also used by the sheet layout PDF.
+export async function loadFonts(signal: AbortSignal) {
   return Promise.all(fontStyles.map(async style => {
     const file = `liberation-sans-${style === 'normal' ? 'regular' : 'bold'}.ttf`;
     const response = await fetch(`/fonts/${file}`, { signal });
