@@ -66,6 +66,16 @@ Keep the STL and previews in the entry folder, along with the original OpenSCAD 
 
 The viewer assumes STL coordinates are millimeters with Z up, matching OpenSCAD. It provides orbit/pan/zoom, keyboard rotation/zoom, solid/edge/wireframe modes, and one movable X/Y/Z clipping plane with a flip control. Colored stencil caps show cut material while preserving cavities; these require closed, consistently wound meshes. The first entry is a single solid, so part visibility controls are not shown. View controls do not affect the downloadable solid. Models with `customizer` also expose editable source parameters and regenerate the geometry in the browser.
 
+### Model viewer
+
+The **3D model viewer** at `/misc/model-viewer/` is the viewer with no model of its own: visitors open their own STL files in it. Its metadata sets `"type": "viewer"`, with the usual title, description, date and previews, and optional `notes`. It needs no `model`, `source` or `diagram.html`; its list previews are small SVGs, as there is no fixed model to capture.
+
+`ModelViewer.tsx` (lazy-loaded like `CadViewer`):
+- **Opening:** a file can be dropped anywhere on the page, including over a model already open (which it replaces), or chosen with a file picker that also suits keyboards and phones. A "Drop to open" overlay shows while dragging. Window-level drag handlers keep the browser from navigating to a dropped file.
+- **Checking:** a file must end in `.stl` and look like one: a binary STL's size must match its triangle count, or an ASCII STL must start with `solid` and list facets. Otherwise it's refused with a message, and the open model stays.
+- **Viewing:** an accepted file becomes an object URL (nothing is uploaded) passed to `CadViewer` as a synthetic CAD entry. The viewer remounts per file and opens front-right-top, with every tool: measuring, sections, display modes, the orientation cube and fullscreen.
+- **Units and downloads:** STL carries no units, so measurements read as millimetres with inches alongside. `CadViewer`'s `downloads={false}` hides the download links, and its load errors stop pointing at them.
+
 ### Onshape and other STL imports
 
 An exported mesh can be a complete CAD entry without an OpenSCAD file. Omit `source` and `customizer`, and provide `sourceUrl` if an editable design is available elsewhere. The local page still includes the full Three.js viewer and a hosted STL download; the source link is supplementary. Do not fabricate a SCAD file or editable parameters from a mesh.

@@ -36,7 +36,13 @@ export interface CadEntry extends EntryBase {
   attribution?: { text: string; url: string };
 }
 
-type MiscEntry = DiagramEntry | CadEntry;
+// The 3D viewer with no model of its own: visitors open their own files in it.
+export interface ViewerEntry extends EntryBase {
+  type: 'viewer';
+  notes?: string;
+}
+
+type MiscEntry = DiagramEntry | CadEntry | ViewerEntry;
 
 const previewFilename = /^[a-z0-9][a-z0-9-]*\.(svg|png|webp|jpe?g)$/;
 
@@ -90,7 +96,7 @@ export const miscEntries = Object.entries(metadata).map(([path, entry]) => {
       (entry.previewDark !== undefined && !previewFilename.test(entry.previewDark))) {
     throw new Error(`Invalid Misc metadata: ${path}`);
   }
-  if (entry.type !== undefined && !['diagram', 'cad'].includes(entry.type)) {
+  if (entry.type !== undefined && !['diagram', 'cad', 'viewer'].includes(entry.type)) {
     throw new Error(`Unknown Misc entry type: ${path}`);
   }
   if (entry.type === 'cad' && (
@@ -108,6 +114,9 @@ export const miscEntries = Object.entries(metadata).map(([path, entry]) => {
     ))
   )) {
     throw new Error(`Invalid CAD metadata: ${path}`);
+  }
+  if (entry.type === 'viewer' && entry.notes !== undefined && typeof entry.notes !== 'string') {
+    throw new Error(`Invalid viewer metadata: ${path}`);
   }
   return { ...entry, href: `/misc/${slug}/` };
 }).sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));

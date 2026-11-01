@@ -19,7 +19,8 @@ import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
 
-export default function CadViewer({ entry }: { entry: CadEntry & { href: string } }) {
+// `downloads` offers the model and source files; the model viewer turns it off for visitors' own files.
+export default function CadViewer({ entry, downloads = true }: { entry: CadEntry & { href: string }; downloads?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
   const [legendOpen, setLegendOpen] = useState(true);
@@ -71,7 +72,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
     if (!element) return;
     const controller = new AbortController();
     let active: Viewer | null = null;
-    const lost = () => { setStatus('The 3D view was interrupted. Reload the page to restore it, or download the model below.'); };
+    const lost = () => { setStatus(`The 3D view was interrupted. ${downloads ? 'Reload the page to restore it, or download the model below.' : 'Open the file again to restore it.'}`); };
     const load = async () => {
       try {
         // Start with saved colored triangles when provided, so cold loads don't
@@ -96,7 +97,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
         setStatus('');
       } catch {
         if (!controller.signal.aborted) {
-          setStatus('The 3D view could not load. You can still download the model below.');
+          setStatus(downloads ? 'The 3D view could not load. You can still download the model below.' : 'The 3D view could not load this file.');
         }
       }
     };
@@ -106,7 +107,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [modelUrl, displayUrl, palette, camera]);
+  }, [modelUrl, displayUrl, palette, camera, downloads]);
 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });
@@ -408,7 +409,7 @@ export default function CadViewer({ entry }: { entry: CadEntry & { href: string 
             </div>}
           </fieldset>
           {viewer && <p className="cad-dimensions">Bounds: {viewer.size.x.toFixed(1)} × {viewer.size.y.toFixed(1)} × {viewer.size.z.toFixed(1)} mm (X × Y × Z)</p>}
-          {!entry.customizer && <div className="cad-downloads">
+          {downloads && !entry.customizer && <div className="cad-downloads">
             <a href={modelUrl} download>Download STL ↓</a>
             {entry.source && <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>}
             {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
