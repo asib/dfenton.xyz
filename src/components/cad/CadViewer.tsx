@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry, PartColor } from '../../misc';
-import { createScene, type PartAppearances, type RenderMode, type SectionAxis } from './scene';
+import { createScene, type PartAppearances, type PickedFace, type RenderMode } from './scene';
+import { defaultPlanes, depthRange, facePlane, planeNames, sectionPlane, startSection, type DefaultPlane, type SectionState, type Vec3 } from './section';
 import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
@@ -19,6 +20,7 @@ import { emptyWorksheets, type CutListDraft, type DraftUpdate, type SheetLayoutD
 import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
+const tuple = (vector: { x: number; y: number; z: number }): Vec3 => [vector.x, vector.y, vector.z];
 
 // What a visitor's file's parts are, for the legend.
 const partsHints: Record<FileParts['from'], string> = {
@@ -56,9 +58,12 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [status, setStatus] = useState('Loading model…');
   const [mode, setMode] = useState<RenderMode>('edges');
-  const [axis, setAxis] = useState<SectionAxis>('off');
-  const [position, setPosition] = useState(50);
-  const [flipped, setFlipped] = useState(false);
+  // The section view (section.ts), or null when off; Shift+X brings back the last one.
+  // `picking` waits for a click on a face to section through; `depthDraft` is a typed depth.
+  const [section, setSection] = useState<SectionState | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [depthDraft, setDepthDraft] = useState<string | null>(null);
+  const lastSection = useRef<SectionState | null>(null);
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
@@ -127,7 +132,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
         setPartsFrom(from);
         setPieces(geometryPieces(geometry));
         try {
-          active = createScene(element, geometry, camera, (key) => { pick.current(key); }, setCanvasHover);
+          active = createScene(element, geometry, camera, (key, face) => { pick.current(key, face); }, setCanvasHover);
         } catch (error) {
           geometry.dispose();
           throw error;
@@ -150,8 +155,19 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   }, [local, modelUrl, displayUrl, palette, genericParts, camera, downloads, scale]);
 
   useEffect(() => {
-    viewer?.setSettings({ mode, axis, position, flipped });
-  }, [viewer, mode, axis, position, flipped]);
+    viewer?.setSettings({ mode, section: section && sectionPlane(section) });
+    if (section) lastSection.current = section;
+  }, [viewer, mode, section]);
+  // A change of units rescales the model, so the section moves with it.
+  const sectionScale = useRef(scale);
+  useEffect(() => {
+    const ratio = scale / sectionScale.current;
+    sectionScale.current = scale;
+    if (ratio === 1) return;
+    const rescale = (current: SectionState | null) => current && { ...current, depth: current.depth * ratio, reference: { ...current.reference, offset: current.reference.offset * ratio } };
+    lastSection.current = rescale(lastSection.current);
+    setSection(rescale);
+  }, [scale]);
 
   const pieceLabels = useMemo(() => parsePieceLabels(cutList.text), [cutList.text]);
   const partPieces = (id: string) => pieces.filter(piece => piece.part === id);
@@ -193,6 +209,11 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     const mmText = `${mm.toFixed(2)} mm`;
     return units === 'inches' ? [inchText(mm), mmText] : [mmText, inchText(mm)];
   };
+  // A section's depth, which may be negative, in the model's units.
+  const depthText = (mm: number) => {
+    const text = units === 'inches' ? inchText(Math.abs(mm)) : `${Math.abs(mm).toFixed(1)} mm`;
+    return mm < 0 && /[1-9]/.test(text) ? `−${text}` : text;
+  };
   const formatRow = (row: { value: number; unit: 'length' | 'angle' }) => row.unit === 'angle' ? [`${row.value.toFixed(2)}°`, ''] : formatLength(row.value);
   const measurementKey = measurement ? JSON.stringify(measurement) : '';
   useEffect(() => {
@@ -225,8 +246,15 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
       return [...current, target.key];
     });
   };
-  const pick = useRef(toggleSelect);
-  pick.current = toggleSelect;
+  // A click selects, or while picking, sections through the face clicked.
+  const pick = useRef<(key: string | null, face: PickedFace | null) => void>(toggleSelect);
+  pick.current = (key, face) => {
+    if (!picking) { toggleSelect(key); return; }
+    if (!face || !viewer) return;
+    setSection(startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size)));
+    setDepthDraft(null);
+    setPicking(false);
+  };
   // Hovering an edge or vertex marks the part it belongs to in the legend.
   const hoverTarget = resolve(canvasHover) ?? resolveEntity(canvasHover)?.owner ?? null;
   // Pointing at or focusing a legend entry, piece or selected item lights it in 3D.
@@ -293,8 +321,25 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     setLooks(targets, () => ({ hidden: false, opacity: fade ? 0.3 : 1 }));
   };
   const anyHidden = Object.values(appearances).some(value => value?.hidden);
+  // A default plane from the Section menu opens through the middle of the model; "Face" waits
+  // for a click on one. Shift+X brings back the last section, or else the front plane.
+  const chooseSection = (value: string) => {
+    setDepthDraft(null);
+    if (value === 'face') { setPicking(true); return; }
+    setPicking(false);
+    setSection(value === 'off' || !viewer ? null : startSection(defaultPlanes[value as DefaultPlane], tuple(viewer.sourceMin), tuple(viewer.size)));
+  };
+  const toggleSection = () => {
+    setPicking(false);
+    setDepthDraft(null);
+    const fallback = viewer && startSection(defaultPlanes.front, tuple(viewer.sourceMin), tuple(viewer.size));
+    setSection(current => current ? null : lastSection.current ?? fallback);
+  };
+  // Look back along the section's normal, at the cut face on.
+  const viewNormal = () => { if (section) viewer?.lookAlong(sectionPlane(section).normal); };
   // Onshape-style keys: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
-  // transparency, and Space (from the 3D view) clears the selection. Actions apply to
+  // transparency, and Space (from the 3D view) clears the selection. Shift+X turns the section
+  // off and on, N views normal to it, and Escape stops picking a face. Actions apply to
   // the selection or, with nothing selected, to the part under the cursor. Returns whether the
   // key was used. From the 3D view Space is always used, so it never scrolls the page. Models
   // without a legend have no parts, but their edges and corners can be selected, so Space
@@ -307,7 +352,10 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
       .filter((target, i, all) => all.findIndex(other => other.key === target.key) === i);
     const targets = ['KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
       ? owners.length ? owners : [hovered()].filter((target): target is Target => !!target) : [];
-    if (code === 'Space' && fromCanvas) setSelected(current => current.length ? [] : current);
+    if (code === 'KeyX' && shift && !alt) toggleSection();
+    else if (code === 'KeyN' && !shift && !alt && section) viewNormal();
+    else if (code === 'Escape' && picking) setPicking(false);
+    else if (code === 'Space' && fromCanvas) setSelected(current => current.length ? [] : current);
     else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
     else if (code === 'KeyY' && shift && (anyHidden || targets.some(target => look(target.key).hidden))) showHidden(targets);
     else if (code === 'KeyI' && shift && (targets.length || isolated('ghost'))) toggleIsolation('ghost', targets);
@@ -368,15 +416,11 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     if (event.target === pointerTarget.current && viewerControl(event.target, 'select')) focusView();
   };
 
-  const coordinate = viewer && axis !== 'off'
-    ? viewer.sourceMin[axis] + viewer.size[axis] * position / 100
-    : 0;
-  const coordinateText = units === 'inches' ? inchText(coordinate) : `${coordinate.toFixed(1)} mm`;
   const reset = () => {
     setMode('edges');
-    setAxis('off');
-    setPosition(50);
-    setFlipped(false);
+    setSection(null);
+    setPicking(false);
+    setDepthDraft(null);
     viewer?.reset();
   };
   const onCompiled = useCallback((model: CompiledModel) => {
@@ -411,7 +455,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
         </div>
         <div className="cad-workbench" data-has-panels={hasPanels || undefined}>
         <div className="cad-viewer">
-          <div className="cad-stage">
+          <div className="cad-stage" data-picking={picking || undefined}>
             <div ref={host} className="cad-canvas" aria-hidden={!!status} />
             {status && <div className="cad-fallback">
               <img className={entry.previewDark ? 'cad-preview-light' : ''} src={`${entry.href}${entry.preview}`} alt={entry.title} />
@@ -425,9 +469,10 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
                 return <div key={row.label}><dt>{row.label}</dt><dd>{primary}{secondary && <span>{secondary}</span>}</dd></div>;
               })}</dl> : <p>{measured.length === 1 ? 'Select another edge or vertex to measure a distance.' : 'Select up to two items, or only edges, to measure.'}</p>}
             </div>}
-            {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? `Z up · ${units === 'inches' ? 'inches' : 'mm'}` : `${axis.toUpperCase()} section · ${coordinateText}`}</span>}
+            {!status && <span className="cad-stage-label" aria-hidden="true">{picking ? 'Click a face to section through it'
+              : section ? `${planeNames[section.reference.plane]} section · depth ${depthText(section.depth)}` : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; N views it normal to the cut, and Shift+X turns it off and on.{hasLegend
             ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click edges or corners to measure them, adding them to the selection or removing them; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -440,23 +485,41 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
               </select>
             </label>
             <label>Section
-              <select value={axis} onChange={(event) => { setAxis(event.target.value as SectionAxis); }}>
+              <select value={picking ? 'face' : section?.reference.plane ?? 'off'} aria-keyshortcuts="Shift+X" onChange={(event) => { chooseSection(event.target.value); }}>
                 <option value="off">Off</option>
-                <option value="x">X axis</option>
-                <option value="y">Y axis</option>
-                <option value="z">Z axis</option>
+                <option value="front">Front plane</option>
+                <option value="top">Top plane</option>
+                <option value="right">Right plane</option>
+                <option value="face">{section?.reference.plane === 'face' ? 'Face' : 'Face…'}</option>
               </select>
             </label>
             <button type="button" onClick={reset}>Reset view</button>
-            {axis !== 'off' && <div className="cad-section-controls">
-              <label className="cad-slider">Cut position <output>{coordinateText}</output>
-                <input type="range" min="0" max="100" step="0.1" value={position}
-                  aria-valuetext={`${units === 'inches' ? `${(coordinate / 25.4).toFixed(3)} inches` : `${coordinate.toFixed(1)} millimeters`} on ${axis.toUpperCase()}`}
-                  onChange={(event) => { setPosition(Number(event.target.value)); }} />
-              </label>
-              <label className="cad-checkbox"><input type="checkbox" checked={flipped} onChange={(event) => { setFlipped(event.target.checked); }} />Flip cut</label>
-              {mode !== 'wireframe' && <span className="cad-section-key"><i aria-hidden="true" />Cut surface</span>}
-            </div>}
+            {picking && <p className="cad-section-pick" role="status">Click a face of the model to section through it.{' '}
+              <button type="button" onClick={() => { setPicking(false); }} aria-keyshortcuts="Escape">Cancel</button></p>}
+            {section && viewer && (() => {
+              const [low, high] = depthRange(section.reference, tuple(viewer.sourceMin), tuple(viewer.size));
+              const typed = units === 'inches' ? Number((section.depth / 25.4).toFixed(4)) : Number(section.depth.toFixed(2));
+              return <div className="cad-section-controls">
+                <label className="cad-slider">Depth <output>{depthText(section.depth)}</output>
+                  <input type="range" min={low} max={high} step={(high - low) / 1000 || 0.001} value={Math.min(high, Math.max(low, section.depth))}
+                    aria-valuetext={`${depthText(section.depth)} from the ${planeNames[section.reference.plane].toLowerCase()}`}
+                    onChange={(event) => { setDepthDraft(null); setSection({ ...section, depth: Number(event.target.value) }); }} />
+                </label>
+                <label className="cad-section-depth">Exact depth
+                  <span><input type="number" step={units === 'inches' ? 1 / 64 : 0.1} value={depthDraft ?? String(typed)}
+                    onChange={(event) => {
+                      setDepthDraft(event.target.value);
+                      const value = Number(event.target.value);
+                      if (event.target.value.trim() && Number.isFinite(value)) setSection({ ...section, depth: units === 'inches' ? value * 25.4 : value });
+                    }}
+                    onBlur={() => { setDepthDraft(null); }} /> {units === 'inches' ? 'in' : 'mm'}</span>
+                </label>
+                <label className="cad-checkbox"><input type="checkbox" checked={section.flipped} onChange={(event) => { setSection({ ...section, flipped: event.target.checked }); }} />Flip cut</label>
+                <button type="button" onClick={viewNormal} title="View normal to the section (N)" aria-keyshortcuts="N">View normal</button>
+                <button type="button" onClick={() => { setPicking(true); }}>Pick a face</button>
+                {mode !== 'wireframe' && <span className="cad-section-key"><i aria-hidden="true" />Cut surface</span>}
+              </div>;
+            })()}
           </fieldset>
           {viewer && <p className="cad-dimensions">Bounds: {units === 'inches'
             ? `${[viewer.size.x, viewer.size.y, viewer.size.z].map(inchText).join(' × ')} (X × Y × Z) · ${viewer.size.x.toFixed(1)} × ${viewer.size.y.toFixed(1)} × ${viewer.size.z.toFixed(1)} mm`

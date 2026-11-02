@@ -3,17 +3,18 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import type { SectionPlane } from './section';
 import { edgeTopology, type Topology } from './topology';
 import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
-export type SectionAxis = 'off' | 'x' | 'y' | 'z';
+// `section` is the plane cutting the model (section.ts), or null for none.
 export interface ViewSettings {
   mode: RenderMode;
-  axis: SectionAxis;
-  position: number;
-  flipped: boolean;
+  section: SectionPlane | null;
 }
+// A face under a click, as a point on it and its normal, in model coordinates.
+export interface PickedFace { point: [number, number, number]; normal: [number, number, number] }
 // View-only appearance, keyed by legend part ID or by piece key (the piece's
 // "#rrggbb" source color). A piece's own entry overrides its legend part's.
 // The downloadable model never changes.
@@ -36,7 +37,7 @@ interface Layer {
 }
 
 export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, cameraDirection = defaultCamera,
-  onPick?: (id: string | null) => void, onHover?: (id: string | null) => void) {
+  onPick?: (id: string | null, face: PickedFace | null) => void, onHover?: (id: string | null) => void) {
   geometry.computeBoundingBox();
   const bounds = geometry.boundingBox;
   if (!bounds || bounds.isEmpty()) throw new Error('The model has no geometry.');
@@ -256,7 +257,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     vertexOverlays[overlay].visible = dots.length > 0;
   };
 
-  let settings: ViewSettings = { mode: 'edges', axis: 'off', position: 50, flipped: false };
+  let settings: ViewSettings = { mode: 'edges', section: null };
   let appearances: PartAppearances = {};
   let selected: string[] = [];
   // Hover comes from the pointer over the canvas, or from the legend; the pointer wins.
@@ -294,8 +295,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   };
   // Apply display mode, section, theme colors and per-part appearance to every layer.
   const apply = () => {
-    const { mode, axis } = settings;
-    const clipping = axis !== 'off';
+    const { mode } = settings;
+    const clipping = !!settings.section;
     const planes = clipping ? [plane] : [];
     const colored = geometry.hasAttribute('colorLight');
     for (const layer of layers) {
@@ -337,14 +338,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
 
   const setSettings = (next: ViewSettings) => {
     settings = next;
-    const { axis, position, flipped } = next;
-    if (axis !== 'off') {
-      const direction = new THREE.Vector3();
-      direction[axis] = flipped ? 1 : -1;
-      const coordinate = (position / 100 - 0.5) * size[axis];
-      plane.set(direction, -direction[axis] * coordinate);
+    if (next.section) {
+      // Three keeps the side its plane faces, so the plane faces away from the removed side.
+      // Scene coordinates are model coordinates less the origin.
+      const normal = new THREE.Vector3(...next.section.normal);
+      plane.set(normal.clone().negate(), next.section.constant - normal.dot(origin));
       plane.coplanarPoint(cap.position);
-      cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+      cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), plane.normal);
     }
     apply();
   };
@@ -507,18 +507,28 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     controls.update();
   };
 
-  // The nearest visible, unclipped piece (or legend part) at a client position.
+  // The nearest visible, unclipped surface at a client position, with its piece (or legend part).
   const raycaster = new THREE.Raycaster();
-  const pickAt = (x: number, y: number): string | null => {
+  const hitAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
     raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
-    const clipping = settings.axis !== 'off';
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
-      if (!layer || visible(layer).hidden || (clipping && plane.distanceToPoint(hit.point) < 0)) continue;
-      return layer.piece ?? layer.part;
+      if (!layer || visible(layer).hidden || (settings.section && plane.distanceToPoint(hit.point) < 0)) continue;
+      return { hit, layer };
     }
     return null;
+  };
+  const pickAt = (x: number, y: number) => {
+    const found = hitAt(x, y);
+    return found ? found.layer.piece ?? found.layer.part : null;
+  };
+  // The face under a click, in model coordinates, for sectioning through it.
+  const faceAt = (x: number, y: number): PickedFace | null => {
+    const face = hitAt(x, y)?.hit;
+    if (!face?.face) return null;
+    const point = face.point.clone().add(origin);
+    return { point: [point.x, point.y, point.z], normal: [face.face.normal.x, face.face.normal.y, face.face.normal.z] };
   };
   // Snap to a vertex within 8 px, else an edge within 6 px, else the face's piece.
   // Candidates must be on a visible piece, on the kept side of a section, and not
@@ -529,7 +539,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     return { x: rect.left + (projected.x + 1) / 2 * rect.width, y: rect.top + (1 - projected.y) / 2 * rect.height, behind: projected.z > 1 };
   };
   const unobstructed = (point: THREE.Vector3) => {
-    if (settings.axis !== 'off' && plane.distanceToPoint(point) < 0) return false;
+    if (settings.section && plane.distanceToPoint(point) < 0) return false;
     const direction = point.clone().sub(camera.position);
     const distance = direction.length();
     raycaster.set(camera.position, direction.normalize());
@@ -537,7 +547,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (hit.distance >= distance - radius * 2e-3) return true;
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
       const look = layer ? visible(layer) : undefined;
-      if (!layer || !look || look.hidden || look.opacity < 0.999 || (settings.axis !== 'off' && plane.distanceToPoint(hit.point) < 0)) continue;
+      if (!layer || !look || look.hidden || look.opacity < 0.999 || (settings.section && plane.distanceToPoint(hit.point) < 0)) continue;
       return false;
     }
     return true;
@@ -604,7 +614,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
-      if (!layer || visible(layer).hidden || (settings.axis !== 'off' && plane.distanceToPoint(hit.point) < 0)) continue;
+      if (!layer || visible(layer).hidden || (settings.section && plane.distanceToPoint(hit.point) < 0)) continue;
       return hit.point;
     }
     return null;
@@ -666,7 +676,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     scheduleHover();
     if (!onPick || !pressed || event.button !== 0 || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) return;
     pressed = null;
-    onPick(pickEntityAt(event.clientX, event.clientY));
+    onPick(pickEntityAt(event.clientX, event.clientY), faceAt(event.clientX, event.clientY));
   };
   const onPointerMove = (event: PointerEvent) => {
     if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -690,7 +700,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   renderer.domElement.addEventListener('pointercancel', onPointerCancel);
   renderer.domElement.addEventListener('blur', onBlur);
   setTheme();
-  setSettings({ mode: 'edges', axis: 'off', position: 50, flipped: false });
+  setSettings({ mode: 'edges', section: null });
   resize();
 
   return {
@@ -702,6 +712,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     focus: focusCanvas,
     // Look from a named direction, as the views menu and Shift+1 to Shift+7 do.
     view,
+    // Look back along a direction, as viewing normal to a section does.
+    lookAlong: (direction: [number, number, number]) => { orient(new THREE.Vector3(...direction)); },
     // An edge or vertex in model coordinates, with the piece it belongs to.
     entity: (key: string) => {
       const found = entityAt(key);

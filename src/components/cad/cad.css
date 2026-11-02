@@ -94,6 +94,11 @@
 .cad-checkbox input { width: 16px; height: 16px; accent-color: var(--cad-section); }
 .cad-section-key { display: flex; align-items: center; gap: 7px; font-size: 12px; }
 .cad-section-key i { width: 12px; height: 12px; background: var(--cad-section); }
+.cad-section-depth { display: grid; gap: 6px; font-size: 12px; }
+.cad-section-depth span { display: flex; align-items: center; gap: 6px; }
+.cad-section-depth input { width: 8em; min-height: 40px; padding: 8px; color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 4px; font: inherit; font-size: 14px; }
+.cad-section-pick { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; font-size: 14px; }
+.cad-stage[data-picking] canvas { cursor: crosshair; }
 .cad-dimensions { opacity: .65; font-size: 12px; }
 .cad-downloads { display: flex; flex-wrap: wrap; gap: 16px 24px; margin: 24px 0; }
 .cad a { text-decoration: underline dotted; text-underline-offset: 4px; }
