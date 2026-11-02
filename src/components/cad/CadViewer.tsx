@@ -274,7 +274,9 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
   // Onshape-style keys: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
   // transparency, and Space (from the 3D view) clears the selection. Actions apply to
   // the selection or, with nothing selected, to the part under the cursor. Returns whether the
-  // key was used. From the 3D view Space is always used, so it never scrolls the page.
+  // key was used. From the 3D view Space is always used, so it never scrolls the page. Models
+  // without a legend have no parts, but their edges and corners can be selected, so Space
+  // works for every model.
   const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
     const { code, shiftKey: shift, altKey: alt } = event;
     const hovered = () => resolve(viewer?.hovered() ?? null);
@@ -300,7 +302,7 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
         target.matches('input:not([type=range]), select, textarea')) return;
     const view = namedView(event);
     if (view) viewer?.view(view);
-    else if (!hasLegend || !runShortcut(event, target.tagName === 'CANVAS')) return;
+    else if (!runShortcut(event, target.tagName === 'CANVAS')) return;
     event.preventDefault();
     event.stopPropagation();
   };
@@ -315,11 +317,11 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
           (active && active !== document.body) || !viewer.pointerInside()) return;
       const view = namedView(event);
       if (view) { viewer.view(view); event.preventDefault(); }
-      else if (hasLegend && latestShortcut.current(event, true)) event.preventDefault();
+      else if (latestShortcut.current(event, true)) event.preventDefault();
     };
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('keydown', onKey); };
-  }, [hasLegend, viewer]);
+  }, [viewer]);
 
   // Mouse use of the viewer's own controls (toolbar, display controls, legend and the panel
   // headings) hands focus back to the 3D view, so keys keep their viewer meaning: Space clears
@@ -402,7 +404,9 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? `Z up · ${units === 'inches' ? 'inches' : 'mm'}` : `${axis.toUpperCase()} section · ${coordinateText}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
+          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend
+            ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
+            : ' Click edges or corners to measure them, adding them to the selection or removing them; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
