@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
+import type { BufferGeometry } from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry } from '../../misc';
 import { createScene, type PartAppearances, type RenderMode, type SectionAxis } from './scene';
-import ParametricControls from './ParametricControls';
-import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors } from './displayMesh';
+import ParametricControls, { type LocalModel } from './ParametricControls';
+import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
 import { inches } from './cutList';
@@ -19,8 +20,9 @@ import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
 
-// `downloads` offers the model and source files; the model viewer turns it off for visitors' own files.
-export default function CadViewer({ entry, downloads = true }: { entry: CadEntry & { href: string }; downloads?: boolean }) {
+// `downloads` offers the model and source files; the model viewer turns it off for visitors' own
+// files. `local` is a visitor's SCAD file, compiled already, which opens without a request.
+export default function CadViewer({ entry, local, downloads = true }: { entry: CadEntry & { href: string }; local?: LocalModel; downloads?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
   const [legendOpen, setLegendOpen] = useState(true);
@@ -77,12 +79,18 @@ export default function CadViewer({ entry, downloads = true }: { entry: CadEntry
       try {
         // Start with saved colored triangles when provided, so cold loads don't
         // show a monochrome STL while the parametric engine initializes.
-        const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
-        if (!response.ok) throw new Error('Model request failed.');
-        const display = displayUrl ? parseDisplayMesh(await response.json()) : undefined;
-        const geometry = display
-          ? coloredGeometry(display, palette)
-          : new STLLoader().parse(await response.arrayBuffer());
+        let geometry: BufferGeometry, display: DisplayMesh | undefined;
+        if (local) {
+          display = local.model.display;
+          geometry = display ? coloredGeometry(display, palette) : new STLLoader().parse(local.model.stl);
+        } else {
+          const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
+          if (!response.ok) throw new Error('Model request failed.');
+          display = displayUrl ? parseDisplayMesh(await response.json()) : undefined;
+          geometry = display
+            ? coloredGeometry(display, palette)
+            : new STLLoader().parse(await response.arrayBuffer());
+        }
         if (controller.signal.aborted) { geometry.dispose(); return; }
         setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
         setPieces(geometryPieces(geometry));
@@ -107,7 +115,7 @@ export default function CadViewer({ entry, downloads = true }: { entry: CadEntry
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [modelUrl, displayUrl, palette, camera, downloads]);
+  }, [local, modelUrl, displayUrl, palette, camera, downloads]);
 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });
@@ -476,7 +484,7 @@ export default function CadViewer({ entry, downloads = true }: { entry: CadEntry
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>
-            <ParametricControls entry={{ ...entry, source: entry.source }} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onDrawings={setDrawings} onViewCutList={fullscreen ? viewCutList : undefined}
+            <ParametricControls entry={{ ...entry, source: entry.source }} local={local} available={!!viewer && !status} onCompiled={onCompiled} onOutput={setCutList} onDrawings={setDrawings} onViewCutList={fullscreen ? viewCutList : undefined}
               worksheets={worksheets} onWorksheets={setWorksheets} />
           </details>}
         </div>

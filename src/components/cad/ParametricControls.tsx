@@ -12,11 +12,15 @@ import { conflictInputs, type Conflict, type Fix } from './conflicts';
 import { checkValues, fixText, listOf, readableCheck } from './conflictText';
 
 type Entry = CadEntry & { href: string; source: string };
+// A visitor's own SCAD file in the model viewer: its text, the parameters the panel can edit
+// and its default model, compiled already. Nothing loads by URL, configurations are kept by
+// file name, and there are no share links, which couldn't carry the file.
+export interface LocalModel { name: string; text: string; parameters: Parameter[]; model: CompiledModel }
 interface Source { text: string; parameters: Parameter[] }
-interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet }
+interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet; warnings?: string }
 
-export default function ParametricControls({ entry, available, onCompiled, onOutput, onViewCutList, onDrawings, worksheets, onWorksheets }: {
-  entry: Entry; available: boolean; onCompiled: (model: CompiledModel) => void;
+export default function ParametricControls({ entry, local, available, onCompiled, onOutput, onViewCutList, onDrawings, worksheets, onWorksheets }: {
+  entry: Entry; local?: LocalModel; available: boolean; onCompiled: (model: CompiledModel) => void;
   onOutput: (output: CutListOutput) => void;
   // Cut list and sheet layout settings, saved and loaded with configurations.
   worksheets: WorksheetDrafts; onWorksheets: (drafts: WorksheetDrafts) => void;
@@ -36,7 +40,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const [initialModel, setInitialModel] = useState<CompiledModel | null>(null);
   // Named configurations saved in this browser for this item.
   const storage = useMemo(() => { try { return window.localStorage; } catch { return null; } }, []);
-  const configurationKey = storageKey(entry.href);
+  const configurationKey = storageKey(local ? `local:${local.name}` : entry.href);
   const [configurations, setConfigurations] = useState<Configuration[]>(() => readConfigurations(storage, configurationKey));
   const [activeName, setActiveName] = useState('');
   const [loadedValues, setLoadedValues] = useState<Values | null>(null);
@@ -54,6 +58,9 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;
   const modelUrl = `${entry.href}${entry.model}`;
+  // A visitor's file names downloads after itself rather than its object URLs.
+  const stlName = local ? local.name.replace(/\.scad$/i, '.stl') : entry.model;
+  const configuredName = (local ? local.name : entry.source).replace(/\.scad$/i, '-configured.scad');
   const outputLabel = entry.customizer?.outputLabel;
   const hasParts = !!entry.customizer?.parts?.length;
   const hasCutList = !!entry.customizer?.cutList;
@@ -68,32 +75,36 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     job.current = controller;
     const load = async () => {
       try {
-        const response = await fetch(sourceUrl, { signal: controller.signal });
-        if (!response.ok) throw new Error('The parameter source could not load.');
-        const text = await response.text();
-        const schema = await compileJob({ kind: 'parameters', source: text }, controller.signal);
-        if (controller.signal.aborted || schema.kind !== 'parameters') return;
-        const parameters = parseParameters(schema.json, text);
-        const values = defaults(parameters);
-        // Verify that configured downloads can preserve these literal assignments.
-        configuredSource(text, parameters, values);
-        // Entries with textual output also compute their default cut list in the
-        // worker. The committed fallback mesh stays visible while this runs.
-        let output = '';
+        let text = local?.text ?? '';
+        let parameters = local?.parameters ?? [];
+        let output = local?.model.output ?? '';
         let drawings: DrawingSheet | undefined;
-        if (outputLabel || hasParts || hasCutList || hasSheetLayout || hasDrawings) {
-          const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal);
-          controller.signal.throwIfAborted();
-          if (compiled.kind !== 'model') return;
-          output = compiled.output;
-          drawings = compiled.drawings;
-          setInitialModel(compiled);
+        if (!local) {
+          const response = await fetch(sourceUrl, { signal: controller.signal });
+          if (!response.ok) throw new Error('The parameter source could not load.');
+          text = await response.text();
+          const schema = await compileJob({ kind: 'parameters', source: text }, controller.signal);
+          if (controller.signal.aborted || schema.kind !== 'parameters') return;
+          parameters = parseParameters(schema.json, text);
+          // Verify that configured downloads can preserve these literal assignments.
+          configuredSource(text, parameters, defaults(parameters));
+          // Entries with textual output also compute their default cut list in the
+          // worker. The committed fallback mesh stays visible while this runs.
+          if (outputLabel || hasParts || hasCutList || hasSheetLayout || hasDrawings) {
+            const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal);
+            controller.signal.throwIfAborted();
+            if (compiled.kind !== 'model') return;
+            output = compiled.output;
+            drawings = compiled.drawings;
+            setInitialModel(compiled);
+          }
         }
+        const values = defaults(parameters);
         setSource({ text, parameters });
         draftValues.current = values;
         edited.current = false;
         setDraft(values);
-        setResult({ values, stl: modelUrl, source: sourceUrl, output, drawings });
+        setResult({ values, stl: modelUrl, source: sourceUrl, output, drawings, warnings: local?.model.warnings });
         setPhase('');
       } catch (failure) {
         if (controller.signal.aborted) return;
@@ -103,7 +114,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); window.clearTimeout(updateTimer.current); };
-  }, [sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasSheetLayout, hasDrawings, retry]);
+  }, [local, sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasSheetLayout, hasDrawings, retry]);
 
   useEffect(() => {
     if (!available || !initialModel) return;
@@ -112,10 +123,11 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     setInitialModel(null);
   }, [available, initialModel, onCompiled]);
 
+  // Generated files only: the defaults' object URLs belong to the model viewer.
   useEffect(() => () => {
-    if (result?.stl.startsWith('blob:')) URL.revokeObjectURL(result.stl);
-    if (result?.source.startsWith('blob:')) URL.revokeObjectURL(result.source);
-  }, [result]);
+    if (result?.stl.startsWith('blob:') && result.stl !== modelUrl) URL.revokeObjectURL(result.stl);
+    if (result?.source.startsWith('blob:') && result.source !== sourceUrl) URL.revokeObjectURL(result.source);
+  }, [result, modelUrl, sourceUrl]);
 
   const pending = !!result && JSON.stringify(draft) !== JSON.stringify(result.values);
   const canDownload = !!result && !pending && !phase && !error;
@@ -169,7 +181,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     let text = '';
     try {
       text = configuredSource(source.text, source.parameters, values);
-      const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal, () => {
+      const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings, lenient: !!local }, controller.signal, () => {
         if (!controller.signal.aborted) setPhase('Updating model…');
       });
       if (controller.signal.aborted || compiled.kind !== 'model') return;
@@ -179,6 +191,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
         source: URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
         output: compiled.output,
         drawings: compiled.drawings,
+        warnings: compiled.warnings,
       });
       setPhase('');
     } catch (failure) {
@@ -311,7 +324,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
   const sharedRef = useRef(applySaved);
   sharedRef.current = applySaved;
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || local) return;
     const loadShared = async () => {
       const encoded = readConfigurationHash(window.location.hash);
       if (!encoded) return;
@@ -325,7 +338,7 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     const onHash = () => { void loadShared(); };
     window.addEventListener('hashchange', onHash);
     return () => { window.removeEventListener('hashchange', onHash); };
-  }, [ready]);
+  }, [ready, local]);
   // Saves the values in the form and the worksheet settings, which must be valid; an
   // existing name is replaced in place.
   const saveConfiguration = (name: string) => {
@@ -403,11 +416,11 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     {source && <section className="cad-configurations" aria-labelledby="cad-configurations-title">
       <h3 id="cad-configurations-title">Saved configurations</h3>
       {!storage ? <>
-        <div className="cad-configuration-actions">
+        {!local && <div className="cad-configuration-actions">
           <button type="button" disabled={!available} onClick={() => { void copyShare('link'); }}>Copy link</button>
           <button type="button" disabled={!available} onClick={() => { void copyShare('config'); }}>Copy config</button>
-        </div>
-        <p>Saving configurations needs browser storage, which is unavailable here; links still work.</p>
+        </div>}
+        <p>Saving configurations needs browser storage, which is unavailable here{local ? '.' : '; links still work.'}</p>
       </> : <>
         <label className="cad-configuration-select">Configuration
           <select value={activeName} disabled={!available} onChange={(event) => { loadConfiguration(event.target.value); }}>
@@ -431,12 +444,16 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
           {confirmDelete
             ? <button type="button" className="cad-configuration-danger" onClick={deleteConfiguration}>Confirm delete</button>
             : <button type="button" disabled={!activeName} onClick={() => { setConfirmDelete(true); }}>Delete</button>}
-          <button type="button" disabled={!available} onClick={() => { void copyShare('link'); }}>Copy link</button>
-          <button type="button" disabled={!available} onClick={() => { void copyShare('config'); }}>Copy config</button>
+          {!local && <>
+            <button type="button" disabled={!available} onClick={() => { void copyShare('link'); }}>Copy link</button>
+            <button type="button" disabled={!available} onClick={() => { void copyShare('config'); }}>Copy config</button>
+          </>}
         </div>}
         {modified && <p>Changed since loading “{activeName}”; Update keeps the changes.</p>}
         {configurationNotice && <p role="status">{configurationNotice}</p>}
-        <p className="cad-configuration-help">Configurations keep the {carried} in this browser only; Copy link shares the current ones, and Copy config copies just the configuration, the part after #config= in a link.</p>
+        <p className="cad-configuration-help">{local
+          ? `Configurations keep the parameters in this browser only, for files named ${local.name}.`
+          : `Configurations keep the ${carried} in this browser only; Copy link shares the current ones, and Copy config copies just the configuration, the part after #config= in a link.`}</p>
       </>}
       {manualShare && <input className="cad-configuration-link" readOnly aria-label={manualShare.kind === 'link' ? 'Configuration link' : 'Configuration'} value={manualShare.text}
         onFocus={(event) => { event.currentTarget.select(); }} />}
@@ -563,6 +580,10 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
       <pre>{result.output.split('\n').filter(line => !/^ECHO:\s*"[A-Z_]+_V\d+",/.test(line)).join('\n')
         .replace(/^ECHO:\s*/gm, '').replace(/"/g, '')}</pre>
     </details>}
+    {result?.warnings && <details className="cad-model-output">
+      <summary>OpenSCAD warnings{!canDownload ? ' · previous settings' : ''}</summary>
+      <pre>{result.warnings}</pre>
+    </details>}
     {hasSheetLayout && result?.output && <p className="cad-compile-status"><a href="#sheet-layout-title" onClick={(event) => {
       if (onViewCutList) { event.preventDefault(); onViewCutList('sheet-layout-title'); }
     }}>View sheet layout ↓</a></p>}
@@ -572,11 +593,11 @@ export default function ParametricControls({ entry, available, onCompiled, onOut
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">
       {canDownload ? <>
-        <a href={result.stl} download={entry.model}>Download STL ↓</a>
-        <a href={result.source} download={entry.source.replace(/\.scad$/, '-configured.scad')}>Configured source ↓</a>
+        <a href={result.stl} download={stlName}>Download STL ↓</a>
+        <a href={result.source} download={configuredName}>Configured source ↓</a>
       </> : source ? <span className="cad-download-pending">Update successfully to download these settings.</span> :
-        <a href={modelUrl} download>Default STL ↓</a>}
-      <a href={sourceUrl} download>Original source ↓</a>
+        <a href={modelUrl} download={stlName}>Default STL ↓</a>}
+      <a href={sourceUrl} download={local ? local.name : true}>Original source ↓</a>
       {entry.sourceUrl && <a href={entry.sourceUrl}>CAD source ↗</a>}
     </div>
   </aside>;
