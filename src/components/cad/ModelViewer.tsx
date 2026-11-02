@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CadEntry, ViewerEntry } from '../../misc';
 import CadViewer from './CadViewer';
 import { compileJob } from './compiler';
+import { forgetLastFile, keepLastFile, readLastFile } from './lastFile';
 import { editableParameters, type Parameter } from './parameters';
 import type { LocalModel } from './ParametricControls';
 import './cad.css';
@@ -9,7 +10,8 @@ import './cad.css';
 // The 3D viewer for visitors' own files: drop one anywhere on the page or choose one, and it
 // opens with the usual tools (measuring, sections, the orientation cube). An STL opens as it
 // is; an OpenSCAD file compiles here, its Customizer parameters becoming controls as for the
-// site's own models. Files stay in the browser as object URLs; nothing is uploaded.
+// site's own models. Files stay in the browser as object URLs; nothing is uploaded. The last
+// file opened is kept in this browser and reopens after a reload, until it's closed.
 interface OpenFile { name: string; size: number; url: string; scad?: { sourceUrl: string; local: LocalModel; skipped: string[] } }
 
 type Units = 'mm' | 'inches';
@@ -81,15 +83,23 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
   const [units, setUnits] = useState<Units>('mm');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  // The open file was reopened from the last visit.
+  const [reopened, setReopened] = useState(false);
   const [dragging, setDragging] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const job = useRef<AbortController | null>(null);
   const latest = useRef<OpenFile | null>(null);
   latest.current = file;
 
-  // A newer file, or Cancel, abandons one still being checked or compiled.
-  const open = async (picked: File | undefined) => {
+  // A newer file, or Cancel, abandons one still being checked or compiled. A kept file that
+  // no longer opens is forgotten.
+  const open = async (picked: File | undefined, kept = false) => {
     if (!picked) return;
+    const fail = (message: string) => {
+      setBusy('');
+      setError(message);
+      if (kept) void forgetLastFile();
+    };
     const scad = /\.scad$/i.test(picked.name);
     if (!scad && !/\.stl$/i.test(picked.name)) { setError(`${picked.name} isn’t an STL or OpenSCAD file. Choose a file ending in .stl or .scad.`); return; }
     job.current?.abort();
@@ -102,14 +112,12 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
       try {
         next = await compileScad(picked, controller.signal, () => { if (!controller.signal.aborted) setBusy(`Compiling ${picked.name}…`); });
       } catch (failure) {
-        if (controller.signal.aborted) return;
-        setBusy('');
-        setError(compileFailure(picked.name, failure));
+        if (!controller.signal.aborted) fail(compileFailure(picked.name, failure));
         return;
       }
     } else {
       if (!await looksLikeStl(picked)) {
-        if (!controller.signal.aborted) { setBusy(''); setError(`${picked.name} doesn’t look like an STL file, so it wasn’t opened.`); }
+        if (!controller.signal.aborted) fail(`${picked.name} doesn’t look like an STL file, so it wasn’t opened.`);
         return;
       }
       next = { name: picked.name, size: picked.size, url: URL.createObjectURL(picked) };
@@ -118,10 +126,29 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     if (latest.current) release(latest.current);
     setBusy('');
     setUnits(savedUnits(next.name));
+    setReopened(kept);
     setFile(next);
+    if (!kept) void keepLastFile(picked);
   };
   const openRef = useRef(open);
   openRef.current = open;
+  const close = () => {
+    job.current?.abort();
+    if (latest.current) release(latest.current);
+    setFile(null);
+    setBusy('');
+    setError('');
+    void forgetLastFile();
+  };
+
+  // Reopen the last file, unless another is already opening.
+  useEffect(() => {
+    let cancelled = false;
+    void readLastFile().then((saved) => {
+      if (saved && !cancelled && !latest.current && !job.current) void openRef.current(saved, true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Files dropped anywhere on the page open here rather than the browser navigating to them.
   useEffect(() => {
@@ -174,7 +201,8 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     <input ref={picker} type="file" accept=".stl,.scad,model/stl" hidden onChange={event => { void open(event.target.files?.[0]); event.target.value = ''; }} />
     {file && <div className="cad-file-bar">
       {choose}
-      <span className="cad-file-name">{file.name} · {sizeText(file.size)}</span>
+      <button type="button" className="cad-file-choose" onClick={close}>Close file</button>
+      <span className="cad-file-name">{file.name} · {sizeText(file.size)}{reopened ? ' · reopened from your last visit' : ''}</span>
       <label className="cad-file-units">Units
         <select value={units} onChange={event => { const next = event.target.value as Units; setUnits(next); saveUnits(file.name, next); }}>
           <option value="mm">Millimetres</option>
@@ -194,6 +222,7 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
       : <div className="cad-dropzone">
         <p><strong>Drop an STL or OpenSCAD file anywhere on this page</strong> to view it, or choose one.</p>
         <p>STL files open as they are. OpenSCAD files compile in this browser, with their Customizer parameters as controls. Nothing is uploaded.</p>
+        <p>The last file you open stays in this browser and reopens here next time, until you close it.</p>
         {choose}
       </div>}
     {output && <details className="cad-model-output cad-file-output"><summary>Console output</summary><pre>{output}</pre></details>}
