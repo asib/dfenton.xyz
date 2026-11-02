@@ -3,14 +3,15 @@
 // of a neighbouring face places a vertex. Segments are joined through points
 // where exactly two meet and continue straight on, or along a tessellated curve
 // (equal-length segments turning gently, as OpenSCAD circles do). Corners and
-// T-junctions end an edge, as in a B-rep model; edge endpoints are vertices.
+// T-junctions end an edge, as in a B-rep model; edge endpoints are vertices. A B-rep model's
+// own edges (`whole`) are already whole, so they join through every point where two meet.
 export interface TopoEdge { points: number[]; closed: boolean; length: number }
 export interface Topology { edges: TopoEdge[]; vertices: number[][] }
 
 const collinear = Math.cos(0.5 * Math.PI / 180);
 const curved = Math.cos(20 * Math.PI / 180);
 
-export function edgeTopology(segments: ArrayLike<number>, tolerance = 1e-4): Topology {
+export function edgeTopology(segments: ArrayLike<number>, tolerance = 1e-4, whole = false): Topology {
   // Weld endpoints to shared points.
   const points: number[][] = [];
   const index = new Map<string, number>();
@@ -34,6 +35,7 @@ export function edgeTopology(segments: ArrayLike<number>, tolerance = 1e-4): Top
   // A point an edge passes through rather than ends at.
   const through = incident.map((segmentsAt, p) => {
     if (segmentsAt.length !== 2) return false;
+    if (whole) return true;
     const u = vector(other(segmentsAt[0], p), p), v = vector(p, other(segmentsAt[1], p));
     const lu = norm(u), lv = norm(v), cos = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (lu * lv);
     return cos >= collinear || (cos >= curved && Math.abs(lu - lv) <= 0.01 * Math.max(lu, lv));
@@ -65,4 +67,30 @@ export function edgeTopology(segments: ArrayLike<number>, tolerance = 1e-4): Top
   pairs.forEach(([a], s) => { if (!used[s]) walk(a, s); });
   const vertices = points.filter((_, p) => incident[p].length > 0 && !through[p]);
   return { edges, vertices };
+}
+
+// A B-rep model's edges, from its triangles: the sides of triangles that lie in different faces,
+// or that only one triangle has, as at a hole in the surface. Sides within a face, including
+// a periodic face's seam, are only tessellation. `faces` gives each triangle's face; corners at
+// the same position are the same point. Returns line segment pairs, as EdgesGeometry does.
+export function faceEdges(positions: ArrayLike<number>, faces: ArrayLike<number>): Float32Array {
+  const keys = Array.from({ length: faces.length * 3 }, (_, corner) =>
+    `${String(positions[corner * 3])},${String(positions[corner * 3 + 1])},${String(positions[corner * 3 + 2])}`);
+  const sides = new Map<string, { face: number; count: number; between: boolean; from: number; to: number }>();
+  for (let triangle = 0; triangle < faces.length; triangle++) {
+    for (let i = 0; i < 3; i++) {
+      const from = triangle * 3 + i, to = triangle * 3 + (i + 1) % 3;
+      if (keys[from] === keys[to]) continue;
+      const key = keys[from] < keys[to] ? `${keys[from]}|${keys[to]}` : `${keys[to]}|${keys[from]}`;
+      const side = sides.get(key);
+      if (!side) sides.set(key, { face: faces[triangle], count: 1, between: false, from, to });
+      else { side.count++; if (side.face !== faces[triangle]) side.between = true; }
+    }
+  }
+  const segments: number[] = [];
+  for (const { between, count, from, to } of sides.values()) {
+    if (!between && count > 1) continue;
+    for (const corner of [from, to]) segments.push(positions[corner * 3], positions[corner * 3 + 1], positions[corner * 3 + 2]);
+  }
+  return new Float32Array(segments);
 }

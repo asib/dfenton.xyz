@@ -67,6 +67,7 @@ function stepGeometry(mesh: Mesh) {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(mesh.positions.slice(), 3));
   geometry.setAttribute('normal', new BufferAttribute(mesh.normals.slice(), 3));
+  if (mesh.faces) geometry.userData.brepFaces = mesh.faces;
   return { geometry, parts: undefined, from: undefined };
 }
 

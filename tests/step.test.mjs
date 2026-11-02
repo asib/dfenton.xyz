@@ -7,6 +7,7 @@ import { binaryStl, faceNormals } from '../src/components/cad/stl';
 import { Color } from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { readOptions, referencedFiles, stepMesh, stepUnits } from '../src/components/cad/stepMesh';
+import { edgeTopology, faceEdges } from '../src/components/cad/topology';
 
 // OpenCascade's own test files, shipped with occt-import-js: CAx-IF's assembly of a plate, two
 // L-bracket assemblies and a rod, and a 1 m cube saved in each of three units.
@@ -128,4 +129,47 @@ test('an assembly that keeps its parts in other files has no geometry, and names
   expect(mesh.positions.length).toBe(0);
   expect(referencedFiles(file(name).toString('latin1'))).toEqual(['headback.stp', 'headfront.stp', 'tailmiddlepart.stp', 'tailturbine.stp', 'footback.stp', 'footfront.stp', 'mainbodyback.stp', 'mainbodyfront.stp']);
   expect(referencedFiles(file('cax-if/as1-oc-214.stp').toString('latin1'))).toEqual([]);
+});
+
+test('each triangle keeps its B-rep face, and a body’s edges are where its faces meet', () => {
+  // OpenCascade's face ranges run from first to last triangle inclusive, one after another.
+  const content = file('cax-if/as1-oc-214.stp');
+  const result = occt.ReadStepFile(content, readOptions(stepUnits(content.toString('latin1'))));
+  for (const body of result.meshes) {
+    expect(body.brep_faces[0].first).toBe(0);
+    expect(body.brep_faces.every((face, i) => !i || face.first === body.brep_faces[i - 1].last + 1)).toBe(true);
+    expect(body.brep_faces.at(-1).last).toBe(body.index.array.length / 3 - 1);
+  }
+  const { mesh } = read('cax-if/as1-oc-214.stp');
+  expect(mesh.faces.length).toBe(mesh.positions.length / 9);
+  expect(new Set(mesh.faces).size).toBe(result.meshes.reduce((sum, body) => sum + body.brep_faces.length, 0));
+  // A body's edges, as the viewer draws and picks them, with its name.
+  const edges = (name, index = 0) => {
+    const { mesh: model } = read(name), body = model.groups[index];
+    const range = [body.start * 3, (body.start + body.count) * 3], faces = model.faces.subarray(body.start / 3, (body.start + body.count) / 3);
+    return { name: body.name, ...edgeTopology(faceEdges(model.positions.subarray(...range), faces), 1e-3, true) };
+  };
+  // A box's 12 edges and 8 corners.
+  const cube = edges('cube-units/cube-mm.step');
+  expect([cube.edges.length, cube.vertices.length]).toEqual([12, 8]);
+  // Rounding one edge of a 10 mm cube adds a tangent edge each side of the fillet; creases
+  // at over 25° miss those.
+  const rounded = edges('rounded-cube/rounded-cube.step');
+  expect([rounded.edges.length, rounded.vertices.length]).toEqual([15, 10]);
+  // A bolt's edges are whole circles, however unevenly OpenCascade spaces their points.
+  const bolt = edges('cax-if/dm1-id-214.stp', 1);
+  expect([bolt.name, bolt.edges.length, bolt.edges.every(edge => edge.closed), bolt.vertices.length]).toEqual(['bolt', 4, true, 0]);
+});
+
+test('sides within a face, a periodic face’s seam among them, are not edges; open sides are', () => {
+  // Two triangles of one face sharing a side, and a third in another face sharing one of theirs.
+  const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1]);
+  const segments = faceEdges(positions, [0, 0, 1]);
+  const sides = [];
+  for (let i = 0; i < segments.length; i += 6) sides.push([...segments.subarray(i, i + 6)].join(','));
+  // The diagonal inside face 0 is gone; the side face 0 shares with face 1 stays, as do the open sides.
+  expect(sides).not.toContain('1,0,0,0,1,0');
+  expect(sides).not.toContain('0,1,0,1,0,0');
+  expect(sides.some(side => side === '1,0,0,1,1,0' || side === '1,1,0,1,0,0')).toBe(true);
+  expect(sides.length).toBe(6);
 });

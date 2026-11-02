@@ -12,7 +12,8 @@ export const maxParts = 50;
 export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' | 'body' }
 // A text STL's solid or a STEP file's body, as a vertex range, with its name and any color.
 interface Block { start: number; count: number; name: string; color?: string }
-export interface Mesh { positions: Float32Array; normals: Float32Array; groups?: Block[] }
+// `faces` gives each triangle's face in a STEP file's B-rep, whose meeting lines are its edges.
+export interface Mesh { positions: Float32Array; normals: Float32Array; groups?: Block[]; faces?: Int32Array }
 
 // An STL as Three's STLLoader reads it: a text STL's `solid … endsolid` blocks become groups
 // (vertex ranges), their names the rest of each `solid` line.
@@ -236,7 +237,7 @@ export function bodyParts(mesh: Mesh): FileParts | undefined {
   const pieces = distinctColors(partOf.map(part => colors[part]));
   return {
     display: {
-      positions: mesh.positions, normals: mesh.normals,
+      positions: mesh.positions, normals: mesh.normals, faces: mesh.faces,
       groups: bodies.map((body, index) => ({ start: body.start, count: body.count, color: rgba(pieces[index]), mode: 'solid', part: parts[partOf[index]].id })),
     },
     parts, from: 'body',

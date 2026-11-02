@@ -4,7 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { SectionPlane } from './section';
-import { edgeTopology, type Topology } from './topology';
+import { edgeTopology, faceEdges, type Topology } from './topology';
 import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
@@ -57,7 +57,7 @@ interface Layer {
   solid: THREE.MeshStandardMaterial;
   // Back and front stencil materials for each section plane.
   stencil: THREE.MeshBasicMaterial[][];
-  edges: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>;
+  edges: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
 }
 
 export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, cameraDirection = defaultCamera,
@@ -145,11 +145,16 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const parts = (source.userData.partIds ?? []) as (string | null)[];
     const pieces = (source.userData.pieceKeys ?? []) as (string | undefined)[];
     const positions = source.getAttribute('position').array;
+    // A STEP file's edges are where its faces meet; other models' are their creases.
+    const faces = source.userData.brepFaces as Int32Array | undefined;
     return source.groups.map((group, index) => {
       group.materialIndex = index;
       const slice = new THREE.BufferGeometry();
       slice.setAttribute('position', new THREE.BufferAttribute(positions.slice(group.start * 3, (group.start + group.count) * 3), 3));
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(slice, 25), new THREE.LineBasicMaterial());
+      let lines: THREE.BufferGeometry = new THREE.BufferGeometry();
+      if (faces) lines.setAttribute('position', new THREE.BufferAttribute(faceEdges(slice.getAttribute('position').array, faces.subarray(group.start / 3, (group.start + group.count) / 3)), 3));
+      else lines = new THREE.EdgesGeometry(slice, 25);
+      const edges = new THREE.LineSegments(lines, new THREE.LineBasicMaterial());
       slice.dispose();
       edges.renderOrder = 4;
       const part = parts[index] ?? null;
@@ -157,7 +162,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
         part,
         piece: part ? pieces[index] ?? null : null,
         // Picking uses exactly the creases that are drawn, joined into whole edges.
-        topology: edgeTopology(edges.geometry.getAttribute('position').array, 1e-3),
+        topology: edgeTopology(edges.geometry.getAttribute('position').array, 1e-3, !!faces),
         solid: new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
         stencil: planes.map(plane => [stencilMaterial(THREE.BackSide, plane), stencilMaterial(THREE.FrontSide, plane)]),
         edges,

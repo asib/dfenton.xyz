@@ -33,7 +33,8 @@ const srgb = (rgb: [number, number, number]) => `#${rgb.map(channel).join('')}`;
 
 // The bodies, as one triangle list with a group (vertex range) per body, in file order. A body
 // takes its own name, or else the name of the product holding it, when the name tells parts
-// apart; its color is its own, or else its first face's.
+// apart; its color is its own, or else its first face's. Each triangle keeps the face of the
+// file's B-rep it lies in, numbered through the file, unless a body's faces don't cover it.
 export function stepMesh(result: OcctResult): Mesh {
   const holders: string[] = [];
   const visit = (node: OcctNode) => {
@@ -44,9 +45,11 @@ export function stepMesh(result: OcctResult): Mesh {
   const total = result.meshes.reduce((sum, mesh) => sum + mesh.index.array.length, 0);
   const positions = new Float32Array(total * 3), normals = new Float32Array(total * 3);
   const groups: NonNullable<Mesh['groups']> = [];
-  let vertex = 0;
-  result.meshes.forEach((mesh, index) => {
+  const faces = new Int32Array(total / 3).fill(-1);
+  let vertex = 0, face = 0, covered = true;
+  for (const [index, mesh] of result.meshes.entries()) {
     const start = vertex, points = mesh.attributes.position.array, directions = mesh.attributes.normal?.array, corners = mesh.index.array;
+    for (const { first, last } of mesh.brep_faces) faces.fill(face++, start / 3 + first, start / 3 + last + 1);
     for (let i = 0; i < corners.length; i += 3) {
       const triangle = [corners[i], corners[i + 1], corners[i + 2]];
       // Without normals, a face's normal comes from its corners.
@@ -59,11 +62,12 @@ export function stepMesh(result: OcctResult): Mesh {
         vertex++;
       }
     }
-    const rgb = mesh.color ?? mesh.brep_faces.find(face => face.color)?.color ?? undefined;
+    const rgb = mesh.color ?? mesh.brep_faces.find(brep => brep.color)?.color ?? undefined;
     const named = [mesh.name, holders[index] ?? ''].find(name => !placeholder.test(name.trim())) ?? '';
     groups.push({ start, count: vertex - start, name: named, ...(rgb ? { color: srgb(rgb) } : {}) });
-  });
-  return { positions, normals, groups };
+    if (faces.subarray(start / 3, vertex / 3).includes(-1)) covered = false;
+  }
+  return { positions, normals, groups, ...(covered ? { faces } : {}) };
 }
 
 // Exporters' stand-ins for a name, which tell no parts apart.

@@ -23,7 +23,8 @@ self.onmessage = async ({ data }: MessageEvent<ArrayBuffer>) => {
       throw new Error(others.length ? `Its parts are in other files (${listed}), and only single STEP files open here.` : 'It has no solid geometry to show.');
     }
     const stl = binaryStl(mesh.positions, faceNormals(mesh.positions));
-    self.postMessage({ kind: 'model', mesh, units, stl } satisfies StepResponse, { transfer: [mesh.positions.buffer, mesh.normals.buffer, stl] });
+    const transfer = [mesh.positions.buffer, mesh.normals.buffer, stl, ...(mesh.faces ? [mesh.faces.buffer] : [])];
+    self.postMessage({ kind: 'model', mesh, units, stl } satisfies StepResponse, { transfer });
   } catch (error) {
     self.postMessage({ kind: 'error', message: error instanceof Error ? error.message : '' } satisfies StepResponse);
   }

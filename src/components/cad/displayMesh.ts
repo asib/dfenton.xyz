@@ -4,7 +4,9 @@ import type { PartColor } from '../../misc';
 // A group's color names its piece and, within a few 1/255 steps, its legend part, unless it
 // names the part itself (`part`), as a STEP file's repeated bodies do.
 interface Group { start: number; count: number; color: number[]; mode: string; part?: string }
-export interface DisplayMesh { positions: Float32Array; normals: Float32Array; groups: Group[] }
+// `faces`, for a STEP file, gives each triangle's face in its B-rep: the viewer draws edges where
+// faces meet, rather than at creases.
+export interface DisplayMesh { positions: Float32Array; normals: Float32Array; groups: Group[]; faces?: Int32Array }
 
 export function parseDisplayMesh(data: unknown): DisplayMesh {
   const numbers = (value: unknown): value is number[] => Array.isArray(value) &&
@@ -94,6 +96,7 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   geometry.setAttribute('color', geometry.getAttribute('colorLight'));
   geometry.userData.partIds = partIds;
   geometry.userData.pieceKeys = pieceKeys;
+  if (display.faces) geometry.userData.brepFaces = display.faces;
   return geometry;
 }
 
