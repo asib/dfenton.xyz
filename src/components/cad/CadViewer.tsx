@@ -6,7 +6,7 @@ import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
-import { fileParts } from './fileParts';
+import { fileParts, type FileParts } from './fileParts';
 import { inches } from './cutList';
 import { measure, type Measurable } from './measure';
 import SheetLayoutTable from './SheetLayoutTable';
@@ -82,7 +82,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   const latestModel = useRef(local?.model);
   const [visibleParts, setVisibleParts] = useState(palette);
   // What a visitor's file's generic parts are.
-  const [partsFrom, setPartsFrom] = useState<'color' | 'solid'>();
+  const [partsFrom, setPartsFrom] = useState<FileParts['from']>();
   const hasParameters = !!(entry.customizer && entry.source);
   const hasLegend = !!visibleParts?.length;
   const hasPanels = hasLegend || hasParameters;

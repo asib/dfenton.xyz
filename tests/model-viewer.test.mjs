@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { parameters, render } from 'openrscad-engine/node';
 import { configuredSource, defaults, editableParameters } from '../src/components/cad/parameters';
 import { coloredGeometry, displayMesh, geometryPieces } from '../src/components/cad/displayMesh';
-import { fileParts, maxParts, solidColor } from '../src/components/cad/fileParts';
+import { fileParts, maxParts, solidColor, solids } from '../src/components/cad/fileParts';
 
 // A visitor's file, as the model viewer opens it: OpenSCAD literals JSON lacks, a vector
 // the panel can't edit, a dropdown, a hidden group and a reassigned name.
@@ -107,3 +107,37 @@ test('solid colors differ from one another, and are lighter on dark pages', () =
   const lightness = (hex) => Math.max(...hex.slice(1).match(/../g).map(n => parseInt(n, 16)));
   for (const { color, darkColor } of colors) expect(lightness(darkColor)).toBeGreaterThan(lightness(color));
 });
+
+// Several exported bodies in one STL, each its own closed surface, as CAD tools write them.
+const shells = (...sources) => {
+  const meshes = sources.map(source => compiled(source).mesh.positions);
+  const positions = new Float32Array(meshes.reduce((sum, mesh) => sum + mesh.length, 0));
+  meshes.reduce((offset, mesh) => { positions.set(mesh, offset); return offset + mesh.length; }, 0);
+  return positions;
+};
+
+test('bodies that touch at a face, an edge or a corner stay separate solids', () => {
+  for (const other of ['translate([10, 0, 0]) cube(10);', 'translate([10, 10, 0]) cube(10);', 'translate([10, 10, 10]) cube(10);', 'translate([0, 0, 10]) cube([10, 10, 2]);']) {
+    // In either order, so each body's triangles come first around the shared edges.
+    expect(solids(shells('cube(10);', other)).count).toBe(2);
+    expect(solids(shells(other, 'cube(10);')).count).toBe(2);
+  }
+  // Three bodies around one edge, and two lids on a box, stay three.
+  expect(solids(shells('cube(10);', 'translate([10, 0, 0]) cube(10);', 'translate([0, 0, 10]) cube(10);')).count).toBe(3);
+  expect(solids(shells('cube(10);', 'translate([0, 0, 10]) cube([5, 10, 1]);', 'translate([5, 0, 10]) cube([5, 10, 1]);')).count).toBe(3);
+  // One body touching itself, unioned, stays one.
+  expect(solids(compiled('cube(10); translate([10, 0, 0]) cube(10);').mesh.positions).count).toBe(1);
+});
+
+test('slivers and holes don’t become parts of their own', () => {
+  const cube = compiled('cube(10);').mesh.positions;
+  // A degenerate triangle on one of the cube's corners joins that cube.
+  const sliver = new Float32Array([...cube, ...cube.subarray(0, 3), ...cube.subarray(0, 3), ...cube.subarray(3, 6)]);
+  expect(solids(sliver).count).toBe(1);
+  // A cube missing one face is still one solid, apart from a closed cube nearby, and joins a closed one it touches.
+  const holed = cube.subarray(18);
+  expect(solids(holed).count).toBe(1);
+  expect(solids(new Float32Array([...holed, ...shells('translate([30, 0, 0]) cube(10);')])).count).toBe(2);
+  expect(solids(new Float32Array([...holed, ...shells('translate([10, 10, 10]) cube(10);')])).count).toBe(1);
+});
+
