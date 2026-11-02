@@ -93,17 +93,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   controls.minDistance = radius * 0.25;
   controls.maxDistance = radius * 15;
   controls.enableDamping = false;
-  // Onshape's mouse: right-drag orbits about the point under the cursor (orbitAbout
-  // below), Ctrl- (or Cmd-/Shift-) right-drag and middle-drag pan, and left-click
-  // selects. The wheel and a pinch zoom about the point under the pointer (zoomAbout
-  // below). The controls keep panning and two-finger panning; with their own rotation
-  // and zoom disabled, a plain right-drag is left to orbitAbout. One finger is unmapped
-  // too, so a pinch that ends with a finger still down resets them instead of leaving
-  // that finger panning against a lifted one.
+  // Onshape's mouse: right-drag orbits about the point under the cursor, Ctrl- (or
+  // Cmd-/Shift-) right-drag and middle-drag pan it, the wheel zooms about it, and
+  // left-click selects; on touch, one finger orbits and two pan and pinch. Each is the
+  // viewer's own (orbitAbout, panTo and zoomAbout below), so the controls' are disabled:
+  // they keep the camera's target and distance limits, capture the pointer for drags
+  // and suppress the context menu.
   controls.enableRotate = false;
   controls.enableZoom = false;
-  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
-  controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
+  controls.enablePan = false;
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
@@ -831,26 +829,37 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     pivotMarker.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pivot.toArray(), 3));
     pivotMarker.visible = !!grabbed;
   };
-  // Zoom about the point under the pointer, as Onshape does: the camera and its target move
-  // toward it or away by the same factor, so it stays under the pointer, and the camera keeps
-  // its distance limits from the target. Over empty space, the point is on the pointer's ray
-  // as far away as the target.
-  let zoomPoint: THREE.Vector3 | null = null;
-  const zoomPointAt = (x: number, y: number) => {
+  // Panning and zooming hold the point under the pointer there, as Onshape does: the point
+  // the pointer is on, or over empty space the point on its ray as far away as the target.
+  // The plane square to the view through a point, which panning slides the camera across.
+  const depthPlane = (point: THREE.Vector3) => new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), point);
+  let anchor: THREE.Vector3 | null = null;
+  const anchorAt = (x: number, y: number) => {
     // Zooming leaves the point where it was on screen, so while the pointer stays put it's reused.
-    if (zoomPoint) {
-      const at = toScreen(zoomPoint.toArray(), renderer.domElement.getBoundingClientRect());
-      if (!at.behind && Math.hypot(at.x - x, at.y - y) < 1) return zoomPoint;
+    if (anchor) {
+      const at = toScreen(anchor.toArray(), renderer.domElement.getBoundingClientRect());
+      if (!at.behind && Math.hypot(at.x - x, at.y - y) < 1) return anchor;
     }
-    const depth = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), controls.target);
-    zoomPoint = grabAt(x, y) ?? rayAt(x, y).intersectPlane(depth, new THREE.Vector3()) ?? controls.target.clone();
-    return zoomPoint;
+    anchor = grabAt(x, y) ?? rayAt(x, y).intersectPlane(depthPlane(controls.target), new THREE.Vector3()) ?? controls.target.clone();
+    return anchor;
   };
+  // Pan: the camera and its target slide across the view until the point is under the pointer.
+  // This and zooming move the camera only; controls.update() then applies and renders the move.
+  const panTo = (point: THREE.Vector3, x: number, y: number) => {
+    camera.updateMatrixWorld();
+    const under = rayAt(x, y).intersectPlane(depthPlane(point), new THREE.Vector3());
+    if (!under) return;
+    const shift = point.clone().sub(under);
+    camera.position.add(shift);
+    controls.target.add(shift);
+  };
+  let panning: { id: number; point: THREE.Vector3 } | null = null;
+  // Zoom: the camera and its target move toward the point or away by the same factor, so it
+  // stays under the pointer, and the camera keeps its distance limits from the target.
   const zoomAbout = (center: THREE.Vector3, factor: number) => {
     const distance = camera.position.distanceTo(controls.target);
     const scale = Math.min(controls.maxDistance, Math.max(controls.minDistance, distance * factor)) / distance;
     for (const point of [camera.position, controls.target]) point.sub(center).multiplyScalar(scale).add(center);
-    controls.update();
   };
   // Wheel steps zoom as the orbit controls' did: lines and pages count as pixels, and a
   // trackpad pinch (Ctrl set without the key held) moves in small steps, so counts ten times.
@@ -860,10 +869,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
     const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1) * (event.ctrlKey && !controlHeld ? 10 : 1);
-    if (delta) zoomAbout(zoomPointAt(event.clientX, event.clientY), Math.pow(0.95, -delta * 0.01));
+    if (!delta) return;
+    zoomAbout(anchorAt(event.clientX, event.clientY), Math.pow(0.95, -delta * 0.01));
+    controls.update();
   };
-  // A pinch zooms about the point between the fingers as they land. The controls pan with the
-  // fingers, which keeps that point between them.
+  // Two fingers hold the point between them as they land there, panning as they move together
+  // and zooming as they spread or pinch.
   let pinch: { center: THREE.Vector3; span: number } | null = null;
   const fingers = () => {
     const [a, b] = [...pointers.values()];
@@ -884,20 +895,23 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     pressed = event.button === 0 && !pointers.size ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const orbitButton = event.pointerType === 'touch' ? event.button === 0
-      : event.button === 2 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    const finger = event.pointerType === 'touch';
+    const modified = event.ctrlKey || event.metaKey || event.shiftKey;
+    const orbitButton = finger ? event.button === 0 : event.button === 2 && !modified;
+    const panButton = !finger && (event.button === 1 || (event.button === 2 && modified));
     if (orbitButton && pointers.size === 1) startOrbit(event.pointerId, event.clientX, event.clientY);
     else stopOrbit(); // A second finger hands over to pinch and pan.
-    if (event.pointerType === 'touch' && pointers.size === 2) {
+    panning = panButton && pointers.size === 1 ? { id: event.pointerId, point: anchorAt(event.clientX, event.clientY) } : null;
+    if (finger && pointers.size === 2) {
       const { x, y, span } = fingers();
-      pinch = { center: zoomPointAt(x, y), span };
+      pinch = { center: anchorAt(x, y), span };
     } else pinch = null;
     scheduleHover();
   };
   // When a pinch ends with one finger still down, that finger orbits again from where it is.
   const release = (event: PointerEvent) => {
     pointers.delete(event.pointerId);
-    pinch = null;
+    pinch = panning = null;
     stopOrbit();
     if (event.pointerType === 'touch' && pointers.size === 1) for (const [id, at] of pointers) startOrbit(id, at.x, at.y);
   };
@@ -918,9 +932,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     if (handleDrag?.pointerId === event.pointerId) { pointer = { x: event.clientX, y: event.clientY }; dragHandle(event, false); return; }
     if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pinch && pointers.has(event.pointerId) && pointers.size === 2) {
-      const { span } = fingers();
+      const { x, y, span } = fingers();
+      panTo(pinch.center, x, y);
       if (pinch.span > 0 && span > 0) zoomAbout(pinch.center, pinch.span / span);
       pinch.span = span;
+      controls.update();
+    }
+    if (panning?.id === event.pointerId) {
+      panTo(panning.point, event.clientX, event.clientY);
+      controls.update();
     }
     if (orbiting?.id === event.pointerId) {
       orbitAbout(event.clientX - orbiting.x, event.clientY - orbiting.y);
