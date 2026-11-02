@@ -28,11 +28,11 @@ export interface SectionHandle { point: Vec3; arrow: Vec3; axes: [Vec3, Vec3] }
 export type HandleDrag = { kind: 'depth'; distance: number; done: boolean } | { kind: 'tilt'; axis: 0 | 1; degrees: number; done: boolean } | { kind: 'flip' };
 // A unit arc about the X axis, beside an arrow along Z, for the manipulator's tilt handles.
 class ArcCurve extends THREE.Curve<THREE.Vector3> {
-  // Three's Curve constructor is protected.
-  // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-  constructor() { super(); }
+  // How far the arc runs on past each end, in radians, as its outline does.
+  readonly overrun: number;
+  constructor(overrun = 0) { super(); this.overrun = overrun; }
   override getPoint(t: number, target = new THREE.Vector3()) {
-    const angle = 0.3 + t * 0.75;
+    const angle = 0.3 - this.overrun + t * (0.75 + 2 * this.overrun);
     return target.set(0, Math.sin(angle) * 0.62, Math.cos(angle) * 0.62);
   }
 }
@@ -204,7 +204,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // the plane along it and clicked to flip it, and two arcs dragged to tilt the plane about its
   // axes. Built at unit size about its point, kept a constant size on screen as it renders, and
   // drawn over the model. Each handle has a wider invisible copy that is easier to grab.
+  // Its own colors and a dark outline under each part keep it clear against the cut faces,
+  // the model and the page alike: the outline is the part grown by about a pixel and a half.
   const handleMaterials = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true }));
+  const outlineMaterial = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true, side: THREE.DoubleSide });
   const hitMaterial = new THREE.MeshBasicMaterial({ visible: false });
   const handleGeometries = [
     new THREE.CylinderGeometry(0.022, 0.022, 0.72, 12).translate(0, 0.36, 0).rotateX(Math.PI / 2),
@@ -214,14 +217,24 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     new THREE.TubeGeometry(new ArcCurve(), 24, 0.022, 8),
     new THREE.TubeGeometry(new ArcCurve(), 12, 0.09, 6),
   ];
+  // The shaft, head, base and arc outlines, in the same order.
+  const outlineGeometries = [
+    new THREE.CylinderGeometry(0.038, 0.038, 0.72, 12).translate(0, 0.36, 0).rotateX(Math.PI / 2),
+    new THREE.ConeGeometry(0.096, 0.358, 20).translate(0, 0.883, 0).rotateX(Math.PI / 2),
+    new THREE.SphereGeometry(0.071, 16, 12),
+    new THREE.TubeGeometry(new ArcCurve(0.026), 24, 0.038, 8),
+  ];
   const handle = new THREE.Group(), arrow = new THREE.Group();
+  const outlines = outlineGeometries.map(part => new THREE.Mesh(part, outlineMaterial));
   const arrowHit = new THREE.Mesh(handleGeometries[3], hitMaterial);
-  arrow.add(...[0, 1, 2].map(index => new THREE.Mesh(handleGeometries[index], handleMaterials[0])), arrowHit);
+  arrow.add(...outlines.slice(0, 3), ...[0, 1, 2].map(index => new THREE.Mesh(handleGeometries[index], handleMaterials[0])), arrowHit);
   const arcs = [1, 2].map(material => new THREE.Mesh(handleGeometries[4], handleMaterials[material]));
   const arcHits = arcs.map(arc => { const hit = new THREE.Mesh(handleGeometries[5], hitMaterial); arc.add(hit); return hit; });
+  arcs.forEach((arc, index) => { arc.add(index ? outlines[3].clone() : outlines[3]); });
   const handleHits = [arrowHit, ...arcHits];
   handle.add(arrow, ...arcs);
-  handle.traverse((part) => { part.renderOrder = 10; });
+  // Outlines draw first, so no part's outline crosses another part.
+  handle.traverse((part) => { part.renderOrder = part instanceof THREE.Mesh && part.material === outlineMaterial ? 9 : 10; });
   handle.visible = false;
   scene.add(handle);
   const handleColors = { idle: '', active: '' };
@@ -407,8 +420,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     colors.selected = style.getPropertyValue('--cad-selected').trim() || '#c2006b';
     colors.hover = style.getPropertyValue('--cad-hover').trim() || '#e389c0';
     caps.forEach((cap) => { cap.material.color.set(style.getPropertyValue('--cad-section').trim()); });
-    handleColors.idle = style.getPropertyValue('--cad-section').trim();
-    handleColors.active = colors.hover;
+    handleColors.idle = style.getPropertyValue('--cad-handle').trim();
+    handleColors.active = style.getPropertyValue('--cad-handle-active').trim();
+    outlineMaterial.color.set(style.getPropertyValue('--cad-handle-outline').trim());
     paintHandle();
     apply();
   };
@@ -927,8 +941,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       disposeLayers(layers);
       capGeometry.dispose();
       caps.forEach((cap) => { cap.material.dispose(); });
-      handleGeometries.forEach((part) => { part.dispose(); });
-      [...handleMaterials, hitMaterial].forEach((material) => { material.dispose(); });
+      [...handleGeometries, ...outlineGeometries].forEach((part) => { part.dispose(); });
+      [...handleMaterials, outlineMaterial, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
       vertexOverlays.forEach((points) => { points.geometry.dispose(); });
       [...lineMaterials, ...pointMaterials].forEach((material) => { material.dispose(); });

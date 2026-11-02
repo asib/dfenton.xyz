@@ -8,6 +8,10 @@
   --cad-surface: #efe6ee;
   --cad-selected: #c2006b;
   --cad-hover: #e389c0;
+  /* The section manipulator, set apart from the cut faces and the model by color and outline. */
+  --cad-handle: #f0a818;
+  --cad-handle-active: #ffd769;
+  --cad-handle-outline: #2b2112;
   /* Orientation cube outlines and labels. */
   --cad-cube: var(--cad-edge);
   font-size: 14px;
@@ -20,6 +24,9 @@
   --cad-surface: #1f1f1f;
   --cad-selected: #ff6cc0;
   --cad-hover: #ffb3df;
+  --cad-handle: #ffc94a;
+  --cad-handle-active: #fff1c2;
+  --cad-handle-outline: #161616;
   --cad-cube: var(--cad-body);
 }
 .cad select option { background: var(--cad-surface); color: inherit; }
