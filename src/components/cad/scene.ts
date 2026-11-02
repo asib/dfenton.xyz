@@ -3,17 +3,41 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import type { SectionPlane } from './section';
 import { edgeTopology, type Topology } from './topology';
 import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
-export type SectionAxis = 'off' | 'x' | 'y' | 'z';
+// `sections` are the planes cutting the model (section.ts), up to `maxSections`. With several,
+// only material on the removed side of every one is removed, as in Onshape's corner cutaways.
+// `handle` places one plane's manipulator, or null hides it. `excluded` parts and pieces (by
+// legend part ID or piece key) are left whole.
+export const maxSections = 3;
 export interface ViewSettings {
   mode: RenderMode;
-  axis: SectionAxis;
-  position: number;
-  flipped: boolean;
+  sections: SectionPlane[];
+  handle?: SectionHandle | null;
+  excluded?: string[];
 }
+type Vec3 = [number, number, number];
+// The section manipulator, in model coordinates: its point, its arrow (toward the removed
+// side) and the axes its two arcs tilt the plane about.
+export interface SectionHandle { point: Vec3; arrow: Vec3; axes: [Vec3, Vec3] }
+// A drag of the manipulator, measured from where it started: millimetres along the arrow, or
+// degrees about an arc's axis (right-handed). Clicking the arrow without dragging flips it.
+export type HandleDrag = { kind: 'depth'; distance: number; done: boolean } | { kind: 'tilt'; axis: 0 | 1; degrees: number; done: boolean } | { kind: 'flip' };
+// A unit arc about the X axis, beside an arrow along Z, for the manipulator's tilt handles.
+class ArcCurve extends THREE.Curve<THREE.Vector3> {
+  // How far the arc runs on past each end, in radians, as its outline does.
+  readonly overrun: number;
+  constructor(overrun = 0) { super(); this.overrun = overrun; }
+  override getPoint(t: number, target = new THREE.Vector3()) {
+    const angle = 0.3 - this.overrun + t * (0.75 + 2 * this.overrun);
+    return target.set(0, Math.sin(angle) * 0.62, Math.cos(angle) * 0.62);
+  }
+}
+// A face under a click, as a point on it and its normal, in model coordinates.
+export interface PickedFace { point: [number, number, number]; normal: [number, number, number] }
 // View-only appearance, keyed by legend part ID or by piece key (the piece's
 // "#rrggbb" source color). A piece's own entry overrides its legend part's.
 // The downloadable model never changes.
@@ -31,12 +55,13 @@ interface Layer {
   // Whole edges and vertices of the piece, in scene coordinates.
   topology: Topology;
   solid: THREE.MeshStandardMaterial;
-  stencil: THREE.MeshBasicMaterial[];
+  // Back and front stencil materials for each section plane.
+  stencil: THREE.MeshBasicMaterial[][];
   edges: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>;
 }
 
 export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, cameraDirection = defaultCamera,
-  onPick?: (id: string | null) => void, onHover?: (id: string | null) => void) {
+  onPick?: (id: string | null, face: PickedFace | null) => void, onHover?: (id: string | null) => void, onHandle?: (drag: HandleDrag) => void) {
   geometry.computeBoundingBox();
   const bounds = geometry.boundingBox;
   if (!bounds || bounds.isEmpty()) throw new Error('The model has no geometry.');
@@ -68,18 +93,19 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   controls.minDistance = radius * 0.25;
   controls.maxDistance = radius * 15;
   controls.enableDamping = false;
-  // Onshape's mouse: right-drag orbits about the point under the cursor (orbitAbout
-  // below), Ctrl- (or Cmd-/Shift-) right-drag and middle-drag pan, and left-click
-  // selects. The controls keep panning, wheel/pinch zoom and two-finger gestures;
-  // with their own rotation disabled, a plain right-drag is left to orbitAbout.
-  // One finger is unmapped too, so a pinch that ends with a finger still down
-  // resets them instead of leaving that finger zooming against a lifted one.
+  // Onshape's mouse: right-drag orbits about the point under the cursor, Ctrl- (or
+  // Cmd-/Shift-) right-drag and middle-drag pan it, the wheel zooms about it, and
+  // left-click selects; on touch, one finger orbits and two pan and pinch. Each is the
+  // viewer's own (orbitAbout, panTo and zoomAbout below), so the controls' are disabled:
+  // they keep the camera's target and distance limits, capture the pointer for drags
+  // and suppress the context menu.
   controls.enableRotate = false;
-  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
-  controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
+  controls.enableZoom = false;
+  controls.enablePan = false;
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
+  let placeHandle: () => void = () => undefined;
   // Clicking the orientation cube or its arrows turns the view and leaves keyboard focus on
   // the canvas; the views menu keeps focus for keyboard use.
   const focusCanvas = () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); };
@@ -88,7 +114,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     rotate: (axis, angle) => { rotate(axis, angle); focusCanvas(); },
     view: name => { view(name); },
   });
-  const render = () => { renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
+  const render = () => { placeHandle(); renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
   controls.addEventListener('change', render);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.6));
@@ -98,10 +124,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   fill.position.set(-3, -2, 1);
   scene.add(key, fill);
 
-  const plane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
+  // Three keeps the side each plane faces. A cap is kept only where every other plane removes
+  // material, so it uses those planes turned around.
+  const planes = Array.from({ length: maxSections }, () => new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0));
+  const capClips = planes.map(() => new THREE.Plane());
   // Count back/front intersections in stencil so the cut is filled only inside
-  // the solid. Cavities remain empty. Based on Three.js's clipping-stencil example.
-  const stencilMaterial = (side: THREE.Side) => {
+  // the solid. Cavities remain empty. Based on Three.js's clipping-stencil example;
+  // each plane counts with only itself clipping, then fills its cap and clears.
+  const stencilMaterial = (side: THREE.Side, plane: THREE.Plane) => {
     const operation = side === THREE.BackSide ? THREE.IncrementWrapStencilOp : THREE.DecrementWrapStencilOp;
     return new THREE.MeshBasicMaterial({
       side, depthWrite: false, depthTest: false, colorWrite: false,
@@ -129,7 +159,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
         // Picking uses exactly the creases that are drawn, joined into whole edges.
         topology: edgeTopology(edges.geometry.getAttribute('position').array, 1e-3),
         solid: new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
-        stencil: [stencilMaterial(THREE.BackSide), stencilMaterial(THREE.FrontSide)],
+        stencil: planes.map(plane => [stencilMaterial(THREE.BackSide, plane), stencilMaterial(THREE.FrontSide, plane)]),
         edges,
       };
     });
@@ -137,7 +167,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const disposeLayers = (old: Layer[]) => {
     for (const layer of old) {
       layer.solid.dispose();
-      layer.stencil.forEach((material) => { material.dispose(); });
+      layer.stencil.flat().forEach((material) => { material.dispose(); });
       layer.edges.geometry.dispose();
       layer.edges.material.dispose();
     }
@@ -147,26 +177,76 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   mesh.renderOrder = 3;
   const edgesGroup = new THREE.Group();
   edgesGroup.add(...layers.map((layer) => layer.edges));
-  const stencilMeshes = [0, 1].map((side) => {
-    const stencilMesh = new THREE.Mesh(geometry, layers.map((layer) => layer.stencil[side]));
-    stencilMesh.renderOrder = 1;
+  // Each plane's stencil count and cap draw in turn, between the model and its edges.
+  const stencilMeshes = planes.map((_, index) => [0, 1].map((side) => {
+    const stencilMesh = new THREE.Mesh(geometry, layers.map((layer) => layer.stencil[index][side]));
+    stencilMesh.renderOrder = 1 + index / maxSections;
     return stencilMesh;
-  });
-  const stencilGroup = new THREE.Group();
-  stencilGroup.add(...stencilMeshes);
+  }));
+  const stencilGroups = stencilMeshes.map((pair) => { const group = new THREE.Group(); group.add(...pair); return group; });
   scene.add(mesh, edgesGroup);
 
   let capGeometry = new THREE.PlaneGeometry(radius * 3, radius * 3);
-  const capMaterial = new THREE.MeshBasicMaterial({
-    side: THREE.DoubleSide,
-    stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
-    stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp,
-    stencilZPass: THREE.ReplaceStencilOp,
+  const caps = planes.map((_, index) => {
+    const cap = new THREE.Mesh(capGeometry, new THREE.MeshBasicMaterial({
+      side: THREE.DoubleSide,
+      stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
+      stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp,
+    }));
+    cap.renderOrder = 1 + (index + 0.5) / maxSections;
+    cap.onAfterRender = () => { renderer.clearStencil(); };
+    return cap;
   });
-  const cap = new THREE.Mesh(capGeometry, capMaterial);
-  cap.renderOrder = 2;
-  cap.onAfterRender = () => { renderer.clearStencil(); };
-  scene.add(stencilGroup, cap);
+  scene.add(...stencilGroups, ...caps);
+
+  // The section manipulator, as in Onshape: an arrow toward the removed side, dragged to move
+  // the plane along it and clicked to flip it, and two arcs dragged to tilt the plane about its
+  // axes. Built at unit size about its point, kept a constant size on screen as it renders, and
+  // drawn over the model. Each handle has a wider invisible copy that is easier to grab.
+  // Its own colors and a dark outline under each part keep it clear against the cut faces,
+  // the model and the page alike: the outline is the part grown by about a pixel and a half.
+  const handleMaterials = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true }));
+  const outlineMaterial = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true, side: THREE.DoubleSide });
+  const hitMaterial = new THREE.MeshBasicMaterial({ visible: false });
+  const handleGeometries = [
+    new THREE.CylinderGeometry(0.022, 0.022, 0.72, 12).translate(0, 0.36, 0).rotateX(Math.PI / 2),
+    new THREE.ConeGeometry(0.075, 0.28, 20).translate(0, 0.86, 0).rotateX(Math.PI / 2),
+    new THREE.SphereGeometry(0.055, 16, 12),
+    new THREE.CylinderGeometry(0.1, 0.1, 1.05, 8).translate(0, 0.52, 0).rotateX(Math.PI / 2),
+    new THREE.TubeGeometry(new ArcCurve(), 24, 0.022, 8),
+    new THREE.TubeGeometry(new ArcCurve(), 12, 0.09, 6),
+  ];
+  // The shaft, head, base and arc outlines, in the same order.
+  const outlineGeometries = [
+    new THREE.CylinderGeometry(0.038, 0.038, 0.72, 12).translate(0, 0.36, 0).rotateX(Math.PI / 2),
+    new THREE.ConeGeometry(0.096, 0.358, 20).translate(0, 0.883, 0).rotateX(Math.PI / 2),
+    new THREE.SphereGeometry(0.071, 16, 12),
+    new THREE.TubeGeometry(new ArcCurve(0.026), 24, 0.038, 8),
+  ];
+  const handle = new THREE.Group(), arrow = new THREE.Group();
+  const outlines = outlineGeometries.map(part => new THREE.Mesh(part, outlineMaterial));
+  const arrowHit = new THREE.Mesh(handleGeometries[3], hitMaterial);
+  arrow.add(...outlines.slice(0, 3), ...[0, 1, 2].map(index => new THREE.Mesh(handleGeometries[index], handleMaterials[0])), arrowHit);
+  const arcs = [1, 2].map(material => new THREE.Mesh(handleGeometries[4], handleMaterials[material]));
+  const arcHits = arcs.map(arc => { const hit = new THREE.Mesh(handleGeometries[5], hitMaterial); arc.add(hit); return hit; });
+  arcs.forEach((arc, index) => { arc.add(index ? outlines[3].clone() : outlines[3]); });
+  const handleHits = [arrowHit, ...arcHits];
+  handle.add(arrow, ...arcs);
+  // Outlines draw first, so no part's outline crosses another part.
+  handle.traverse((part) => { part.renderOrder = part instanceof THREE.Mesh && part.material === outlineMaterial ? 9 : 10; });
+  handle.visible = false;
+  scene.add(handle);
+  const handleColors = { idle: '', active: '' };
+  let handleHover: number | null = null, handleActive: number | null = null;
+  const paintHandle = () => {
+    handleMaterials.forEach((material, index) => { material.color.set(index === (handleActive ?? handleHover) ? handleColors.active : handleColors.idle); });
+  };
+  placeHandle = () => {
+    if (!handle.visible) return;
+    const pixels = 2 * camera.position.distanceTo(handle.position) * Math.tan(camera.fov * Math.PI / 360) / (renderer.domElement.clientHeight || 1);
+    handle.scale.setScalar(pixels * 84);
+  };
 
   // Selected and hovered edges draw as wide lines, vertices as round markers.
   const lineMaterials = [0, 1].map(() => new LineMaterial({ linewidth: 3.5, worldUnits: false }));
@@ -256,7 +336,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     vertexOverlays[overlay].visible = dots.length > 0;
   };
 
-  let settings: ViewSettings = { mode: 'edges', axis: 'off', position: 50, flipped: false };
+  let settings: ViewSettings = { mode: 'edges', sections: [] };
   let appearances: PartAppearances = {};
   let selected: string[] = [];
   // Hover comes from the pointer over the canvas, or from the legend; the pointer wins.
@@ -292,11 +372,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const look = (layer.piece ? appearances[layer.piece] : undefined) ?? (layer.part ? appearances[layer.part] : undefined);
     return { hidden: !!look?.hidden || look?.opacity === 0, opacity: look?.opacity ?? 1 };
   };
+  // Excluded parts and pieces are left whole; material is clipped where every plane removes it.
+  const whole = (layer: Layer) => !!settings.excluded?.some(key => key === layer.piece || key === layer.part);
+  const clipped = (layer: Layer, point: THREE.Vector3) => settings.sections.length > 0 && !whole(layer) &&
+    planes.slice(0, settings.sections.length).every(plane => plane.distanceToPoint(point) < 0);
   // Apply display mode, section, theme colors and per-part appearance to every layer.
   const apply = () => {
-    const { mode, axis } = settings;
-    const clipping = axis !== 'off';
-    const planes = clipping ? [plane] : [];
+    const { mode } = settings;
+    const active = planes.slice(0, settings.sections.length);
     const colored = geometry.hasAttribute('colorLight');
     for (const layer of layers) {
       const { hidden, opacity } = visible(layer);
@@ -309,16 +392,21 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       // Translucent parts let parts behind them show through.
       layer.solid.depthWrite = !translucent;
       layer.solid.wireframe = mode === 'wireframe';
-      layer.solid.clippingPlanes = planes;
+      const cut = whole(layer) ? [] : active;
+      layer.solid.clippingPlanes = cut;
+      layer.solid.clipIntersection = cut.length > 1;
       layer.solid.needsUpdate = true;
       layer.edges.material.transparent = translucent;
       layer.edges.material.opacity = opacity;
-      layer.edges.material.clippingPlanes = planes;
+      layer.edges.material.clippingPlanes = cut;
+      layer.edges.material.clipIntersection = cut.length > 1;
       layer.edges.material.needsUpdate = true;
-      // Section caps fill only fully opaque, visible parts.
-      layer.stencil.forEach((material) => { material.visible = !hidden && !translucent; });
+      // Section caps fill only fully opaque, visible, cut parts.
+      layer.stencil.forEach((pair, index) => {
+        pair.forEach((material) => { material.visible = !hidden && !translucent && index < cut.length; });
+      });
     }
-    stencilGroup.visible = cap.visible = clipping && mode !== 'wireframe';
+    stencilGroups.forEach((group, index) => { group.visible = caps[index].visible = index < active.length && mode !== 'wireframe'; });
     paint();
   };
 
@@ -331,20 +419,43 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     colors.edge = style.getPropertyValue('--cad-edge').trim();
     colors.selected = style.getPropertyValue('--cad-selected').trim() || '#c2006b';
     colors.hover = style.getPropertyValue('--cad-hover').trim() || '#e389c0';
-    capMaterial.color.set(style.getPropertyValue('--cad-section').trim());
+    caps.forEach((cap) => { cap.material.color.set(style.getPropertyValue('--cad-section').trim()); });
+    handleColors.idle = style.getPropertyValue('--cad-handle').trim();
+    handleColors.active = style.getPropertyValue('--cad-handle-active').trim();
+    outlineMaterial.color.set(style.getPropertyValue('--cad-handle-outline').trim());
+    paintHandle();
     apply();
   };
 
   const setSettings = (next: ViewSettings) => {
     settings = next;
-    const { axis, position, flipped } = next;
-    if (axis !== 'off') {
-      const direction = new THREE.Vector3();
-      direction[axis] = flipped ? 1 : -1;
-      const coordinate = (position / 100 - 0.5) * size[axis];
-      plane.set(direction, -direction[axis] * coordinate);
-      plane.coplanarPoint(cap.position);
-      cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+    next.sections.slice(0, maxSections).forEach((section, index) => {
+      // Each plane faces away from the side it removes. Scene coordinates are model
+      // coordinates less the origin.
+      const normal = new THREE.Vector3(...section.normal);
+      planes[index].set(normal.clone().negate(), section.constant - normal.dot(origin));
+      planes[index].coplanarPoint(caps[index].position);
+      caps[index].quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), planes[index].normal);
+      capClips[index].copy(planes[index]).negate();
+    });
+    caps.forEach((cap, index) => {
+      cap.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < next.sections.length);
+      cap.material.needsUpdate = true;
+    });
+    handle.visible = next.sections.length > 0 && !!next.handle;
+    if (next.handle) {
+      const direction = new THREE.Vector3(...next.handle.arrow).normalize();
+      handle.position.set(...next.handle.point).sub(origin);
+      arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+      // Each arc turns about its axis, swinging beside the arrow.
+      next.handle.axes.forEach((axis, index) => {
+        const x = new THREE.Vector3(...axis).normalize();
+        const z = direction.clone().addScaledVector(x, -direction.dot(x));
+        arcs[index].visible = z.lengthSq() > 1e-12;
+        if (!arcs[index].visible) return;
+        z.normalize();
+        arcs[index].quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, z.clone().cross(x), z));
+      });
     }
     apply();
   };
@@ -456,11 +567,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     mesh.material = layers.map((layer) => layer.solid);
     edgesGroup.clear();
     edgesGroup.add(...layers.map((layer) => layer.edges));
-    stencilMeshes.forEach((stencilMesh, side) => {
-      stencilMesh.geometry = next;
-      stencilMesh.material = layers.map((layer) => layer.stencil[side]);
+    stencilMeshes.forEach((pair, index) => {
+      pair.forEach((stencilMesh, side) => {
+        stencilMesh.geometry = next;
+        stencilMesh.material = layers.map((layer) => layer.stencil[index][side]);
+      });
     });
-    cap.geometry = nextCap;
+    caps.forEach((cap) => { cap.geometry = nextCap; });
     size.copy(nextSize);
     sourceMin.copy(nextMin);
     radius = nextRadius;
@@ -507,18 +620,93 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     controls.update();
   };
 
-  // The nearest visible, unclipped piece (or legend part) at a client position.
+  // The nearest visible, unclipped surface at a client position, with its piece (or legend part).
   const raycaster = new THREE.Raycaster();
-  const pickAt = (x: number, y: number): string | null => {
+  const hitAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
     raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
-    const clipping = settings.axis !== 'off';
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
-      if (!layer || visible(layer).hidden || (clipping && plane.distanceToPoint(hit.point) < 0)) continue;
-      return layer.piece ?? layer.part;
+      if (!layer || visible(layer).hidden || clipped(layer, hit.point)) continue;
+      return { hit, layer };
     }
     return null;
+  };
+  const pickAt = (x: number, y: number) => {
+    const found = hitAt(x, y);
+    return found ? found.layer.piece ?? found.layer.part : null;
+  };
+  // The manipulator's handle under a client position: 0 for the arrow, 1 and 2 for the arcs.
+  const rayAt = (x: number, y: number) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
+    return raycaster.ray;
+  };
+  const handleAt = (x: number, y: number) => {
+    if (!handle.visible) return null;
+    rayAt(x, y);
+    const hit = raycaster.intersectObjects(handleHits.filter(part => part.parent?.visible), false)[0] as THREE.Intersection | undefined;
+    return hit ? handleHits.findIndex(part => part === hit.object) : null;
+  };
+  // A drag follows the pointer: along the arrow, the point on its line nearest the pointer's
+  // ray; about an arc's axis, the pointer's ray meeting the plane square to that axis.
+  let handleDrag: { pointerId: number; part: number; x: number; y: number; moved: boolean; center: THREE.Vector3; direction: THREE.Vector3; start: THREE.Vector3 | number } | null = null;
+  const alongArrow = (ray: THREE.Ray, center: THREE.Vector3, direction: THREE.Vector3) => {
+    const between = center.clone().sub(ray.origin), b = direction.dot(ray.direction), denominator = 1 - b * b;
+    if (denominator < 1e-6) return null;
+    return (b * ray.direction.dot(between) - direction.dot(between)) / denominator;
+  };
+  const aroundAxis = (ray: THREE.Ray, center: THREE.Vector3, axis: THREE.Vector3) => {
+    if (Math.abs(ray.direction.dot(axis)) < 0.08) return null;
+    const hit = ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(axis, center), new THREE.Vector3());
+    return hit?.sub(center) ?? null;
+  };
+  const startHandleDrag = (part: number, event: PointerEvent) => {
+    const center = handle.position.clone();
+    const direction = part === 0 ? new THREE.Vector3(0, 0, 1).applyQuaternion(arrow.quaternion) : new THREE.Vector3(1, 0, 0).applyQuaternion(arcs[part - 1].quaternion);
+    const ray = rayAt(event.clientX, event.clientY);
+    const start = part === 0 ? alongArrow(ray, center, direction) : aroundAxis(ray, center, direction);
+    if (start === null) return false;
+    handleDrag = { pointerId: event.pointerId, part, x: event.clientX, y: event.clientY, moved: false, center, direction, start };
+    handleActive = part;
+    paintHandle();
+    renderer.domElement.setPointerCapture(event.pointerId);
+    renderer.domElement.style.cursor = 'grabbing';
+    render();
+    return true;
+  };
+  const dragHandle = (event: PointerEvent, done: boolean) => {
+    if (!handleDrag) return;
+    const { part, center, direction, start } = handleDrag;
+    handleDrag.moved ||= Math.hypot(event.clientX - handleDrag.x, event.clientY - handleDrag.y) > 3;
+    if (!handleDrag.moved) return;
+    const ray = rayAt(event.clientX, event.clientY);
+    if (typeof start === 'number') {
+      const along = alongArrow(ray, center, direction);
+      if (along !== null) onHandle?.({ kind: 'depth', distance: along - start, done });
+    } else {
+      const now = aroundAxis(ray, center, direction);
+      if (now) onHandle?.({ kind: 'tilt', axis: part === 1 ? 0 : 1, degrees: Math.atan2(direction.dot(start.clone().cross(now)), start.dot(now)) * 180 / Math.PI, done });
+    }
+  };
+  const endHandleDrag = (event: PointerEvent, cancelled: boolean) => {
+    if (!handleDrag) return;
+    if (!cancelled) dragHandle(event, true);
+    if (!cancelled && !handleDrag.moved && handleDrag.part === 0) onHandle?.({ kind: 'flip' });
+    if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+    handleDrag = null;
+    handleActive = null;
+    dragging = false;
+    paintHandle();
+    render();
+    scheduleHover();
+  };
+  // The face under a click, in model coordinates, for sectioning through it.
+  const faceAt = (x: number, y: number): PickedFace | null => {
+    const face = hitAt(x, y)?.hit;
+    if (!face?.face) return null;
+    const point = face.point.clone().add(origin);
+    return { point: [point.x, point.y, point.z], normal: [face.face.normal.x, face.face.normal.y, face.face.normal.z] };
   };
   // Snap to a vertex within 8 px, else an edge within 6 px, else the face's piece.
   // Candidates must be on a visible piece, on the kept side of a section, and not
@@ -528,8 +716,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     projected.set(p[0], p[1], p[2]).project(camera);
     return { x: rect.left + (projected.x + 1) / 2 * rect.width, y: rect.top + (1 - projected.y) / 2 * rect.height, behind: projected.z > 1 };
   };
-  const unobstructed = (point: THREE.Vector3) => {
-    if (settings.axis !== 'off' && plane.distanceToPoint(point) < 0) return false;
+  const unobstructed = (point: THREE.Vector3, owner: Layer) => {
+    if (clipped(owner, point)) return false;
     const direction = point.clone().sub(camera.position);
     const distance = direction.length();
     raycaster.set(camera.position, direction.normalize());
@@ -537,7 +725,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (hit.distance >= distance - radius * 2e-3) return true;
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
       const look = layer ? visible(layer) : undefined;
-      if (!layer || !look || look.hidden || look.opacity < 0.999 || (settings.axis !== 'off' && plane.distanceToPoint(hit.point) < 0)) continue;
+      if (!layer || !look || look.hidden || look.opacity < 0.999 || clipped(layer, hit.point)) continue;
       return false;
     }
     return true;
@@ -545,14 +733,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // The nearest unobstructed vertex or edge within its snap distance, with the snapped point.
   const snapAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
-    const vertices: { key: string; distance: number; point: THREE.Vector3 }[] = [];
+    const vertices: { key: string; distance: number; point: THREE.Vector3; layer: Layer }[] = [];
     const edges: typeof vertices = [];
     layers.forEach((layer, l) => {
       if (visible(layer).hidden) return;
       layer.topology.vertices.forEach((p, v) => {
         const s = toScreen(p, rect);
         const distance = Math.hypot(s.x - x, s.y - y);
-        if (!s.behind && distance <= 8) vertices.push({ key: `vertex:${String(version)}:${String(l)}:${String(v)}`, distance, point: new THREE.Vector3(p[0], p[1], p[2]) });
+        if (!s.behind && distance <= 8) vertices.push({ key: `vertex:${String(version)}:${String(l)}:${String(v)}`, distance, point: new THREE.Vector3(p[0], p[1], p[2]), layer });
       });
       layer.topology.edges.forEach((edge, e) => {
         let best: (typeof vertices)[number] | null = null;
@@ -564,14 +752,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
           const distance = Math.hypot(a.x + t * dx - x, a.y + t * dy - y);
           if (distance > 6 || (best && best.distance <= distance)) continue;
           const point = new THREE.Vector3(...edge.points.slice(i, i + 3)).lerp(new THREE.Vector3(...edge.points.slice(i + 3, i + 6)), t);
-          best = { key: `edge:${String(version)}:${String(l)}:${String(e)}`, distance, point };
+          best = { key: `edge:${String(version)}:${String(l)}:${String(e)}`, distance, point, layer };
         }
         if (best) edges.push(best);
       });
     });
     for (const candidates of [vertices, edges]) {
       candidates.sort((a, b) => a.distance - b.distance);
-      for (const candidate of candidates.slice(0, 8)) if (unobstructed(candidate.point)) return candidate;
+      for (const candidate of candidates.slice(0, 8)) if (unobstructed(candidate.point, candidate.layer)) return candidate;
     }
     return null;
   };
@@ -584,8 +772,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   let dragging = false, touch = false, frame = 0;
   const updateHover = () => {
     frame = 0;
-    const next = pointer && !dragging && !touch ? pickEntityAt(pointer.x, pointer.y) : null;
-    renderer.domElement.style.cursor = next ? 'pointer' : '';
+    // The manipulator is drawn over the model, so it comes first.
+    const grab = pointer && !dragging && !touch ? handleAt(pointer.x, pointer.y) : null;
+    if (grab !== handleHover) { handleHover = grab; paintHandle(); render(); }
+    const next = pointer && !dragging && !touch && grab === null ? pickEntityAt(pointer.x, pointer.y) : null;
+    if (!handleDrag) renderer.domElement.style.cursor = grab !== null ? 'grab' : next ? 'pointer' : '';
     if (next === pointerHover) return;
     pointerHover = next;
     paint();
@@ -604,7 +795,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
-      if (!layer || visible(layer).hidden || (settings.axis !== 'off' && plane.distanceToPoint(hit.point) < 0)) continue;
+      if (!layer || visible(layer).hidden || clipped(layer, hit.point)) continue;
       return hit.point;
     }
     return null;
@@ -627,13 +818,67 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     orbiting = null;
     if (pivotMarker.visible) { pivotMarker.visible = false; render(); }
   };
+  // The point the pointer is on, to orbit or zoom about: on the part under it, else a
+  // snapped corner or edge.
+  const grabAt = (x: number, y: number) => surfaceAt(x, y) ?? snapAt(x, y)?.point ?? null;
   const startOrbit = (id: number, x: number, y: number) => {
     orbiting = { id, x, y };
-    // A point on the part under the cursor, else a snapped corner or edge, else the center.
-    const grabbed = surfaceAt(x, y) ?? snapAt(x, y)?.point ?? null;
+    // The point the cursor is on, else the center.
+    const grabbed = grabAt(x, y);
     pivot.copy(grabbed ?? controls.target);
     pivotMarker.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pivot.toArray(), 3));
     pivotMarker.visible = !!grabbed;
+  };
+  // Panning and zooming hold the point under the pointer there, as Onshape does: the point
+  // the pointer is on, or over empty space the point on its ray as far away as the target.
+  // The plane square to the view through a point, which panning slides the camera across.
+  const depthPlane = (point: THREE.Vector3) => new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), point);
+  let anchor: THREE.Vector3 | null = null;
+  const anchorAt = (x: number, y: number) => {
+    // Zooming leaves the point where it was on screen, so while the pointer stays put it's reused.
+    if (anchor) {
+      const at = toScreen(anchor.toArray(), renderer.domElement.getBoundingClientRect());
+      if (!at.behind && Math.hypot(at.x - x, at.y - y) < 1) return anchor;
+    }
+    anchor = grabAt(x, y) ?? rayAt(x, y).intersectPlane(depthPlane(controls.target), new THREE.Vector3()) ?? controls.target.clone();
+    return anchor;
+  };
+  // Pan: the camera and its target slide across the view until the point is under the pointer.
+  // This and zooming move the camera only; controls.update() then applies and renders the move.
+  const panTo = (point: THREE.Vector3, x: number, y: number) => {
+    camera.updateMatrixWorld();
+    const under = rayAt(x, y).intersectPlane(depthPlane(point), new THREE.Vector3());
+    if (!under) return;
+    const shift = point.clone().sub(under);
+    camera.position.add(shift);
+    controls.target.add(shift);
+  };
+  let panning: { id: number; point: THREE.Vector3 } | null = null;
+  // Zoom: the camera and its target move toward the point or away by the same factor, so it
+  // stays under the pointer, and the camera keeps its distance limits from the target.
+  const zoomAbout = (center: THREE.Vector3, factor: number) => {
+    const distance = camera.position.distanceTo(controls.target);
+    const scale = Math.min(controls.maxDistance, Math.max(controls.minDistance, distance * factor)) / distance;
+    for (const point of [camera.position, controls.target]) point.sub(center).multiplyScalar(scale).add(center);
+  };
+  // Wheel steps zoom as the orbit controls' did: lines and pages count as pixels, and a
+  // trackpad pinch (Ctrl set without the key held) moves in small steps, so counts ten times.
+  let controlHeld = false;
+  const onControl = (event: KeyboardEvent) => { if (event.key === 'Control') controlHeld = event.type === 'keydown'; };
+  const onWindowBlur = () => { controlHeld = false; };
+  const onWheel = (event: WheelEvent) => {
+    event.preventDefault();
+    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1) * (event.ctrlKey && !controlHeld ? 10 : 1);
+    if (!delta) return;
+    zoomAbout(anchorAt(event.clientX, event.clientY), Math.pow(0.95, -delta * 0.01));
+    controls.update();
+  };
+  // Two fingers hold the point between them as they land there, panning as they move together
+  // and zooming as they spread or pinch.
+  let pinch: { center: THREE.Vector3; span: number } | null = null;
+  const fingers = () => {
+    const [a, b] = [...pointers.values()];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, span: Math.hypot(a.x - b.x, a.y - b.y) };
   };
   // The focus ring shows only when the 3D view is reached from the keyboard. A click or
   // tap marks the focus as the pointer's until the view loses it (not just the window).
@@ -643,33 +888,60 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     markPointerFocus();
     // Grabbing the model takes over from a turn to a named view.
     cancelAnimationFrame(turning);
+    // A lone left button or finger on the section manipulator drags it.
+    const grabbed = event.button === 0 && !pointers.size && !handleDrag ? handleAt(event.clientX, event.clientY) : null;
+    if (grabbed !== null && startHandleDrag(grabbed, event)) { pressed = null; dragging = true; return; }
     // Only a lone pointer can tap; a second finger makes it a gesture.
     pressed = event.button === 0 && !pointers.size ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const orbitButton = event.pointerType === 'touch' ? event.button === 0
-      : event.button === 2 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    const finger = event.pointerType === 'touch';
+    const modified = event.ctrlKey || event.metaKey || event.shiftKey;
+    const orbitButton = finger ? event.button === 0 : event.button === 2 && !modified;
+    const panButton = !finger && (event.button === 1 || (event.button === 2 && modified));
     if (orbitButton && pointers.size === 1) startOrbit(event.pointerId, event.clientX, event.clientY);
     else stopOrbit(); // A second finger hands over to pinch and pan.
+    panning = panButton && pointers.size === 1 ? { id: event.pointerId, point: anchorAt(event.clientX, event.clientY) } : null;
+    if (finger && pointers.size === 2) {
+      const { x, y, span } = fingers();
+      pinch = { center: anchorAt(x, y), span };
+    } else pinch = null;
     scheduleHover();
   };
   // When a pinch ends with one finger still down, that finger orbits again from where it is.
   const release = (event: PointerEvent) => {
     pointers.delete(event.pointerId);
+    pinch = panning = null;
     stopOrbit();
     if (event.pointerType === 'touch' && pointers.size === 1) for (const [id, at] of pointers) startOrbit(id, at.x, at.y);
   };
-  const onPointerCancel = release;
+  const onPointerCancel = (event: PointerEvent) => {
+    if (handleDrag?.pointerId === event.pointerId) { endHandleDrag(event, true); return; }
+    release(event);
+  };
   const onPointerUp = (event: PointerEvent) => {
+    if (handleDrag?.pointerId === event.pointerId) { endHandleDrag(event, false); return; }
     release(event);
     dragging = false;
     scheduleHover();
     if (!onPick || !pressed || event.button !== 0 || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) return;
     pressed = null;
-    onPick(pickEntityAt(event.clientX, event.clientY));
+    onPick(pickEntityAt(event.clientX, event.clientY), faceAt(event.clientX, event.clientY));
   };
   const onPointerMove = (event: PointerEvent) => {
+    if (handleDrag?.pointerId === event.pointerId) { pointer = { x: event.clientX, y: event.clientY }; dragHandle(event, false); return; }
     if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch && pointers.has(event.pointerId) && pointers.size === 2) {
+      const { x, y, span } = fingers();
+      panTo(pinch.center, x, y);
+      if (pinch.span > 0 && span > 0) zoomAbout(pinch.center, pinch.span / span);
+      pinch.span = span;
+      controls.update();
+    }
+    if (panning?.id === event.pointerId) {
+      panTo(panning.point, event.clientX, event.clientY);
+      controls.update();
+    }
     if (orbiting?.id === event.pointerId) {
       orbitAbout(event.clientX - orbiting.x, event.clientY - orbiting.y);
       orbiting.x = event.clientX;
@@ -689,8 +961,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
   renderer.domElement.addEventListener('pointercancel', onPointerCancel);
   renderer.domElement.addEventListener('blur', onBlur);
+  renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+  window.addEventListener('keydown', onControl, true);
+  window.addEventListener('keyup', onControl, true);
+  window.addEventListener('blur', onWindowBlur);
   setTheme();
-  setSettings({ mode: 'edges', axis: 'off', position: 50, flipped: false });
+  setSettings({ mode: 'edges', sections: [] });
   resize();
 
   return {
@@ -702,6 +978,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     focus: focusCanvas,
     // Look from a named direction, as the views menu and Shift+1 to Shift+7 do.
     view,
+    // Look back along a direction, as viewing normal to a section does.
+    lookAlong: (direction: [number, number, number]) => { orient(new THREE.Vector3(...direction)); },
     // An edge or vertex in model coordinates, with the piece it belongs to.
     entity: (key: string) => {
       const found = entityAt(key);
@@ -723,6 +1001,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
       renderer.domElement.removeEventListener('pointercancel', onPointerCancel);
       renderer.domElement.removeEventListener('blur', onBlur);
+      renderer.domElement.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onControl, true);
+      window.removeEventListener('keyup', onControl, true);
+      window.removeEventListener('blur', onWindowBlur);
       pivotMarker.geometry.dispose();
       pivotMaterial.dispose();
       measureLine.geometry.dispose();
@@ -739,7 +1021,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       geometry.dispose();
       disposeLayers(layers);
       capGeometry.dispose();
-      capMaterial.dispose();
+      caps.forEach((cap) => { cap.material.dispose(); });
+      [...handleGeometries, ...outlineGeometries].forEach((part) => { part.dispose(); });
+      [...handleMaterials, outlineMaterial, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
       vertexOverlays.forEach((points) => { points.geometry.dispose(); });
       [...lineMaterials, ...pointMaterials].forEach((material) => { material.dispose(); });
