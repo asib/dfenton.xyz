@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ViewerEntry } from '../../misc';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CadEntry, ViewerEntry } from '../../misc';
 import CadViewer from './CadViewer';
 import './cad.css';
 
@@ -67,6 +67,15 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
   }, []);
   useEffect(() => () => { if (latest.current) URL.revokeObjectURL(latest.current.url); }, []);
 
+  // One entry per file: a new one, or a new camera array, rebuilds the 3D scene.
+  const viewed = useMemo<(CadEntry & { href: string }) | null>(() => file && {
+    type: 'cad', title: file.name, date: entry.date, href: '', model: file.url,
+    // STL files carry no units; measurements read as millimetres, with inches alongside.
+    description: 'Opened in this browser; nothing is uploaded. Measurements assume the file is in millimetres.',
+    preview: `${entry.href}${entry.preview}`, previewDark: entry.previewDark && `${entry.href}${entry.previewDark}`,
+    // Front, right and top, as the other models open.
+    camera: [1.35, -1.8, 1.1],
+  }, [file, entry]);
   const choose = <button type="button" className="cad-file-choose" onClick={() => { picker.current?.click(); }}>{file ? 'Open another file' : 'Choose an STL file'}</button>;
 
   return <section className="cad cad-model-viewer" aria-label="Model viewer">
@@ -74,15 +83,8 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     <input ref={picker} type="file" accept=".stl,model/stl" hidden onChange={event => { void open(event.target.files?.[0]); event.target.value = ''; }} />
     {file && <div className="cad-file-bar">{choose}<span className="cad-file-name">{file.name} · {sizeText(file.size)}</span></div>}
     {error && <p className="cad-error" role="alert">{error}</p>}
-    {file
-      ? <CadViewer key={file.url} downloads={false} entry={{
-        type: 'cad', title: file.name, date: entry.date, href: '', model: file.url,
-        // STL files carry no units; measurements read as millimetres, with inches alongside.
-        description: 'Opened in this browser; nothing is uploaded. Measurements assume the file is in millimetres.',
-        preview: `${entry.href}${entry.preview}`, previewDark: entry.previewDark && `${entry.href}${entry.previewDark}`,
-        // Front, right and top, as the other models open.
-        camera: [1.35, -1.8, 1.1],
-      }} />
+    {file && viewed
+      ? <CadViewer key={file.url} downloads={false} entry={viewed} />
       : <div className="cad-dropzone">
         <p><strong>Drop an STL file anywhere on this page</strong> to view it, or choose one.</p>
         <p>Binary and ASCII STL files open in this browser; nothing is uploaded.</p>
