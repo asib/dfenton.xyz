@@ -12,6 +12,26 @@ import './cad.css';
 // site's own models. Files stay in the browser as object URLs; nothing is uploaded.
 interface OpenFile { name: string; size: number; url: string; scad?: { sourceUrl: string; local: LocalModel; skipped: string[] } }
 
+type Units = 'mm' | 'inches';
+// Front, right and top, as the other models open.
+const camera: [number, number, number] = [1.35, -1.8, 1.1];
+
+// Units are kept per file name in this browser, so a file reopens in the units chosen for it.
+const unitsKey = 'model-viewer-units';
+function readUnits(): Record<string, unknown> {
+  const saved: unknown = JSON.parse(window.localStorage.getItem(unitsKey) ?? '{}');
+  return typeof saved === 'object' && saved !== null ? saved as Record<string, unknown> : {};
+}
+function savedUnits(name: string): Units {
+  try { return readUnits()[name] === 'inches' ? 'inches' : 'mm'; } catch { return 'mm'; }
+}
+function saveUnits(name: string, units: Units) {
+  try {
+    const saved = Object.fromEntries(Object.entries(readUnits()).filter(([key]) => key !== name));
+    window.localStorage.setItem(unitsKey, JSON.stringify(units === 'inches' ? { ...saved, [name]: units } : saved));
+  } catch { /* Units still apply until the file closes. */ }
+}
+
 const sizeText = (bytes: number) => bytes < 1024 * 1024 ? `${String(Math.max(1, Math.round(bytes / 1024)))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const release = (file: OpenFile) => {
   URL.revokeObjectURL(file.url);
@@ -58,6 +78,7 @@ function compileFailure(name: string, failure: unknown) {
 
 export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: string } }) {
   const [file, setFile] = useState<OpenFile | null>(null);
+  const [units, setUnits] = useState<Units>('mm');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [dragging, setDragging] = useState(false);
@@ -96,6 +117,7 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     if (controller.signal.aborted) { release(next); return; }
     if (latest.current) release(latest.current);
     setBusy('');
+    setUnits(savedUnits(next.name));
     setFile(next);
   };
   const openRef = useRef(open);
@@ -131,17 +153,16 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     if (latest.current) release(latest.current);
   }, []);
 
-  // One entry per file: a new one, or a new camera array, rebuilds the 3D scene.
+  // One entry per file and units: a new one, or a new camera array, rebuilds the 3D scene.
   const viewed = useMemo<(CadEntry & { href: string }) | null>(() => file && {
     type: 'cad', title: file.name, date: entry.date, href: '', model: file.url,
-    ...(file.scad?.local.parameters.length ? { source: file.scad.sourceUrl, customizer: { outputLabel: 'Console output' } } : {}),
-    // STL files carry no units, and OpenSCAD's are conventionally millimetres; measurements
-    // read as millimetres, with inches alongside.
-    description: `${file.scad ? 'Compiled' : 'Opened'} in this browser; nothing is uploaded. Measurements assume the ${file.scad ? 'design' : 'file'} is in millimetres.`,
+    ...(file.scad?.local.parameters.length ? { source: file.scad.sourceUrl, customizer: { outputLabel: 'Console output', units } } : {}),
+    // Neither format records units (OpenSCAD's are conventionally millimetres), so the
+    // visitor chooses them; lengths show in those first, with the other alongside.
+    description: `${file.scad ? 'Compiled' : 'Opened'} in this browser; nothing is uploaded. ${file.scad ? 'OpenSCAD designs' : 'STL files'} carry no units, so lengths read in the Units chosen above, with the other alongside.`,
     preview: `${entry.href}${entry.preview}`, previewDark: entry.previewDark && `${entry.href}${entry.previewDark}`,
-    // Front, right and top, as the other models open.
-    camera: [1.35, -1.8, 1.1],
-  }, [file, entry]);
+    camera,
+  }, [file, entry, units]);
   const choose = <button type="button" className="cad-file-choose" onClick={() => { picker.current?.click(); }}>{file ? 'Open another file' : 'Choose a file'}</button>;
   const scad = file?.scad;
   // Without a parameter panel, a SCAD file's download, console output and warnings show here.
@@ -154,6 +175,12 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     {file && <div className="cad-file-bar">
       {choose}
       <span className="cad-file-name">{file.name} · {sizeText(file.size)}</span>
+      <label className="cad-file-units">Units
+        <select value={units} onChange={event => { const next = event.target.value as Units; setUnits(next); saveUnits(file.name, next); }}>
+          <option value="mm">Millimetres</option>
+          <option value="inches">Inches</option>
+        </select>
+      </label>
       {plain && <a href={file.url} download={file.name.replace(/\.scad$/i, '.stl')}>Download STL ↓</a>}
     </div>}
     {busy && <p className="cad-file-status" role="status">{busy}{' '}
@@ -163,7 +190,7 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
       Not editable here, so {scad.skipped.length === 1 ? 'it keeps its value' : 'they keep their values'} from the file: {scad.skipped.join(', ')}. The controls
       cover numbers, text, true or false, and choices.</p>}
     {file && viewed
-      ? <CadViewer key={file.url} downloads={false} local={scad?.local} entry={viewed} />
+      ? <CadViewer key={file.url} downloads={false} local={scad?.local} fileUnits={units} entry={viewed} />
       : <div className="cad-dropzone">
         <p><strong>Drop an STL or OpenSCAD file anywhere on this page</strong> to view it, or choose one.</p>
         <p>STL files open as they are. OpenSCAD files compile in this browser, with their Customizer parameters as controls. Nothing is uploaded.</p>

@@ -106,6 +106,9 @@
 .cad-file-choose:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .cad-file-name { opacity: .75; overflow-wrap: anywhere; }
 .cad-file-bar a { color: inherit; }
+.cad-file-units { display: inline-flex; align-items: center; gap: 8px; }
+.cad-file-units select { padding: 6px 8px; border: 1px solid var(--cad-border); border-radius: 3px; background: var(--cad-control); color: inherit; font: inherit; }
+.cad-file-units select:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .cad-file-status { margin: 12px 0 0; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .cad-file-cancel { margin-left: 8px; padding: 2px 10px; border: 1px solid var(--cad-border); border-radius: 3px; background: var(--cad-control); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
 .cad-file-cancel:focus-visible, .cad-file-output summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

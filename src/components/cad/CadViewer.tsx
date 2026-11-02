@@ -22,7 +22,11 @@ type Viewer = ReturnType<typeof createScene>;
 
 // `downloads` offers the model and source files; the model viewer turns it off for visitors' own
 // files. `local` is a visitor's SCAD file, compiled already, which opens without a request.
-export default function CadViewer({ entry, local, downloads = true }: { entry: CadEntry & { href: string }; local?: LocalModel; downloads?: boolean }) {
+// `fileUnits` are a visitor's file's units: an inch file is scaled to the scene's millimetres,
+// and lengths show in its units first. Site models give their units in the customizer instead.
+export default function CadViewer({ entry, local, fileUnits, downloads = true }: {
+  entry: CadEntry & { href: string }; local?: LocalModel; fileUnits?: 'mm' | 'inches'; downloads?: boolean;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
   const [legendOpen, setLegendOpen] = useState(true);
@@ -55,6 +59,10 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
   const displayUrl = entry.displayModel ? `${entry.href}${entry.displayModel}` : undefined;
   const palette = entry.customizer?.parts;
   const camera = entry.camera;
+  const units = fileUnits ?? entry.customizer?.units ?? 'mm';
+  const scale = fileUnits === 'inches' ? 25.4 : 1;
+  // A local file's latest model, so a change of units rebuilds the scene from current settings.
+  const latestModel = useRef(local?.model);
   const [visibleParts, setVisibleParts] = useState(palette);
   const hasParameters = !!(entry.customizer && entry.source);
   const hasLegend = !!palette?.length;
@@ -80,9 +88,10 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
         // Start with saved colored triangles when provided, so cold loads don't
         // show a monochrome STL while the parametric engine initializes.
         let geometry: BufferGeometry, display: DisplayMesh | undefined;
-        if (local) {
-          display = local.model.display;
-          geometry = display ? coloredGeometry(display, palette) : new STLLoader().parse(local.model.stl);
+        const model = local && (latestModel.current ?? local.model);
+        if (model) {
+          display = model.display;
+          geometry = display ? coloredGeometry(display, palette) : new STLLoader().parse(model.stl);
         } else {
           const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
           if (!response.ok) throw new Error('Model request failed.');
@@ -91,6 +100,7 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
             ? coloredGeometry(display, palette)
             : new STLLoader().parse(await response.arrayBuffer());
         }
+        if (scale !== 1) geometry.scale(scale, scale, scale);
         if (controller.signal.aborted) { geometry.dispose(); return; }
         setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
         setPieces(geometryPieces(geometry));
@@ -115,7 +125,7 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [local, modelUrl, displayUrl, palette, camera, downloads]);
+  }, [local, modelUrl, displayUrl, palette, camera, downloads, scale]);
 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });
@@ -152,12 +162,14 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
     ? { kind: 'edge', points: item.entity.points, closed: item.entity.closed, length: item.entity.length }
     : { kind: 'vertex', position: item.entity.position }] : []);
   const measurement = measure(measured);
-  // Lengths in the entry's units first, then the other; inches snap to 64ths within float precision.
-  const formatLength = (mm: number) => {
+  // Lengths in the model's units first, then the other; inches snap to 64ths within float precision.
+  const inchText = (mm: number) => {
     const value = mm / 25.4, sixtyFourths = Math.round(value * 64);
-    const inchText = Math.abs(value - sixtyFourths / 64) < 2e-5 ? `${inches(sixtyFourths / 64)}″` : `${value.toFixed(3)}″`;
+    return Math.abs(value - sixtyFourths / 64) < 2e-5 ? `${inches(sixtyFourths / 64)}″` : `${value.toFixed(3)}″`;
+  };
+  const formatLength = (mm: number) => {
     const mmText = `${mm.toFixed(2)} mm`;
-    return entry.customizer?.units === 'inches' ? [inchText, mmText] : [mmText, inchText];
+    return units === 'inches' ? [inchText(mm), mmText] : [mmText, inchText(mm)];
   };
   const formatRow = (row: { value: number; unit: 'length' | 'angle' }) => row.unit === 'angle' ? [`${row.value.toFixed(2)}°`, ''] : formatLength(row.value);
   const measurementKey = measurement ? JSON.stringify(measurement) : '';
@@ -165,7 +177,7 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
     if (!viewer) return;
     const shown = measurementKey ? JSON.parse(measurementKey) as NonNullable<typeof measurement> : null;
     viewer.setMeasurement(shown ? { line: shown.line, anchor: shown.anchor, text: formatRow(shown.rows[0])[0] } : null);
-    // formatRow depends only on the entry's units.
+    // formatRow depends only on the units, and a change of units rebuilds the viewer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, measurementKey]);
   const selectionKey = items.map(item => item.key).join(' ');
@@ -335,6 +347,7 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
   const coordinate = viewer && axis !== 'off'
     ? viewer.sourceMin[axis] + viewer.size[axis] * position / 100
     : 0;
+  const coordinateText = units === 'inches' ? inchText(coordinate) : `${coordinate.toFixed(1)} mm`;
   const reset = () => {
     setMode('edges');
     setAxis('off');
@@ -345,12 +358,14 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
   const onCompiled = useCallback((model: CompiledModel) => {
     if (!viewer) throw new Error('The 3D view is unavailable.');
     const geometry = model.display ? coloredGeometry(model.display, entry.customizer?.parts) : new STLLoader().parse(model.stl);
+    if (scale !== 1) geometry.scale(scale, scale, scale);
+    latestModel.current = model;
     try { viewer.replaceGeometry(geometry); }
     catch (error) { geometry.dispose(); throw error; }
     setVisibleParts(model.display && entry.customizer?.parts ? visiblePartColors(model.display, entry.customizer.parts) : entry.customizer?.parts);
     setPieces(geometryPieces(geometry));
     setRevision((revision) => revision + 1);
-  }, [viewer, entry.customizer?.parts]);
+  }, [viewer, entry.customizer?.parts, scale]);
 
   return (
     <section className="cad" aria-label="CAD model">
@@ -385,7 +400,7 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
                 return <div key={row.label}><dt>{row.label}</dt><dd>{primary}{secondary && <span>{secondary}</span>}</dd></div>;
               })}</dl> : <p>{measured.length === 1 ? 'Select another edge or vertex to measure a distance.' : 'Select up to two items, or only edges, to measure.'}</p>}
             </div>}
-            {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? 'Z up · mm' : `${axis.toUpperCase()} section · ${coordinate.toFixed(1)} mm`}</span>}
+            {!status && <span className="cad-stage-label" aria-hidden="true">{axis === 'off' ? `Z up · ${units === 'inches' ? 'inches' : 'mm'}` : `${axis.toUpperCase()} section · ${coordinateText}`}</span>}
           </div>
           <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom.{hasLegend && ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -407,16 +422,18 @@ export default function CadViewer({ entry, local, downloads = true }: { entry: C
             </label>
             <button type="button" onClick={reset}>Reset view</button>
             {axis !== 'off' && <div className="cad-section-controls">
-              <label className="cad-slider">Cut position <output>{coordinate.toFixed(1)} mm</output>
+              <label className="cad-slider">Cut position <output>{coordinateText}</output>
                 <input type="range" min="0" max="100" step="0.1" value={position}
-                  aria-valuetext={`${coordinate.toFixed(1)} millimeters on ${axis.toUpperCase()}`}
+                  aria-valuetext={`${units === 'inches' ? `${(coordinate / 25.4).toFixed(3)} inches` : `${coordinate.toFixed(1)} millimeters`} on ${axis.toUpperCase()}`}
                   onChange={(event) => { setPosition(Number(event.target.value)); }} />
               </label>
               <label className="cad-checkbox"><input type="checkbox" checked={flipped} onChange={(event) => { setFlipped(event.target.checked); }} />Flip cut</label>
               {mode !== 'wireframe' && <span className="cad-section-key"><i aria-hidden="true" />Cut surface</span>}
             </div>}
           </fieldset>
-          {viewer && <p className="cad-dimensions">Bounds: {viewer.size.x.toFixed(1)} × {viewer.size.y.toFixed(1)} × {viewer.size.z.toFixed(1)} mm (X × Y × Z)</p>}
+          {viewer && <p className="cad-dimensions">Bounds: {units === 'inches'
+            ? `${[viewer.size.x, viewer.size.y, viewer.size.z].map(inchText).join(' × ')} (X × Y × Z) · ${viewer.size.x.toFixed(1)} × ${viewer.size.y.toFixed(1)} × ${viewer.size.z.toFixed(1)} mm`
+            : `${viewer.size.x.toFixed(1)} × ${viewer.size.y.toFixed(1)} × ${viewer.size.z.toFixed(1)} mm (X × Y × Z)`}</p>}
           {downloads && !entry.customizer && <div className="cad-downloads">
             <a href={modelUrl} download>Download STL ↓</a>
             {entry.source && <a href={`${entry.href}${entry.source}`} download>OpenSCAD source ↓</a>}
