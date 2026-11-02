@@ -42,7 +42,7 @@ const partsHints: Record<FileParts['from'], string> = {
   color: 'Each color in this file is a part, numbered in file order.',
   solid: 'Each separate solid in this file is a part, numbered in file order.',
   listed: 'Each solid this file lists is a part, by the name it gives, or else numbered in file order.',
-  body: 'Each body in this STEP file is a part, by the name it gives, or else numbered in file order.',
+  body: 'Each body in this STEP file is a part, by the name it gives, or else numbered in file order. Copies of a body, alike in name and color, are one part with a piece each.',
 };
 
 // A model's geometry and the parts its legend lists. The site's models name their parts; a

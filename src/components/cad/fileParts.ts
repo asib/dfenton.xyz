@@ -6,7 +6,8 @@ import { pieceKey, type DisplayMesh } from './displayMesh';
 // "Part 2" and so on: each color of a colored OpenSCAD design, as OpenSCAD groups them, or
 // otherwise each solid, in a color of its own: those a text STL lists, by their names where
 // it gives them, or else each separate closed surface. A STEP file's parts are its bodies, by
-// their names and in their colors. A file of one solid, or of more than `maxParts` parts, has none.
+// their names and in their colors, its repeated bodies one part with a piece each. A file of
+// one solid, or of more than `maxParts` parts, has none.
 export const maxParts = 50;
 export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' | 'body' }
 // A text STL's solid or a STEP file's body, as a vertex range, with its name and any color.
@@ -211,22 +212,34 @@ function distinctColors(colors: string[]) {
   });
 }
 
-// A STEP file's bodies are its parts, by the names it gives them, or else numbered. They keep
-// the file's colors in both themes, as a colored design's do; a body without one is colored as
-// an STL's solids are.
+// A STEP file's bodies are its parts, by the names it gives them, or else numbered. Bodies of
+// the same name and color are copies of one part, as an assembly's nuts are: one part, with a
+// piece for each, which can be selected on its own. Parts keep the file's colors in both
+// themes, as a colored design's do; a body without one is colored as an STL's solids are.
+// Pieces name their part, so their colors need only differ: each is its part's, shifted a step
+// of 1/255 or two where repeated.
 export function bodyParts(mesh: Mesh): FileParts | undefined {
-  const bodies = mesh.groups ?? [];
-  if (bodies.length < 2 || bodies.length > maxParts) return;
-  const looks = bodies.map((body, index) => body.color ? { color: body.color, darkColor: body.color } : solidColor(index));
+  const bodies = mesh.groups?.filter(body => body.count > 0) ?? [];
+  if (bodies.length < 2) return;
+  const kinds = new Map<string, number>(), partOf = bodies.map((body, index) => {
+    const kind = body.name.trim() ? `${body.name}\u0000${body.color ?? ''}` : `#${String(index)}`;
+    if (!kinds.has(kind)) kinds.set(kind, kinds.size);
+    return kinds.get(kind) ?? 0;
+  });
+  if (kinds.size < 2 || kinds.size > maxParts) return;
+  const firsts = [...kinds.values()].map(part => bodies[partOf.indexOf(part)]);
+  const looks = firsts.map((body, part) => body.color ? { color: body.color, darkColor: body.color } : solidColor(part));
   const colors = distinctColors(looks.map(look => look.color));
-  const partOf = new Int32Array(mesh.positions.length / 9);
-  bodies.forEach((body, index) => { partOf.fill(index, body.start / 3, (body.start + body.count) / 3); });
+  const parts = distinct(firsts.map((body, part) => shortName(body.name) || `Part ${String(part + 1)}`)).map((label, part) => ({
+    id: `body-${String(part + 1)}`, label, color: colors[part], darkColor: firsts[part].color ? colors[part] : looks[part].darkColor,
+  }));
+  const pieces = distinctColors(partOf.map(part => colors[part]));
   return {
-    display: regroup(mesh, partOf, colors), from: 'body',
-    parts: distinct(bodies.map((body, index) => shortName(body.name) || `Part ${String(index + 1)}`)).map((label, index) => ({
-      id: `body-${String(index + 1)}`, label, color: colors[index],
-      darkColor: bodies[index].color ? colors[index] : looks[index].darkColor,
-    })),
+    display: {
+      positions: mesh.positions, normals: mesh.normals,
+      groups: bodies.map((body, index) => ({ start: body.start, count: body.count, color: rgba(pieces[index]), mode: 'solid', part: parts[partOf[index]].id })),
+    },
+    parts, from: 'body',
   };
 }
 
