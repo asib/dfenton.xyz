@@ -75,9 +75,11 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   // The section view (section.ts), or null when off; Shift+X brings back the last one.
   // `picking` waits for a click on a face to section through.
   // Up to `maxSections` planes cut at once; the controls and manipulator edit the active one.
+  // `excluded` parts and pieces are left whole.
   const [sections, setSections] = useState<SectionState[]>([]);
   const [active, setActive] = useState(0);
   const section = (sections[active] as SectionState | undefined) ?? null;
+  const [excluded, setExcluded] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   const lastSections = useRef<{ sections: SectionState[]; active: number } | null>(null);
   // Changes the active plane, or with none, adds it.
@@ -183,11 +185,11 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   useEffect(() => {
     const plane = section && sectionPlane(section);
     viewer?.setSettings({
-      mode, sections: sections.map(sectionPlane),
+      mode, sections: sections.map(sectionPlane), excluded,
       handle: section && plane && !picking ? { point: section.point, arrow: plane.normal, axes: sectionFrame(section).axes } : null,
     });
     if (sections.length) lastSections.current = { sections, active };
-  }, [viewer, mode, sections, active, section, picking]);
+  }, [viewer, mode, sections, active, section, excluded, picking]);
   // A change of units rescales the model, so the section moves with it.
   const sectionScale = useRef(scale);
   useEffect(() => {
@@ -385,7 +387,8 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     setActive(Math.max(0, Math.min(active > index ? active - 1 : active, sections.length - 2)));
     setPicking(false);
   };
-
+  // Selected parts and pieces join those left whole.
+  const excludeSelection = () => { setExcluded(current => [...new Set([...current, ...selection.map(target => target.key)])]); };
   // Look back along the section's normal, at the cut face on.
   const viewNormal = () => { if (section) viewer?.lookAlong(sectionPlane(section).normal); };
   // Dragging the manipulator moves or tilts the section from where the drag began, tilts to a
@@ -489,6 +492,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     setMode('edges');
     setSections([]);
     setActive(0);
+    setExcluded([]);
     setPicking(false);
     viewer?.reset();
   };
@@ -542,7 +546,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
               : section ? `${planeNames[section.reference.plane]} section${sections.length > 1 ? ` ${String(active + 1)} of ${String(sections.length)}` : ''} · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
             ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click edges or corners to measure them, adding them to the selection or removing them; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -598,6 +602,14 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
                 <button type="button" onClick={viewNormal} title="View normal to the section (N)" aria-keyshortcuts="N">View normal</button>
                 <button type="button" onClick={() => { setPicking(true); }}>Pick a face</button>
                 {mode !== 'wireframe' && <span className="cad-section-key"><i aria-hidden="true" />Cut surface</span>}
+                {hasLegend && <div className="cad-section-excluded">
+                  <button type="button" disabled={!selection.length} onClick={excludeSelection}>Leave selection uncut</button>
+                  {excluded.length > 0 && <>
+                    <span>Uncut:</span>
+                    {excluded.map(key => <button key={key} type="button" className="cad-section-uncut" title="Cut it again" onClick={() => { setExcluded(current => current.filter(item => item !== key)); }}>
+                      {resolve(key)?.label ?? 'Part not shown'} <span aria-hidden="true">×</span></button>)}
+                  </>}
+                </div>}
               </div>;
             })()}
           </fieldset>

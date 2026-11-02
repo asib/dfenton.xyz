@@ -103,6 +103,8 @@
 .cad-section-plane { display: flex; }
 .cad-controls .cad-section-plane button[aria-pressed=true] { border-color: currentColor; box-shadow: inset 0 -3px 0 var(--cad-section); }
 .cad-controls .cad-section-plane .cad-section-remove { margin-left: -1px; padding: 8px 10px; }
+.cad-section-excluded { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.cad-controls .cad-section-uncut { min-height: 32px; padding: 4px 10px; font-size: 13px; }
 .cad-dimensions { opacity: .65; font-size: 12px; }
 .cad-downloads { display: flex; flex-wrap: wrap; gap: 16px 24px; margin: 24px 0; }
 .cad a { text-decoration: underline dotted; text-underline-offset: 4px; }

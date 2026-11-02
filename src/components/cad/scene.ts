@@ -10,12 +10,14 @@ import { createViewCube, namedViews, type NamedView } from './viewCube';
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
 // `sections` are the planes cutting the model (section.ts), up to `maxSections`. With several,
 // only material on the removed side of every one is removed, as in Onshape's corner cutaways.
-// `handle` places one plane's manipulator, or null hides it.
+// `handle` places one plane's manipulator, or null hides it. `excluded` parts and pieces (by
+// legend part ID or piece key) are left whole.
 export const maxSections = 3;
 export interface ViewSettings {
   mode: RenderMode;
   sections: SectionPlane[];
   handle?: SectionHandle | null;
+  excluded?: string[];
 }
 type Vec3 = [number, number, number];
 // The section manipulator, in model coordinates: its point, its arrow (toward the removed
@@ -357,8 +359,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const look = (layer.piece ? appearances[layer.piece] : undefined) ?? (layer.part ? appearances[layer.part] : undefined);
     return { hidden: !!look?.hidden || look?.opacity === 0, opacity: look?.opacity ?? 1 };
   };
-  // Material is clipped where every plane removes it.
-  const clipped = (_layer: Layer, point: THREE.Vector3) => settings.sections.length > 0 &&
+  // Excluded parts and pieces are left whole; material is clipped where every plane removes it.
+  const whole = (layer: Layer) => !!settings.excluded?.some(key => key === layer.piece || key === layer.part);
+  const clipped = (layer: Layer, point: THREE.Vector3) => settings.sections.length > 0 && !whole(layer) &&
     planes.slice(0, settings.sections.length).every(plane => plane.distanceToPoint(point) < 0);
   // Apply display mode, section, theme colors and per-part appearance to every layer.
   const apply = () => {
@@ -376,7 +379,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       // Translucent parts let parts behind them show through.
       layer.solid.depthWrite = !translucent;
       layer.solid.wireframe = mode === 'wireframe';
-      const cut = active;
+      const cut = whole(layer) ? [] : active;
       layer.solid.clippingPlanes = cut;
       layer.solid.clipIntersection = cut.length > 1;
       layer.solid.needsUpdate = true;
