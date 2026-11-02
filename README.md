@@ -1,18 +1,16 @@
 # Cloudflare Pages
 
-Pages is configured with `BUN_VERSION=1.4.2`. Use **Bun 1.4.2** when changing dependencies or writing the text `bun.lock`; a different Bun release can write a lockfile that Pages' frozen install rejects. `package.json` records the expected version in `packageManager`, but Pages selects its Bun version from the `BUN_VERSION` environment variable in the dashboard.
+Pages' build command is `bash scripts/pages-build.sh`, with `SKIP_DEPENDENCY_INSTALL=true` set for Production and Preview so Pages doesn't install dependencies itself. The script installs the Bun version that `packageManager` in `package.json` names, then runs `bun install --frozen-lockfile` and `bun run build`. Pages would otherwise take its Bun version from the `BUN_VERSION` setting in the dashboard; it's no longer needed.
 
-Before pushing dependency changes, verify with that Bun version in a clean checkout:
+Use that Bun version when changing dependencies or writing the text `bun.lock`; a different Bun release can write a lockfile that the frozen install rejects. Before pushing dependency changes, verify in a clean checkout:
 
 ```sh
-bun --version # must print 1.4.2
-bun install --frozen-lockfile
-bun run build
+bash scripts/pages-build.sh # installs the right Bun first if yours differs
 ```
 
-Upgrade the local Bun version and Pages' `BUN_VERSION` together when intentionally changing the toolchain. Keep frozen installs enabled so deployments use the committed dependency versions.
+To change the toolchain, bump `packageManager` in a PR; its Pages preview builds with the new Bun before production does. Keep frozen installs so deployments use the committed dependency versions.
 
-Dependabot opens weekly dependency PRs, configured in `.github/dependabot.yml`. It rewrites `bun.lock` with its own Bun, 1.4.2 at the time of writing (see `BUN_VERSION` in [dependabot-core's `bun/Dockerfile`](https://github.com/dependabot/dependabot-core/blob/main/bun/Dockerfile)). Check each PR's Pages preview build before merging: a frozen-install failure there usually means Dependabot's Bun and Pages' `BUN_VERSION` have drifted apart.
+Dependabot opens weekly dependency PRs, configured in `.github/dependabot.yml`. It rewrites `bun.lock` with its own Bun, 1.4.2 at the time of writing (see `BUN_VERSION` in [dependabot-core's `bun/Dockerfile`](https://github.com/dependabot/dependabot-core/blob/main/bun/Dockerfile)). Check each PR's Pages preview build before merging: a frozen-install failure there usually means Dependabot's Bun and `packageManager` have drifted apart, so bump `packageManager` to match.
 
 Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
 
