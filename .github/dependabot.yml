@@ -1,0 +1,56 @@
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # Hold new releases back a week so a broken or compromised publish has time
+    # to be caught. Security updates ignore this.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    # A dependency goes into the first group it matches. The named groups take
+    # every update type; anything else gets its minor and patch updates batched
+    # and a separate PR for each major.
+    groups:
+      # three is 0.x, so any bump can break; keep its types in step.
+      three:
+        patterns:
+          - three
+          - "@types/three"
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+      # svg2pdf.js is a jsPDF plugin.
+      pdf:
+        patterns:
+          - jspdf
+          - svg2pdf.js
+      lint:
+        patterns:
+          - eslint
+          - eslint-*
+          - "@eslint/*"
+          - typescript-eslint
+          - "@typescript-eslint/*"
+          - prettier
+          - prettier-*
+          - globals
+      dependencies:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+        # The CAD engine is 0.x and the drawings and tests depend on its
+        # output, so it gets PRs of its own.
+        exclude-patterns:
+          - openrscad-engine
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch

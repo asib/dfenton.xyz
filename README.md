@@ -12,6 +12,8 @@ bun run build
 
 Upgrade the local Bun version and Pages' `BUN_VERSION` together when intentionally changing the toolchain. Keep frozen installs enabled so deployments use the committed dependency versions.
 
+Dependabot opens weekly dependency PRs, configured in `.github/dependabot.yml`. It rewrites `bun.lock` with its own Bun, 1.4.2 at the time of writing (see `BUN_VERSION` in [dependabot-core's `bun/Dockerfile`](https://github.com/dependabot/dependabot-core/blob/main/bun/Dockerfile)). Check each PR's Pages preview build before merging: a frozen-install failure there usually means Dependabot's Bun and Pages' `BUN_VERSION` have drifted apart.
+
 Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
 
 Use a `[Skip CI]` prefix to tell Pages not to deploy a given commit.
