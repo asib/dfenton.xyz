@@ -95,11 +95,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   controls.enableDamping = false;
   // Onshape's mouse: right-drag orbits about the point under the cursor (orbitAbout
   // below), Ctrl- (or Cmd-/Shift-) right-drag and middle-drag pan, and left-click
-  // selects. The controls keep panning, wheel/pinch zoom and two-finger gestures;
-  // with their own rotation disabled, a plain right-drag is left to orbitAbout.
-  // One finger is unmapped too, so a pinch that ends with a finger still down
-  // resets them instead of leaving that finger zooming against a lifted one.
+  // selects. The wheel and a pinch zoom about the point under the pointer (zoomAbout
+  // below). The controls keep panning and two-finger panning; with their own rotation
+  // and zoom disabled, a plain right-drag is left to orbitAbout. One finger is unmapped
+  // too, so a pinch that ends with a finger still down resets them instead of leaving
+  // that finger panning against a lifted one.
   controls.enableRotate = false;
+  controls.enableZoom = false;
   controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
   controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
   // Render only on interaction; idle models don't consume an animation loop.
@@ -818,13 +820,54 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     orbiting = null;
     if (pivotMarker.visible) { pivotMarker.visible = false; render(); }
   };
+  // The point the pointer is on, to orbit or zoom about: on the part under it, else a
+  // snapped corner or edge.
+  const grabAt = (x: number, y: number) => surfaceAt(x, y) ?? snapAt(x, y)?.point ?? null;
   const startOrbit = (id: number, x: number, y: number) => {
     orbiting = { id, x, y };
-    // A point on the part under the cursor, else a snapped corner or edge, else the center.
-    const grabbed = surfaceAt(x, y) ?? snapAt(x, y)?.point ?? null;
+    // The point the cursor is on, else the center.
+    const grabbed = grabAt(x, y);
     pivot.copy(grabbed ?? controls.target);
     pivotMarker.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pivot.toArray(), 3));
     pivotMarker.visible = !!grabbed;
+  };
+  // Zoom about the point under the pointer, as Onshape does: the camera and its target move
+  // toward it or away by the same factor, so it stays under the pointer, and the camera keeps
+  // its distance limits from the target. Over empty space, the point is on the pointer's ray
+  // as far away as the target.
+  let zoomPoint: THREE.Vector3 | null = null;
+  const zoomPointAt = (x: number, y: number) => {
+    // Zooming leaves the point where it was on screen, so while the pointer stays put it's reused.
+    if (zoomPoint) {
+      const at = toScreen(zoomPoint.toArray(), renderer.domElement.getBoundingClientRect());
+      if (!at.behind && Math.hypot(at.x - x, at.y - y) < 1) return zoomPoint;
+    }
+    const depth = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), controls.target);
+    zoomPoint = grabAt(x, y) ?? rayAt(x, y).intersectPlane(depth, new THREE.Vector3()) ?? controls.target.clone();
+    return zoomPoint;
+  };
+  const zoomAbout = (center: THREE.Vector3, factor: number) => {
+    const distance = camera.position.distanceTo(controls.target);
+    const scale = Math.min(controls.maxDistance, Math.max(controls.minDistance, distance * factor)) / distance;
+    for (const point of [camera.position, controls.target]) point.sub(center).multiplyScalar(scale).add(center);
+    controls.update();
+  };
+  // Wheel steps zoom as the orbit controls' did: lines and pages count as pixels, and a
+  // trackpad pinch (Ctrl set without the key held) moves in small steps, so counts ten times.
+  let controlHeld = false;
+  const onControl = (event: KeyboardEvent) => { if (event.key === 'Control') controlHeld = event.type === 'keydown'; };
+  const onWindowBlur = () => { controlHeld = false; };
+  const onWheel = (event: WheelEvent) => {
+    event.preventDefault();
+    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1) * (event.ctrlKey && !controlHeld ? 10 : 1);
+    if (delta) zoomAbout(zoomPointAt(event.clientX, event.clientY), Math.pow(0.95, -delta * 0.01));
+  };
+  // A pinch zooms about the point between the fingers as they land. The controls pan with the
+  // fingers, which keeps that point between them.
+  let pinch: { center: THREE.Vector3; span: number } | null = null;
+  const fingers = () => {
+    const [a, b] = [...pointers.values()];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, span: Math.hypot(a.x - b.x, a.y - b.y) };
   };
   // The focus ring shows only when the 3D view is reached from the keyboard. A click or
   // tap marks the focus as the pointer's until the view loses it (not just the window).
@@ -845,11 +888,16 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       : event.button === 2 && !event.ctrlKey && !event.metaKey && !event.shiftKey;
     if (orbitButton && pointers.size === 1) startOrbit(event.pointerId, event.clientX, event.clientY);
     else stopOrbit(); // A second finger hands over to pinch and pan.
+    if (event.pointerType === 'touch' && pointers.size === 2) {
+      const { x, y, span } = fingers();
+      pinch = { center: zoomPointAt(x, y), span };
+    } else pinch = null;
     scheduleHover();
   };
   // When a pinch ends with one finger still down, that finger orbits again from where it is.
   const release = (event: PointerEvent) => {
     pointers.delete(event.pointerId);
+    pinch = null;
     stopOrbit();
     if (event.pointerType === 'touch' && pointers.size === 1) for (const [id, at] of pointers) startOrbit(id, at.x, at.y);
   };
@@ -869,6 +917,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const onPointerMove = (event: PointerEvent) => {
     if (handleDrag?.pointerId === event.pointerId) { pointer = { x: event.clientX, y: event.clientY }; dragHandle(event, false); return; }
     if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch && pointers.has(event.pointerId) && pointers.size === 2) {
+      const { span } = fingers();
+      if (pinch.span > 0 && span > 0) zoomAbout(pinch.center, pinch.span / span);
+      pinch.span = span;
+    }
     if (orbiting?.id === event.pointerId) {
       orbitAbout(event.clientX - orbiting.x, event.clientY - orbiting.y);
       orbiting.x = event.clientX;
@@ -888,6 +941,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   renderer.domElement.addEventListener('pointerleave', onPointerLeave);
   renderer.domElement.addEventListener('pointercancel', onPointerCancel);
   renderer.domElement.addEventListener('blur', onBlur);
+  renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+  window.addEventListener('keydown', onControl, true);
+  window.addEventListener('keyup', onControl, true);
+  window.addEventListener('blur', onWindowBlur);
   setTheme();
   setSettings({ mode: 'edges', sections: [] });
   resize();
@@ -924,6 +981,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
       renderer.domElement.removeEventListener('pointercancel', onPointerCancel);
       renderer.domElement.removeEventListener('blur', onBlur);
+      renderer.domElement.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onControl, true);
+      window.removeEventListener('keyup', onControl, true);
+      window.removeEventListener('blur', onWindowBlur);
       pivotMarker.geometry.dispose();
       pivotMaterial.dispose();
       measureLine.geometry.dispose();
