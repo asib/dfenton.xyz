@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry, PartColor } from '../../misc';
 import { createScene, type PartAppearances, type PickedFace, type RenderMode } from './scene';
-import { defaultPlanes, depthRange, facePlane, planeNames, sectionPlane, startSection, type DefaultPlane, type SectionState, type Vec3 } from './section';
+import { axisName, defaultPlanes, depthRange, facePlane, planeAxes, planeNames, sectionDepth, sectionPlane, startSection, withDepth, type DefaultPlane, type SectionState, type Vec3 } from './section';
 import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
@@ -21,6 +21,20 @@ import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
 const tuple = (vector: { x: number; y: number; z: number }): Vec3 => [vector.x, vector.y, vector.z];
+
+// A number field that keeps what's typed until it loses focus, applying it whenever it parses.
+function DraftNumber({ label, value, step, unit, onValue }: { label: string; value: number; step: number; unit: string; onValue: (value: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return <label className="cad-section-number">{label}
+    <span><input type="number" step={step} value={draft ?? String(value)}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        const next = Number(event.target.value);
+        if (event.target.value.trim() && Number.isFinite(next)) onValue(next);
+      }}
+      onBlur={() => { setDraft(null); }} /> {unit}</span>
+  </label>;
+}
 
 // What a visitor's file's parts are, for the legend.
 const partsHints: Record<FileParts['from'], string> = {
@@ -59,10 +73,9 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   const [status, setStatus] = useState('Loading model…');
   const [mode, setMode] = useState<RenderMode>('edges');
   // The section view (section.ts), or null when off; Shift+X brings back the last one.
-  // `picking` waits for a click on a face to section through; `depthDraft` is a typed depth.
+  // `picking` waits for a click on a face to section through.
   const [section, setSection] = useState<SectionState | null>(null);
   const [picking, setPicking] = useState(false);
-  const [depthDraft, setDepthDraft] = useState<string | null>(null);
   const lastSection = useRef<SectionState | null>(null);
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
@@ -164,7 +177,11 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     const ratio = scale / sectionScale.current;
     sectionScale.current = scale;
     if (ratio === 1) return;
-    const rescale = (current: SectionState | null) => current && { ...current, depth: current.depth * ratio, reference: { ...current.reference, offset: current.reference.offset * ratio } };
+    const times = (point: Vec3): Vec3 => [point[0] * ratio, point[1] * ratio, point[2] * ratio];
+    const rescale = (current: SectionState | null) => current && {
+      ...current, point: times(current.point),
+      reference: { ...current.reference, offset: current.reference.offset * ratio, anchor: current.reference.anchor && times(current.reference.anchor) },
+    };
     lastSection.current = rescale(lastSection.current);
     setSection(rescale);
   }, [scale]);
@@ -252,7 +269,6 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     if (!picking) { toggleSelect(key); return; }
     if (!face || !viewer) return;
     setSection(startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size)));
-    setDepthDraft(null);
     setPicking(false);
   };
   // Hovering an edge or vertex marks the part it belongs to in the legend.
@@ -324,14 +340,12 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   // A default plane from the Section menu opens through the middle of the model; "Face" waits
   // for a click on one. Shift+X brings back the last section, or else the front plane.
   const chooseSection = (value: string) => {
-    setDepthDraft(null);
     if (value === 'face') { setPicking(true); return; }
     setPicking(false);
     setSection(value === 'off' || !viewer ? null : startSection(defaultPlanes[value as DefaultPlane], tuple(viewer.sourceMin), tuple(viewer.size)));
   };
   const toggleSection = () => {
     setPicking(false);
-    setDepthDraft(null);
     const fallback = viewer && startSection(defaultPlanes.front, tuple(viewer.sourceMin), tuple(viewer.size));
     setSection(current => current ? null : lastSection.current ?? fallback);
   };
@@ -420,7 +434,6 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     setMode('edges');
     setSection(null);
     setPicking(false);
-    setDepthDraft(null);
     viewer?.reset();
   };
   const onCompiled = useCallback((model: CompiledModel) => {
@@ -470,7 +483,8 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
               })}</dl> : <p>{measured.length === 1 ? 'Select another edge or vertex to measure a distance.' : 'Select up to two items, or only edges, to measure.'}</p>}
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{picking ? 'Click a face to section through it'
-              : section ? `${planeNames[section.reference.plane]} section · depth ${depthText(section.depth)}` : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
+              : section ? `${planeNames[section.reference.plane]} section · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
+                : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
           <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; N views it normal to the cut, and Shift+X turns it off and on.{hasLegend
             ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
@@ -498,22 +512,24 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
               <button type="button" onClick={() => { setPicking(false); }} aria-keyshortcuts="Escape">Cancel</button></p>}
             {section && viewer && (() => {
               const [low, high] = depthRange(section.reference, tuple(viewer.sourceMin), tuple(viewer.size));
-              const typed = units === 'inches' ? Number((section.depth / 25.4).toFixed(4)) : Number(section.depth.toFixed(2));
+              const depth = sectionDepth(section), inch = units === 'inches';
+              const axes = planeAxes(section.reference);
               return <div className="cad-section-controls">
-                <label className="cad-slider">Depth <output>{depthText(section.depth)}</output>
-                  <input type="range" min={low} max={high} step={(high - low) / 1000 || 0.001} value={Math.min(high, Math.max(low, section.depth))}
-                    aria-valuetext={`${depthText(section.depth)} from the ${planeNames[section.reference.plane].toLowerCase()}`}
-                    onChange={(event) => { setDepthDraft(null); setSection({ ...section, depth: Number(event.target.value) }); }} />
+                <label className="cad-slider">Depth <output>{depthText(depth)}</output>
+                  <input type="range" min={low} max={high} step={(high - low) / 1000 || 0.001} value={Math.min(high, Math.max(low, depth))}
+                    aria-valuetext={`${depthText(depth)} from the ${planeNames[section.reference.plane].toLowerCase()}`}
+                    onChange={(event) => { setSection(withDepth(section, Number(event.target.value))); }} />
                 </label>
-                <label className="cad-section-depth">Exact depth
-                  <span><input type="number" step={units === 'inches' ? 1 / 64 : 0.1} value={depthDraft ?? String(typed)}
-                    onChange={(event) => {
-                      setDepthDraft(event.target.value);
-                      const value = Number(event.target.value);
-                      if (event.target.value.trim() && Number.isFinite(value)) setSection({ ...section, depth: units === 'inches' ? value * 25.4 : value });
-                    }}
-                    onBlur={() => { setDepthDraft(null); }} /> {units === 'inches' ? 'in' : 'mm'}</span>
-                </label>
+                <DraftNumber label="Exact depth" step={inch ? 1 / 64 : 0.1} unit={inch ? 'in' : 'mm'}
+                  value={inch ? Number((depth / 25.4).toFixed(4)) : Number(depth.toFixed(2))}
+                  onValue={(value) => { setSection(withDepth(section, inch ? value * 25.4 : value)); }} />
+                {axes.map((axis, index) => <DraftNumber key={index} label={`Tilt about ${axisName(axis) ?? (index ? 'the second axis' : 'the first axis')}`} step={1} unit="°"
+                  value={section.tilt[index]} onValue={(value) => {
+                    const tilt: [number, number] = [...section.tilt];
+                    tilt[index] = value;
+                    setSection({ ...section, tilt });
+                  }} />)}
+                <button type="button" disabled={!section.tilt.some(Boolean)} onClick={() => { setSection({ ...section, tilt: [0, 0] }); }}>Square up</button>
                 <label className="cad-checkbox"><input type="checkbox" checked={section.flipped} onChange={(event) => { setSection({ ...section, flipped: event.target.checked }); }} />Flip cut</label>
                 <button type="button" onClick={viewNormal} title="View normal to the section (N)" aria-keyshortcuts="N">View normal</button>
                 <button type="button" onClick={() => { setPicking(true); }}>Pick a face</button>
