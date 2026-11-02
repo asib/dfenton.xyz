@@ -6,7 +6,7 @@ import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
-import { fileParts, type FileParts } from './fileParts';
+import { fileParts, stlMesh, type FileParts } from './fileParts';
 import { inches } from './cutList';
 import { measure, type Measurable } from './measure';
 import SheetLayoutTable from './SheetLayoutTable';
@@ -20,14 +20,19 @@ import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
 
+// What a visitor's file's parts are, for the legend.
+const partsHints: Record<FileParts['from'], string> = {
+  color: 'Each color in this file is a part, numbered in file order.',
+  solid: 'Each separate solid in this file is a part, numbered in file order.',
+  listed: 'Each solid this file lists is a part, by the name it gives, or else numbered in file order.',
+};
+
 // A model's geometry and the parts its legend lists. The site's models name their parts; a
 // visitor's file (`generic`) gets numbered ones when it has several colors or solids.
 function modelGeometry(display: DisplayMesh | undefined, stl: ArrayBuffer | undefined, palette: PartColor[] | undefined, generic: boolean) {
   if (generic) {
     const mesh = stl && new STLLoader().parse(stl);
-    const found = fileParts(display, mesh && {
-      positions: mesh.getAttribute('position').array as Float32Array, normals: mesh.getAttribute('normal').array as Float32Array, groups: mesh.groups,
-    });
+    const found = fileParts(display, mesh && stlMesh(mesh));
     if (found) return { geometry: coloredGeometry(found.display, found.parts), parts: found.parts, from: found.from };
     if (mesh && !display) return { geometry: mesh, parts: undefined, from: undefined };
   }
@@ -465,7 +470,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
         <div className="cad-sidebar" hidden={!hasPanels}>
           {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
             <summary>Part legend</summary>
-            <p className="cad-part-hint">{partsFrom && `${{ color: 'Each color in this file', solid: 'Each separate solid in this file', listed: 'Each solid this file lists' }[partsFrom]} is a part, numbered in file order. `}
+            <p className="cad-part-hint">{partsFrom && `${partsHints[partsFrom]} `}
               Click a part in the model or below to fade, hide or isolate it.</p>
             <ul className="cad-part-key" aria-label="Part colors">
               {visibleParts.map((part) => <li key={part.id}>

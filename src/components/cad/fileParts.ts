@@ -1,13 +1,26 @@
+import type { BufferGeometry } from 'three';
 import type { PartColor } from '../../misc';
 import { pieceKey, type DisplayMesh } from './displayMesh';
 
 // Visitors' files have no part list, so their parts are numbered in file order, "Part 1",
 // "Part 2" and so on: each color of a colored OpenSCAD design, as OpenSCAD groups them, or
-// otherwise each solid, in a color of its own: those a text STL lists, or else each separate
-// closed surface. A file of one solid, or of more than `maxParts` parts, has none.
+// otherwise each solid, in a color of its own: those a text STL lists, by their names where
+// it gives them, or else each separate closed surface. A file of one solid, or of more than
+// `maxParts` parts, has none.
 export const maxParts = 50;
 export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' }
-interface Mesh { positions: Float32Array; normals: Float32Array; groups?: { start: number; count: number }[] }
+interface Block { start: number; count: number; name: string }
+export interface Mesh { positions: Float32Array; normals: Float32Array; groups?: Block[] }
+
+// An STL as Three's STLLoader reads it: a text STL's `solid … endsolid` blocks become groups
+// (vertex ranges), their names the rest of each `solid` line.
+export function stlMesh(geometry: BufferGeometry): Mesh {
+  const names = (geometry.userData.groupNames ?? []) as string[];
+  return {
+    positions: geometry.getAttribute('position').array as Float32Array, normals: geometry.getAttribute('normal').array as Float32Array,
+    groups: geometry.groups.map(group => ({ start: group.start, count: group.count, name: names[group.materialIndex ?? -1] ?? '' })),
+  };
+}
 
 const hex = (value: number) => Math.round(value * 255).toString(16).padStart(2, '0');
 function hsl(hue: number, saturation: number, lightness: number) {
@@ -141,15 +154,29 @@ export function solids(positions: Float32Array): { solidOf: Int32Array; count: n
   return { solidOf, count: order.size };
 }
 
-// A text STL may list its solids itself, as `solid … endsolid` blocks (vertex ranges here).
-function listedSolids(blocks: { start: number; count: number }[], triangles: number) {
+// A text STL may list its solids itself, as `solid … endsolid` blocks.
+function listedSolids(blocks: Block[], triangles: number) {
   const solidOf = new Int32Array(triangles);
   blocks.forEach((block, index) => { solidOf.fill(index, block.start / 3, (block.start + block.count) / 3); });
   return { solidOf, count: blocks.length };
 }
 
+// A block's name, if it tells parts apart. A nameless block's reads on into its first facet
+// (Three's pattern crosses the line break), and exporters' placeholders name no part.
+const placeholder = /^(ascii|binary|stl|mesh|model|object|solid|openscad_model)$|^(exported|generated|created|made)\s+(from|by|with)\b/i;
+function blockName(name: string) {
+  const text = name.replace(/\s+/g, ' ').trim();
+  if (!text || /^facet\b/i.test(text) || placeholder.test(text)) return '';
+  return text.length > 60 ? `${text.slice(0, 59).trimEnd()}…` : text;
+}
+// Repeated labels are numbered, as pieces are: "Leg · 1", "Leg · 2".
+function distinct(labels: string[]) {
+  return labels.map((label, i) => labels.filter(other => other === label).length > 1
+    ? `${label} · ${String(labels.slice(0, i + 1).filter(other => other === label).length)}` : label);
+}
+
 // The mesh's triangles reordered by part, one display group per part.
-function regroup({ positions, normals }: Mesh, partOf: Int32Array, colors: string[]): DisplayMesh {
+function regroup({ positions, normals }: Pick<Mesh, 'positions' | 'normals'>, partOf: Int32Array, colors: string[]): DisplayMesh {
   const counts = colors.map(() => 0);
   for (const part of partOf) counts[part]++;
   const starts = counts.map((_, part) => counts.slice(0, part).reduce((sum, count) => sum + count, 0));
@@ -183,6 +210,7 @@ export function fileParts(display: DisplayMesh | undefined, mesh: Mesh | undefin
   const palette = Array.from({ length: count }, (_, solid) => solidColor(solid));
   return {
     display: regroup(mesh, solidOf, palette.map(({ color }) => color)), from: listed ? 'listed' : 'solid',
-    parts: palette.map((colors, solid) => ({ id: `solid-${String(solid + 1)}`, label: `Part ${String(solid + 1)}`, ...colors })),
+    parts: distinct(palette.map((_, solid) => (listed ? blockName(blocks[solid].name) : '') || `Part ${String(solid + 1)}`))
+      .map((label, solid) => ({ id: `solid-${String(solid + 1)}`, label, ...palette[solid] })),
   };
 }

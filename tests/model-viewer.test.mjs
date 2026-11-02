@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { parameters, render } from 'openrscad-engine/node';
 import { configuredSource, defaults, editableParameters } from '../src/components/cad/parameters';
 import { coloredGeometry, displayMesh, geometryPieces } from '../src/components/cad/displayMesh';
-import { fileParts, maxParts, solidColor, solids } from '../src/components/cad/fileParts';
+import { fileParts, maxParts, solidColor, solids, stlMesh } from '../src/components/cad/fileParts';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
 // A visitor's file, as the model viewer opens it: OpenSCAD literals JSON lacks, a vector
@@ -146,15 +146,17 @@ test('a text STL’s solid blocks are its parts, even where they touch', () => {
   const facets = (positions) => [...Array(positions.length / 9).keys()].map(i => ` facet normal 0 0 0\n  outer loop\n${
     [0, 1, 2].map(v => `   vertex ${[...positions.subarray(i * 9 + v * 3, i * 9 + v * 3 + 3)].join(' ')}`).join('\n')}\n  endloop\n endfacet`).join('\n');
   const a = compiled('cube(10);').mesh.positions, b = compiled('translate([10, 0, 0]) cube(10);').mesh.positions, c = compiled('translate([0, 0, 10]) cube(10);').mesh.positions;
-  const load = (text) => {
-    const geometry = new STLLoader().parse(text);
-    return { positions: geometry.getAttribute('position').array, normals: geometry.getAttribute('normal').array, groups: geometry.groups };
-  };
+  const load = (text) => stlMesh(new STLLoader().parse(text));
   // Two blocks, the second holding two touching cubes: the blocks are the parts.
   const listed = fileParts(undefined, load(`solid lid\n${facets(a)}\nendsolid lid\nsolid body\n${facets(b)}\n${facets(c)}\nendsolid body\n`));
   expect(listed.from).toBe('listed');
-  expect(listed.parts.map(part => part.label)).toEqual(['Part 1', 'Part 2']);
+  expect(listed.parts.map(part => part.label)).toEqual(['lid', 'body']);
   expect(listed.display.groups.map(group => group.count)).toEqual([a.length / 3, (b.length + c.length) / 3]);
-  // One block falls back to finding solids.
-  expect(fileParts(undefined, load(`solid all\n${facets(a)}\n${facets(b)}\nendsolid all\n`)).parts).toHaveLength(2);
+  // One block falls back to finding solids, numbered.
+  expect(fileParts(undefined, load(`solid all\n${facets(a)}\n${facets(b)}\nendsolid all\n`)).parts.map(part => part.label)).toEqual(['Part 1', 'Part 2']);
+
+  // Names that tell parts apart label them; blank names and exporters' placeholders don't, and repeats are numbered.
+  const names = ['Lid', '', 'Leg', 'Leg', 'ascii', 'Exported from Blender-4.2', '  Drawer   front ', 'OpenSCAD_Model'];
+  const text = names.map((name, i) => `solid${name ? ` ${name}` : ''}\n${facets(compiled(`translate([${String(i * 20)}, 0, 0]) cube(5);`).mesh.positions)}\nendsolid${name ? ` ${name}` : ''}\n`).join('');
+  expect(fileParts(undefined, load(text)).parts.map(part => part.label)).toEqual(['Lid', 'Part 2', 'Leg · 1', 'Leg · 2', 'Part 5', 'Part 6', 'Drawer front', 'Part 8']);
 });
