@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry, PartColor } from '../../misc';
-import { createScene, type PartAppearances, type PickedFace, type RenderMode } from './scene';
-import { axisName, defaultPlanes, depthRange, facePlane, planeAxes, planeNames, sectionDepth, sectionPlane, startSection, withDepth, type DefaultPlane, type SectionState, type Vec3 } from './section';
+import { createScene, type HandleDrag, type PartAppearances, type PickedFace, type RenderMode } from './scene';
+import { axisName, defaultPlanes, depthRange, facePlane, planeAxes, planeNames, sectionDepth, sectionFrame, sectionPlane, startSection, withDepth, type DefaultPlane, type SectionState, type Vec3 } from './section';
 import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
@@ -145,7 +145,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
         setPartsFrom(from);
         setPieces(geometryPieces(geometry));
         try {
-          active = createScene(element, geometry, camera, (key, face) => { pick.current(key, face); }, setCanvasHover);
+          active = createScene(element, geometry, camera, (key, face) => { pick.current(key, face); }, setCanvasHover, (drag) => { onHandle.current(drag); });
         } catch (error) {
           geometry.dispose();
           throw error;
@@ -167,10 +167,13 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     };
   }, [local, modelUrl, displayUrl, palette, genericParts, camera, downloads, scale]);
 
+  // The manipulator sits at the section's point, its arrow toward the removed side; it hides
+  // while a face is being picked.
   useEffect(() => {
-    viewer?.setSettings({ mode, section: section && sectionPlane(section) });
+    const plane = section && sectionPlane(section);
+    viewer?.setSettings({ mode, section: plane, handle: section && plane && !picking ? { point: section.point, arrow: plane.normal, axes: sectionFrame(section).axes } : null });
     if (section) lastSection.current = section;
-  }, [viewer, mode, section]);
+  }, [viewer, mode, section, picking]);
   // A change of units rescales the model, so the section moves with it.
   const sectionScale = useRef(scale);
   useEffect(() => {
@@ -351,6 +354,24 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   };
   // Look back along the section's normal, at the cut face on.
   const viewNormal = () => { if (section) viewer?.lookAlong(sectionPlane(section).normal); };
+  // Dragging the manipulator moves or tilts the section from where the drag began, tilts to a
+  // tenth of a degree; clicking its arrow flips it.
+  const dragStart = useRef<SectionState | null>(null);
+  const onHandle = useRef<(drag: HandleDrag) => void>(() => undefined);
+  onHandle.current = (drag) => {
+    if (drag.kind === 'flip') { setSection(current => current && { ...current, flipped: !current.flipped }); return; }
+    const start = dragStart.current ?? section;
+    if (!start) return;
+    dragStart.current = drag.done ? null : start;
+    if (drag.kind === 'depth') {
+      const arrow = sectionPlane(start).normal;
+      setSection({ ...start, point: [0, 1, 2].map(i => start.point[i] + arrow[i] * drag.distance) as Vec3 });
+      return;
+    }
+    const tilt: [number, number] = [...start.tilt];
+    tilt[drag.axis] = Math.round((start.tilt[drag.axis] + drag.degrees) * 10) / 10;
+    setSection({ ...start, tilt });
+  };
   // Onshape-style keys: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
   // transparency, and Space (from the 3D view) clears the selection. Shift+X turns the section
   // off and on, N views normal to it, and Escape stops picking a face. Actions apply to
@@ -486,7 +507,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
               : section ? `${planeNames[section.reference.plane]} section · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; N views it normal to the cut, and Shift+X turns it off and on.{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. N views it normal to the cut, and Shift+X turns it off and on.{hasLegend
             ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click edges or corners to measure them, adding them to the selection or removing them; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>

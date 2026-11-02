@@ -8,10 +8,29 @@ import { edgeTopology, type Topology } from './topology';
 import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
-// `section` is the plane cutting the model (section.ts), or null for none.
+// `section` is the plane cutting the model (section.ts), or null for none; `handle` places
+// its manipulator, or null to hide it.
 export interface ViewSettings {
   mode: RenderMode;
   section: SectionPlane | null;
+  handle?: SectionHandle | null;
+}
+type Vec3 = [number, number, number];
+// The section manipulator, in model coordinates: its point, its arrow (toward the removed
+// side) and the axes its two arcs tilt the plane about.
+export interface SectionHandle { point: Vec3; arrow: Vec3; axes: [Vec3, Vec3] }
+// A drag of the manipulator, measured from where it started: millimetres along the arrow, or
+// degrees about an arc's axis (right-handed). Clicking the arrow without dragging flips it.
+export type HandleDrag = { kind: 'depth'; distance: number; done: boolean } | { kind: 'tilt'; axis: 0 | 1; degrees: number; done: boolean } | { kind: 'flip' };
+// A unit arc about the X axis, beside an arrow along Z, for the manipulator's tilt handles.
+class ArcCurve extends THREE.Curve<THREE.Vector3> {
+  // Three's Curve constructor is protected.
+  // eslint-disable-next-line @typescript-eslint/no-useless-constructor
+  constructor() { super(); }
+  override getPoint(t: number, target = new THREE.Vector3()) {
+    const angle = 0.3 + t * 0.75;
+    return target.set(0, Math.sin(angle) * 0.62, Math.cos(angle) * 0.62);
+  }
 }
 // A face under a click, as a point on it and its normal, in model coordinates.
 export interface PickedFace { point: [number, number, number]; normal: [number, number, number] }
@@ -37,7 +56,7 @@ interface Layer {
 }
 
 export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, cameraDirection = defaultCamera,
-  onPick?: (id: string | null, face: PickedFace | null) => void, onHover?: (id: string | null) => void) {
+  onPick?: (id: string | null, face: PickedFace | null) => void, onHover?: (id: string | null) => void, onHandle?: (drag: HandleDrag) => void) {
   geometry.computeBoundingBox();
   const bounds = geometry.boundingBox;
   if (!bounds || bounds.isEmpty()) throw new Error('The model has no geometry.');
@@ -81,6 +100,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // Render only on interaction; idle models don't consume an animation loop.
   // The measurement label is HTML over the canvas, placed after every render.
   let placeLabel: () => void = () => undefined;
+  let placeHandle: () => void = () => undefined;
   // Clicking the orientation cube or its arrows turns the view and leaves keyboard focus on
   // the canvas; the views menu keeps focus for keyboard use.
   const focusCanvas = () => { markPointerFocus(); renderer.domElement.focus({ preventScroll: true }); };
@@ -89,7 +109,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     rotate: (axis, angle) => { rotate(axis, angle); focusCanvas(); },
     view: name => { view(name); },
   });
-  const render = () => { renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
+  const render = () => { placeHandle(); renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
   controls.addEventListener('change', render);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.6));
@@ -168,6 +188,41 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   cap.renderOrder = 2;
   cap.onAfterRender = () => { renderer.clearStencil(); };
   scene.add(stencilGroup, cap);
+
+  // The section manipulator, as in Onshape: an arrow toward the removed side, dragged to move
+  // the plane along it and clicked to flip it, and two arcs dragged to tilt the plane about its
+  // axes. Built at unit size about its point, kept a constant size on screen as it renders, and
+  // drawn over the model. Each handle has a wider invisible copy that is easier to grab.
+  const handleMaterials = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true }));
+  const hitMaterial = new THREE.MeshBasicMaterial({ visible: false });
+  const handleGeometries = [
+    new THREE.CylinderGeometry(0.022, 0.022, 0.72, 12).translate(0, 0.36, 0).rotateX(Math.PI / 2),
+    new THREE.ConeGeometry(0.075, 0.28, 20).translate(0, 0.86, 0).rotateX(Math.PI / 2),
+    new THREE.SphereGeometry(0.055, 16, 12),
+    new THREE.CylinderGeometry(0.1, 0.1, 1.05, 8).translate(0, 0.52, 0).rotateX(Math.PI / 2),
+    new THREE.TubeGeometry(new ArcCurve(), 24, 0.022, 8),
+    new THREE.TubeGeometry(new ArcCurve(), 12, 0.09, 6),
+  ];
+  const handle = new THREE.Group(), arrow = new THREE.Group();
+  const arrowHit = new THREE.Mesh(handleGeometries[3], hitMaterial);
+  arrow.add(...[0, 1, 2].map(index => new THREE.Mesh(handleGeometries[index], handleMaterials[0])), arrowHit);
+  const arcs = [1, 2].map(material => new THREE.Mesh(handleGeometries[4], handleMaterials[material]));
+  const arcHits = arcs.map(arc => { const hit = new THREE.Mesh(handleGeometries[5], hitMaterial); arc.add(hit); return hit; });
+  const handleHits = [arrowHit, ...arcHits];
+  handle.add(arrow, ...arcs);
+  handle.traverse((part) => { part.renderOrder = 10; });
+  handle.visible = false;
+  scene.add(handle);
+  const handleColors = { idle: '', active: '' };
+  let handleHover: number | null = null, handleActive: number | null = null;
+  const paintHandle = () => {
+    handleMaterials.forEach((material, index) => { material.color.set(index === (handleActive ?? handleHover) ? handleColors.active : handleColors.idle); });
+  };
+  placeHandle = () => {
+    if (!handle.visible) return;
+    const pixels = 2 * camera.position.distanceTo(handle.position) * Math.tan(camera.fov * Math.PI / 360) / (renderer.domElement.clientHeight || 1);
+    handle.scale.setScalar(pixels * 84);
+  };
 
   // Selected and hovered edges draw as wide lines, vertices as round markers.
   const lineMaterials = [0, 1].map(() => new LineMaterial({ linewidth: 3.5, worldUnits: false }));
@@ -333,6 +388,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     colors.selected = style.getPropertyValue('--cad-selected').trim() || '#c2006b';
     colors.hover = style.getPropertyValue('--cad-hover').trim() || '#e389c0';
     capMaterial.color.set(style.getPropertyValue('--cad-section').trim());
+    handleColors.idle = style.getPropertyValue('--cad-section').trim();
+    handleColors.active = colors.hover;
+    paintHandle();
     apply();
   };
 
@@ -345,6 +403,21 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       plane.set(normal.clone().negate(), next.section.constant - normal.dot(origin));
       plane.coplanarPoint(cap.position);
       cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), plane.normal);
+    }
+    handle.visible = !!next.section && !!next.handle;
+    if (next.handle) {
+      const direction = new THREE.Vector3(...next.handle.arrow).normalize();
+      handle.position.set(...next.handle.point).sub(origin);
+      arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+      // Each arc turns about its axis, swinging beside the arrow.
+      next.handle.axes.forEach((axis, index) => {
+        const x = new THREE.Vector3(...axis).normalize();
+        const z = direction.clone().addScaledVector(x, -direction.dot(x));
+        arcs[index].visible = z.lengthSq() > 1e-12;
+        if (!arcs[index].visible) return;
+        z.normalize();
+        arcs[index].quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, z.clone().cross(x), z));
+      });
     }
     apply();
   };
@@ -523,6 +596,71 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const found = hitAt(x, y);
     return found ? found.layer.piece ?? found.layer.part : null;
   };
+  // The manipulator's handle under a client position: 0 for the arrow, 1 and 2 for the arcs.
+  const rayAt = (x: number, y: number) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
+    return raycaster.ray;
+  };
+  const handleAt = (x: number, y: number) => {
+    if (!handle.visible) return null;
+    rayAt(x, y);
+    const hit = raycaster.intersectObjects(handleHits.filter(part => part.parent?.visible), false)[0] as THREE.Intersection | undefined;
+    return hit ? handleHits.findIndex(part => part === hit.object) : null;
+  };
+  // A drag follows the pointer: along the arrow, the point on its line nearest the pointer's
+  // ray; about an arc's axis, the pointer's ray meeting the plane square to that axis.
+  let handleDrag: { pointerId: number; part: number; x: number; y: number; moved: boolean; center: THREE.Vector3; direction: THREE.Vector3; start: THREE.Vector3 | number } | null = null;
+  const alongArrow = (ray: THREE.Ray, center: THREE.Vector3, direction: THREE.Vector3) => {
+    const between = center.clone().sub(ray.origin), b = direction.dot(ray.direction), denominator = 1 - b * b;
+    if (denominator < 1e-6) return null;
+    return (b * ray.direction.dot(between) - direction.dot(between)) / denominator;
+  };
+  const aroundAxis = (ray: THREE.Ray, center: THREE.Vector3, axis: THREE.Vector3) => {
+    if (Math.abs(ray.direction.dot(axis)) < 0.08) return null;
+    const hit = ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(axis, center), new THREE.Vector3());
+    return hit?.sub(center) ?? null;
+  };
+  const startHandleDrag = (part: number, event: PointerEvent) => {
+    const center = handle.position.clone();
+    const direction = part === 0 ? new THREE.Vector3(0, 0, 1).applyQuaternion(arrow.quaternion) : new THREE.Vector3(1, 0, 0).applyQuaternion(arcs[part - 1].quaternion);
+    const ray = rayAt(event.clientX, event.clientY);
+    const start = part === 0 ? alongArrow(ray, center, direction) : aroundAxis(ray, center, direction);
+    if (start === null) return false;
+    handleDrag = { pointerId: event.pointerId, part, x: event.clientX, y: event.clientY, moved: false, center, direction, start };
+    handleActive = part;
+    paintHandle();
+    renderer.domElement.setPointerCapture(event.pointerId);
+    renderer.domElement.style.cursor = 'grabbing';
+    render();
+    return true;
+  };
+  const dragHandle = (event: PointerEvent, done: boolean) => {
+    if (!handleDrag) return;
+    const { part, center, direction, start } = handleDrag;
+    handleDrag.moved ||= Math.hypot(event.clientX - handleDrag.x, event.clientY - handleDrag.y) > 3;
+    if (!handleDrag.moved) return;
+    const ray = rayAt(event.clientX, event.clientY);
+    if (typeof start === 'number') {
+      const along = alongArrow(ray, center, direction);
+      if (along !== null) onHandle?.({ kind: 'depth', distance: along - start, done });
+    } else {
+      const now = aroundAxis(ray, center, direction);
+      if (now) onHandle?.({ kind: 'tilt', axis: part === 1 ? 0 : 1, degrees: Math.atan2(direction.dot(start.clone().cross(now)), start.dot(now)) * 180 / Math.PI, done });
+    }
+  };
+  const endHandleDrag = (event: PointerEvent, cancelled: boolean) => {
+    if (!handleDrag) return;
+    if (!cancelled) dragHandle(event, true);
+    if (!cancelled && !handleDrag.moved && handleDrag.part === 0) onHandle?.({ kind: 'flip' });
+    if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+    handleDrag = null;
+    handleActive = null;
+    dragging = false;
+    paintHandle();
+    render();
+    scheduleHover();
+  };
   // The face under a click, in model coordinates, for sectioning through it.
   const faceAt = (x: number, y: number): PickedFace | null => {
     const face = hitAt(x, y)?.hit;
@@ -594,8 +732,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   let dragging = false, touch = false, frame = 0;
   const updateHover = () => {
     frame = 0;
-    const next = pointer && !dragging && !touch ? pickEntityAt(pointer.x, pointer.y) : null;
-    renderer.domElement.style.cursor = next ? 'pointer' : '';
+    // The manipulator is drawn over the model, so it comes first.
+    const grab = pointer && !dragging && !touch ? handleAt(pointer.x, pointer.y) : null;
+    if (grab !== handleHover) { handleHover = grab; paintHandle(); render(); }
+    const next = pointer && !dragging && !touch && grab === null ? pickEntityAt(pointer.x, pointer.y) : null;
+    if (!handleDrag) renderer.domElement.style.cursor = grab !== null ? 'grab' : next ? 'pointer' : '';
     if (next === pointerHover) return;
     pointerHover = next;
     paint();
@@ -653,6 +794,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     markPointerFocus();
     // Grabbing the model takes over from a turn to a named view.
     cancelAnimationFrame(turning);
+    // A lone left button or finger on the section manipulator drags it.
+    const grabbed = event.button === 0 && !pointers.size && !handleDrag ? handleAt(event.clientX, event.clientY) : null;
+    if (grabbed !== null && startHandleDrag(grabbed, event)) { pressed = null; dragging = true; return; }
     // Only a lone pointer can tap; a second finger makes it a gesture.
     pressed = event.button === 0 && !pointers.size ? { x: event.clientX, y: event.clientY } : null;
     dragging = true;
@@ -669,8 +813,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     stopOrbit();
     if (event.pointerType === 'touch' && pointers.size === 1) for (const [id, at] of pointers) startOrbit(id, at.x, at.y);
   };
-  const onPointerCancel = release;
+  const onPointerCancel = (event: PointerEvent) => {
+    if (handleDrag?.pointerId === event.pointerId) { endHandleDrag(event, true); return; }
+    release(event);
+  };
   const onPointerUp = (event: PointerEvent) => {
+    if (handleDrag?.pointerId === event.pointerId) { endHandleDrag(event, false); return; }
     release(event);
     dragging = false;
     scheduleHover();
@@ -679,6 +827,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     onPick(pickEntityAt(event.clientX, event.clientY), faceAt(event.clientX, event.clientY));
   };
   const onPointerMove = (event: PointerEvent) => {
+    if (handleDrag?.pointerId === event.pointerId) { pointer = { x: event.clientX, y: event.clientY }; dragHandle(event, false); return; }
     if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (orbiting?.id === event.pointerId) {
       orbitAbout(event.clientX - orbiting.x, event.clientY - orbiting.y);
@@ -752,6 +901,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       disposeLayers(layers);
       capGeometry.dispose();
       capMaterial.dispose();
+      handleGeometries.forEach((part) => { part.dispose(); });
+      [...handleMaterials, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
       vertexOverlays.forEach((points) => { points.geometry.dispose(); });
       [...lineMaterials, ...pointMaterials].forEach((material) => { material.dispose(); });
