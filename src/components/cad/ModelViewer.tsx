@@ -10,8 +10,9 @@ import './cad.css';
 // The 3D viewer for visitors' own files: drop one anywhere on the page or choose one, and it
 // opens with the usual tools (measuring, sections, the orientation cube). An STL opens as it
 // is; an OpenSCAD file compiles here, its Customizer parameters becoming controls as for the
-// site's own models. Files stay in the browser as object URLs; nothing is uploaded. The last
-// file opened is kept in this browser and reopens after a reload, until it's closed.
+// site's own models. A file's colors, or else its separate solids, become numbered parts.
+// Files stay in the browser as object URLs; nothing is uploaded. The last file opened is kept
+// in this browser and reopens after a reload, until it's closed.
 interface OpenFile { name: string; size: number; url: string; scad?: { sourceUrl: string; local: LocalModel; skipped: string[] } }
 
 type Units = 'mm' | 'inches';
@@ -218,10 +219,11 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
       Not editable here, so {scad.skipped.length === 1 ? 'it keeps its value' : 'they keep their values'} from the file: {scad.skipped.join(', ')}. The controls
       cover numbers, text, true or false, and choices.</p>}
     {file && viewed
-      ? <CadViewer key={file.url} downloads={false} local={scad?.local} fileUnits={units} entry={viewed} />
+      ? <CadViewer key={file.url} downloads={false} local={scad?.local} fileUnits={units} genericParts entry={viewed} />
       : <div className="cad-dropzone">
         <p><strong>Drop an STL or OpenSCAD file anywhere on this page</strong> to view it, or choose one.</p>
         <p>STL files open as they are. OpenSCAD files compile in this browser, with their Customizer parameters as controls. Nothing is uploaded.</p>
+        <p>A file’s colors, or else its separate solids, are listed as parts you can fade, hide or isolate.</p>
         <p>The last file you open stays in this browser and reopens here next time, until you close it.</p>
         {choose}
       </div>}

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
-import type { BufferGeometry } from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import type { CadEntry } from '../../misc';
+import type { CadEntry, PartColor } from '../../misc';
 import { createScene, type PartAppearances, type RenderMode, type SectionAxis } from './scene';
 import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
+import { fileParts } from './fileParts';
 import { inches } from './cutList';
 import { measure, type Measurable } from './measure';
 import SheetLayoutTable from './SheetLayoutTable';
@@ -20,12 +20,29 @@ import './cad.css';
 
 type Viewer = ReturnType<typeof createScene>;
 
+// A model's geometry and the parts its legend lists. The site's models name their parts; a
+// visitor's file (`generic`) gets numbered ones when it has several colors or solids.
+function modelGeometry(display: DisplayMesh | undefined, stl: ArrayBuffer | undefined, palette: PartColor[] | undefined, generic: boolean) {
+  if (generic) {
+    const mesh = stl && new STLLoader().parse(stl);
+    const found = fileParts(display, mesh && {
+      positions: mesh.getAttribute('position').array as Float32Array, normals: mesh.getAttribute('normal').array as Float32Array,
+    });
+    if (found) return { geometry: coloredGeometry(found.display, found.parts), parts: found.parts, from: found.from };
+    if (mesh && !display) return { geometry: mesh, parts: undefined, from: undefined };
+  }
+  if (display) return { geometry: coloredGeometry(display, palette), parts: palette && visiblePartColors(display, palette), from: undefined };
+  if (!stl) throw new Error('The model has no geometry.');
+  return { geometry: new STLLoader().parse(stl), parts: palette, from: undefined };
+}
+
 // `downloads` offers the model and source files; the model viewer turns it off for visitors' own
 // files. `local` is a visitor's SCAD file, compiled already, which opens without a request.
 // `fileUnits` are a visitor's file's units: an inch file is scaled to the scene's millimetres,
 // and lengths show in its units first. Site models give their units in the customizer instead.
-export default function CadViewer({ entry, local, fileUnits, downloads = true }: {
-  entry: CadEntry & { href: string }; local?: LocalModel; fileUnits?: 'mm' | 'inches'; downloads?: boolean;
+// `genericParts` numbers a visitor's file's colors or solids as parts, for the legend.
+export default function CadViewer({ entry, local, fileUnits, genericParts = false, downloads = true }: {
+  entry: CadEntry & { href: string }; local?: LocalModel; fileUnits?: 'mm' | 'inches'; genericParts?: boolean; downloads?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
@@ -64,8 +81,10 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
   // A local file's latest model, so a change of units rebuilds the scene from current settings.
   const latestModel = useRef(local?.model);
   const [visibleParts, setVisibleParts] = useState(palette);
+  // What a visitor's file's generic parts are.
+  const [partsFrom, setPartsFrom] = useState<'color' | 'solid'>();
   const hasParameters = !!(entry.customizer && entry.source);
-  const hasLegend = !!palette?.length;
+  const hasLegend = !!visibleParts?.length;
   const hasPanels = hasLegend || hasParameters;
   const viewCutList = (headingId: string) => {
     void leave().then(() => {
@@ -87,22 +106,20 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
       try {
         // Start with saved colored triangles when provided, so cold loads don't
         // show a monochrome STL while the parametric engine initializes.
-        let geometry: BufferGeometry, display: DisplayMesh | undefined;
+        let display: DisplayMesh | undefined, stl: ArrayBuffer | undefined;
         const model = local && (latestModel.current ?? local.model);
-        if (model) {
-          display = model.display;
-          geometry = display ? coloredGeometry(display, palette) : new STLLoader().parse(model.stl);
-        } else {
+        if (model) ({ display, stl } = model);
+        else {
           const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
           if (!response.ok) throw new Error('Model request failed.');
-          display = displayUrl ? parseDisplayMesh(await response.json()) : undefined;
-          geometry = display
-            ? coloredGeometry(display, palette)
-            : new STLLoader().parse(await response.arrayBuffer());
+          if (displayUrl) display = parseDisplayMesh(await response.json());
+          else stl = await response.arrayBuffer();
         }
+        const { geometry, parts, from } = modelGeometry(display, stl, palette, genericParts);
         if (scale !== 1) geometry.scale(scale, scale, scale);
         if (controller.signal.aborted) { geometry.dispose(); return; }
-        setVisibleParts(display && palette ? visiblePartColors(display, palette) : palette);
+        setVisibleParts(parts);
+        setPartsFrom(from);
         setPieces(geometryPieces(geometry));
         try {
           active = createScene(element, geometry, camera, (key) => { pick.current(key); }, setCanvasHover);
@@ -125,7 +142,7 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [local, modelUrl, displayUrl, palette, camera, downloads, scale]);
+  }, [local, modelUrl, displayUrl, palette, genericParts, camera, downloads, scale]);
 
   useEffect(() => {
     viewer?.setSettings({ mode, axis, position, flipped });
@@ -359,15 +376,16 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
   };
   const onCompiled = useCallback((model: CompiledModel) => {
     if (!viewer) throw new Error('The 3D view is unavailable.');
-    const geometry = model.display ? coloredGeometry(model.display, entry.customizer?.parts) : new STLLoader().parse(model.stl);
+    const { geometry, parts, from } = modelGeometry(model.display, model.stl, entry.customizer?.parts, genericParts);
     if (scale !== 1) geometry.scale(scale, scale, scale);
     latestModel.current = model;
     try { viewer.replaceGeometry(geometry); }
     catch (error) { geometry.dispose(); throw error; }
-    setVisibleParts(model.display && entry.customizer?.parts ? visiblePartColors(model.display, entry.customizer.parts) : entry.customizer?.parts);
+    setVisibleParts(parts);
+    setPartsFrom(from);
     setPieces(geometryPieces(geometry));
     setRevision((revision) => revision + 1);
-  }, [viewer, entry.customizer?.parts, scale]);
+  }, [viewer, entry.customizer?.parts, genericParts, scale]);
 
   return (
     <section className="cad" aria-label="CAD model">
@@ -447,9 +465,10 @@ export default function CadViewer({ entry, local, fileUnits, downloads = true }:
         <div className="cad-sidebar" hidden={!hasPanels}>
           {hasLegend && <details id="cad-legend" className="cad-panel" open={legendOpen} onToggle={(event) => { setLegendOpen(event.currentTarget.open); }}>
             <summary>Part legend</summary>
-            <p className="cad-part-hint">Click a part in the model or below to fade, hide or isolate it.</p>
+            <p className="cad-part-hint">{partsFrom && `Each ${partsFrom === 'color' ? 'color' : 'separate solid'} in this file is a part, numbered in file order. `}
+              Click a part in the model or below to fade, hide or isolate it.</p>
             <ul className="cad-part-key" aria-label="Part colors">
-              {visibleParts?.map((part) => <li key={part.id}>
+              {visibleParts.map((part) => <li key={part.id}>
                 <button type="button" className="cad-part-select" aria-pressed={selection.some(target => target.key === part.id)}
                   data-hidden={look(part.id).hidden || undefined} data-piece-selected={selection.some(target => target.piece && target.part.id === part.id) || undefined}
                   data-hovered={hoverTarget?.part.id === part.id || undefined} {...hoverProps(part.id)}
