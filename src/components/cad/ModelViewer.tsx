@@ -123,8 +123,8 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     } else if (step) {
       setBusy(`Loading the STEP reader for ${picked.name}…`);
       try {
-        const model = await readStep(picked, controller.signal, () => { if (!controller.signal.aborted) setBusy(`Reading ${picked.name}…`); });
-        next = { name: picked.name, size: picked.size, url: URL.createObjectURL(picked), step: model };
+        const { stl, ...model } = await readStep(picked, controller.signal, () => { if (!controller.signal.aborted) setBusy(`Reading ${picked.name}…`); });
+        next = { name: picked.name, size: picked.size, url: URL.createObjectURL(new Blob([stl], { type: 'model/stl' })), step: model };
       } catch (failure) {
         if (!controller.signal.aborted) fail(compileFailure(picked.name, failure));
         return;
@@ -228,7 +228,7 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
             <option value="inches">Inches</option>
           </select>
         </label>}
-      {plain && <a href={file.url} download={file.name.replace(/\.scad$/i, '.stl')}>Download STL ↓</a>}
+      {(!!plain || !!file.step) && <a href={file.url} download={file.name.replace(/\.(scad|step|stp)$/i, '.stl')}>Download STL ↓</a>}
     </div>}
     {busy && <p className="cad-file-status" role="status">{busy}{' '}
       <button type="button" className="cad-file-cancel" onClick={() => { job.current?.abort(); setBusy(''); }}>Cancel</button></p>}

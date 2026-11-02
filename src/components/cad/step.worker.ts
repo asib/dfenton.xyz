@@ -1,11 +1,13 @@
 import occtimportjs from 'occt-import-js';
 import wasmUrl from 'occt-import-js/dist/occt-import-js.wasm?url';
+import { binaryStl, faceNormals } from './stl';
 import { readOptions, referencedFiles, stepMesh, stepUnits, type StepModel } from './stepMesh';
 
 // OpenCascade, as occt-import-js compiles it, reads a STEP file into triangles: several
 // megabytes of WASM, so it loads only for a STEP file, and in a fresh worker each time, which
 // bounds its memory, as the OpenSCAD engine's does.
-export type StepResponse = { kind: 'ready' } | ({ kind: 'model' } & StepModel) | { kind: 'error'; message: string };
+// The model comes with an STL of its triangles, in the file's units, to download.
+export type StepResponse = { kind: 'ready' } | ({ kind: 'model'; stl: ArrayBuffer } & StepModel) | { kind: 'error'; message: string };
 
 self.onmessage = async ({ data }: MessageEvent<ArrayBuffer>) => {
   try {
@@ -20,7 +22,8 @@ self.onmessage = async ({ data }: MessageEvent<ArrayBuffer>) => {
       const listed = others.length > 3 ? `${others.slice(0, 3).join(', ')} and ${String(others.length - 3)} more` : others.join(', ');
       throw new Error(others.length ? `Its parts are in other files (${listed}), and only single STEP files open here.` : 'It has no solid geometry to show.');
     }
-    self.postMessage({ kind: 'model', mesh, units } satisfies StepResponse, { transfer: [mesh.positions.buffer, mesh.normals.buffer] });
+    const stl = binaryStl(mesh.positions, faceNormals(mesh.positions));
+    self.postMessage({ kind: 'model', mesh, units, stl } satisfies StepResponse, { transfer: [mesh.positions.buffer, mesh.normals.buffer, stl] });
   } catch (error) {
     self.postMessage({ kind: 'error', message: error instanceof Error ? error.message : '' } satisfies StepResponse);
   }

@@ -1,10 +1,10 @@
 import type { StepResponse } from './step.worker';
 import type { StepModel } from './stepMesh';
 
-// Read a visitor's STEP file in a worker. `onReady` follows the reader's loading; the file is
+// Read a visitor's STEP file in a worker, with an STL of its triangles. `onReady` follows the reader's loading; the file is
 // given up after two minutes, or when `signal` aborts.
 export function readStep(file: File, signal: AbortSignal, onReady?: () => void) {
-  return new Promise<StepModel>((resolve, reject) => {
+  return new Promise<StepModel & { stl: ArrayBuffer }>((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException('Cancelled', 'AbortError')); return; }
     const worker = new Worker(new URL('./step.worker.ts', import.meta.url), { type: 'module' });
     const cleanup = () => {
@@ -21,7 +21,7 @@ export function readStep(file: File, signal: AbortSignal, onReady?: () => void) 
       if (data.kind === 'ready') { onReady?.(); return; }
       if (data.kind === 'error') { fail(new Error(data.message)); return; }
       cleanup();
-      resolve({ mesh: data.mesh, units: data.units });
+      resolve({ mesh: data.mesh, units: data.units, stl: data.stl });
     };
     void file.arrayBuffer().then((buffer) => { worker.postMessage(buffer, [buffer]); }, () => { fail(new Error('The file could not be read.')); });
   });

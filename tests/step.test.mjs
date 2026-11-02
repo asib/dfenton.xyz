@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import occtimportjs from 'occt-import-js';
 import { coloredGeometry, geometryPieces } from '../src/components/cad/displayMesh';
 import { bodyParts, solidColor } from '../src/components/cad/fileParts';
+import { binaryStl, faceNormals } from '../src/components/cad/stl';
 import { Color } from 'three';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { readOptions, referencedFiles, stepMesh, stepUnits } from '../src/components/cad/stepMesh';
 
 // OpenCascade's own test files, shipped with occt-import-js: CAx-IF's assembly of a plate, two
@@ -101,6 +103,23 @@ test('one body, or copies of only one, have no parts', () => {
   expect(bodyParts(cube)).toBeUndefined();
   const twice = { ...cube, groups: [cube.groups[0], { ...cube.groups[0] }] };
   expect(bodyParts(twice)).toBeUndefined();
+});
+
+test('the STL to download has the triangles in the file’s units, each facet with its own normal', () => {
+  const { mesh } = read('rounded-cube/rounded-cube.step');
+  const normals = faceNormals(mesh.positions);
+  const stl = new STLLoader().parse(binaryStl(mesh.positions, normals));
+  expect(stl.getAttribute('position').array).toEqual(mesh.positions);
+  const n = stl.getAttribute('normal').array;
+  // On the fillet, the file's normals are smooth, varying across a facet; the STL's aren't.
+  let smooth = 0;
+  for (let offset = 0; offset < n.length; offset += 9) {
+    const [ax, ay, az] = [0, 1, 2].map(axis => mesh.positions[offset + 3 + axis] - mesh.positions[offset + axis]);
+    expect(Math.hypot(n[offset], n[offset + 1], n[offset + 2])).toBeCloseTo(1, 5);
+    expect(n[offset] * ax + n[offset + 1] * ay + n[offset + 2] * az).toBeCloseTo(0, 4);
+    if (Math.abs(mesh.normals[offset] - mesh.normals[offset + 3]) + Math.abs(mesh.normals[offset + 2] - mesh.normals[offset + 5]) > 1e-3) smooth++;
+  }
+  expect(smooth).toBeGreaterThan(0);
 });
 
 test('an assembly that keeps its parts in other files has no geometry, and names them', () => {
