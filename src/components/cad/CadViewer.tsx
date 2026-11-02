@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry, PartColor } from '../../misc';
-import { createScene, type HandleDrag, type PartAppearances, type PickedFace, type RenderMode } from './scene';
+import { createScene, maxSections, type HandleDrag, type PartAppearances, type PickedFace, type RenderMode } from './scene';
 import { axisName, defaultPlanes, depthRange, facePlane, planeAxes, planeNames, sectionDepth, sectionFrame, sectionPlane, startSection, withDepth, type DefaultPlane, type SectionState, type Vec3 } from './section';
 import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
@@ -74,9 +74,20 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   const [mode, setMode] = useState<RenderMode>('edges');
   // The section view (section.ts), or null when off; Shift+X brings back the last one.
   // `picking` waits for a click on a face to section through.
-  const [section, setSection] = useState<SectionState | null>(null);
+  // Up to `maxSections` planes cut at once; the controls and manipulator edit the active one.
+  const [sections, setSections] = useState<SectionState[]>([]);
+  const [active, setActive] = useState(0);
+  const section = (sections[active] as SectionState | undefined) ?? null;
   const [picking, setPicking] = useState(false);
-  const lastSection = useRef<SectionState | null>(null);
+  const lastSections = useRef<{ sections: SectionState[]; active: number } | null>(null);
+  // Changes the active plane, or with none, adds it.
+  const setSection = (update: SectionState | ((current: SectionState) => SectionState)) => {
+    setSections((list) => {
+      const current = list[active] as SectionState | undefined;
+      if (!current) return typeof update === 'function' ? list : [update];
+      return list.map((item, index) => index === active ? typeof update === 'function' ? update(item) : update : item);
+    });
+  };
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
@@ -171,9 +182,12 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   // while a face is being picked.
   useEffect(() => {
     const plane = section && sectionPlane(section);
-    viewer?.setSettings({ mode, section: plane, handle: section && plane && !picking ? { point: section.point, arrow: plane.normal, axes: sectionFrame(section).axes } : null });
-    if (section) lastSection.current = section;
-  }, [viewer, mode, section, picking]);
+    viewer?.setSettings({
+      mode, sections: sections.map(sectionPlane),
+      handle: section && plane && !picking ? { point: section.point, arrow: plane.normal, axes: sectionFrame(section).axes } : null,
+    });
+    if (sections.length) lastSections.current = { sections, active };
+  }, [viewer, mode, sections, active, section, picking]);
   // A change of units rescales the model, so the section moves with it.
   const sectionScale = useRef(scale);
   useEffect(() => {
@@ -181,12 +195,12 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
     sectionScale.current = scale;
     if (ratio === 1) return;
     const times = (point: Vec3): Vec3 => [point[0] * ratio, point[1] * ratio, point[2] * ratio];
-    const rescale = (current: SectionState | null) => current && {
+    const rescale = (current: SectionState) => ({
       ...current, point: times(current.point),
       reference: { ...current.reference, offset: current.reference.offset * ratio, anchor: current.reference.anchor && times(current.reference.anchor) },
-    };
-    lastSection.current = rescale(lastSection.current);
-    setSection(rescale);
+    });
+    if (lastSections.current) lastSections.current = { ...lastSections.current, sections: lastSections.current.sections.map(rescale) };
+    setSections(list => list.map(rescale));
   }, [scale]);
 
   const pieceLabels = useMemo(() => parsePieceLabels(cutList.text), [cutList.text]);
@@ -342,16 +356,36 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   const anyHidden = Object.values(appearances).some(value => value?.hidden);
   // A default plane from the Section menu opens through the middle of the model; "Face" waits
   // for a click on one. Shift+X brings back the last section, or else the front plane.
+  const start = (plane: DefaultPlane) => viewer && startSection(defaultPlanes[plane], tuple(viewer.sourceMin), tuple(viewer.size));
   const chooseSection = (value: string) => {
     if (value === 'face') { setPicking(true); return; }
     setPicking(false);
-    setSection(value === 'off' || !viewer ? null : startSection(defaultPlanes[value as DefaultPlane], tuple(viewer.sourceMin), tuple(viewer.size)));
+    const next = value === 'off' ? null : start(value as DefaultPlane);
+    if (next) setSection(next);
+    else { setSections([]); setActive(0); }
   };
   const toggleSection = () => {
     setPicking(false);
-    const fallback = viewer && startSection(defaultPlanes.front, tuple(viewer.sourceMin), tuple(viewer.size));
-    setSection(current => current ? null : lastSection.current ?? fallback);
+    if (sections.length) { setSections([]); setActive(0); return; }
+    const restored = lastSections.current ?? { sections: [start('front')].filter(item => !!item), active: 0 };
+    setSections(restored.sections);
+    setActive(restored.active);
   };
+  // Another plane, as Onshape allows up to three: the first default plane not yet used, so a
+  // second plane makes a corner cutaway. It becomes the active one.
+  const addSection = () => {
+    const used = new Set(sections.map(item => item.reference.plane));
+    const next = start((['front', 'right', 'top'] as const).find(plane => !used.has(plane)) ?? 'front');
+    if (!next || sections.length >= maxSections) return;
+    setSections([...sections, next]);
+    setActive(sections.length);
+  };
+  const removeSection = (index: number) => {
+    setSections(sections.filter((_, other) => other !== index));
+    setActive(Math.max(0, Math.min(active > index ? active - 1 : active, sections.length - 2)));
+    setPicking(false);
+  };
+
   // Look back along the section's normal, at the cut face on.
   const viewNormal = () => { if (section) viewer?.lookAlong(sectionPlane(section).normal); };
   // Dragging the manipulator moves or tilts the section from where the drag began, tilts to a
@@ -359,7 +393,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
   const dragStart = useRef<SectionState | null>(null);
   const onHandle = useRef<(drag: HandleDrag) => void>(() => undefined);
   onHandle.current = (drag) => {
-    if (drag.kind === 'flip') { setSection(current => current && { ...current, flipped: !current.flipped }); return; }
+    if (drag.kind === 'flip') { setSection(current => ({ ...current, flipped: !current.flipped })); return; }
     const start = dragStart.current ?? section;
     if (!start) return;
     dragStart.current = drag.done ? null : start;
@@ -453,7 +487,8 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
 
   const reset = () => {
     setMode('edges');
-    setSection(null);
+    setSections([]);
+    setActive(0);
     setPicking(false);
     viewer?.reset();
   };
@@ -504,10 +539,10 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
               })}</dl> : <p>{measured.length === 1 ? 'Select another edge or vertex to measure a distance.' : 'Select up to two items, or only edges, to measure.'}</p>}
             </div>}
             {!status && <span className="cad-stage-label" aria-hidden="true">{picking ? 'Click a face to section through it'
-              : section ? `${planeNames[section.reference.plane]} section · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
+              : section ? `${planeNames[section.reference.plane]} section${sections.length > 1 ? ` ${String(active + 1)} of ${String(sections.length)}` : ''} · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. N views it normal to the cut, and Shift+X turns it off and on.{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate about the point under the cursor · Ctrl+right-drag or middle-drag to pan · scroll or pinch to zoom · on touch, one finger rotates and two fingers pan. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
             ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click edges or corners to measure them, adding them to the selection or removing them; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -528,6 +563,14 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
                 <option value="face">{section?.reference.plane === 'face' ? 'Face' : 'Face…'}</option>
               </select>
             </label>
+            {sections.length > 0 && <div className="cad-section-planes" role="group" aria-label="Section planes">
+              {sections.map((item, index) => <span key={index} className="cad-section-plane">
+                <button type="button" aria-pressed={index === active} onClick={() => { setActive(index); setPicking(false); }}>
+                  {String(index + 1)} · {planeNames[item.reference.plane]}</button>
+                {sections.length > 1 && <button type="button" className="cad-section-remove" aria-label={`Remove plane ${String(index + 1)}`} onClick={() => { removeSection(index); }}>×</button>}
+              </span>)}
+              {sections.length < maxSections && <button type="button" onClick={addSection}>Add plane</button>}
+            </div>}
             <button type="button" onClick={reset}>Reset view</button>
             {picking && <p className="cad-section-pick" role="status">Click a face of the model to section through it.{' '}
               <button type="button" onClick={() => { setPicking(false); }} aria-keyshortcuts="Escape">Cancel</button></p>}

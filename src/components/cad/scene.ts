@@ -8,11 +8,13 @@ import { edgeTopology, type Topology } from './topology';
 import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
-// `section` is the plane cutting the model (section.ts), or null for none; `handle` places
-// its manipulator, or null to hide it.
+// `sections` are the planes cutting the model (section.ts), up to `maxSections`. With several,
+// only material on the removed side of every one is removed, as in Onshape's corner cutaways.
+// `handle` places one plane's manipulator, or null hides it.
+export const maxSections = 3;
 export interface ViewSettings {
   mode: RenderMode;
-  section: SectionPlane | null;
+  sections: SectionPlane[];
   handle?: SectionHandle | null;
 }
 type Vec3 = [number, number, number];
@@ -51,7 +53,8 @@ interface Layer {
   // Whole edges and vertices of the piece, in scene coordinates.
   topology: Topology;
   solid: THREE.MeshStandardMaterial;
-  stencil: THREE.MeshBasicMaterial[];
+  // Back and front stencil materials for each section plane.
+  stencil: THREE.MeshBasicMaterial[][];
   edges: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>;
 }
 
@@ -119,10 +122,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   fill.position.set(-3, -2, 1);
   scene.add(key, fill);
 
-  const plane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
+  // Three keeps the side each plane faces. A cap is kept only where every other plane removes
+  // material, so it uses those planes turned around.
+  const planes = Array.from({ length: maxSections }, () => new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0));
+  const capClips = planes.map(() => new THREE.Plane());
   // Count back/front intersections in stencil so the cut is filled only inside
-  // the solid. Cavities remain empty. Based on Three.js's clipping-stencil example.
-  const stencilMaterial = (side: THREE.Side) => {
+  // the solid. Cavities remain empty. Based on Three.js's clipping-stencil example;
+  // each plane counts with only itself clipping, then fills its cap and clears.
+  const stencilMaterial = (side: THREE.Side, plane: THREE.Plane) => {
     const operation = side === THREE.BackSide ? THREE.IncrementWrapStencilOp : THREE.DecrementWrapStencilOp;
     return new THREE.MeshBasicMaterial({
       side, depthWrite: false, depthTest: false, colorWrite: false,
@@ -150,7 +157,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
         // Picking uses exactly the creases that are drawn, joined into whole edges.
         topology: edgeTopology(edges.geometry.getAttribute('position').array, 1e-3),
         solid: new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
-        stencil: [stencilMaterial(THREE.BackSide), stencilMaterial(THREE.FrontSide)],
+        stencil: planes.map(plane => [stencilMaterial(THREE.BackSide, plane), stencilMaterial(THREE.FrontSide, plane)]),
         edges,
       };
     });
@@ -158,7 +165,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const disposeLayers = (old: Layer[]) => {
     for (const layer of old) {
       layer.solid.dispose();
-      layer.stencil.forEach((material) => { material.dispose(); });
+      layer.stencil.flat().forEach((material) => { material.dispose(); });
       layer.edges.geometry.dispose();
       layer.edges.material.dispose();
     }
@@ -168,26 +175,28 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   mesh.renderOrder = 3;
   const edgesGroup = new THREE.Group();
   edgesGroup.add(...layers.map((layer) => layer.edges));
-  const stencilMeshes = [0, 1].map((side) => {
-    const stencilMesh = new THREE.Mesh(geometry, layers.map((layer) => layer.stencil[side]));
-    stencilMesh.renderOrder = 1;
+  // Each plane's stencil count and cap draw in turn, between the model and its edges.
+  const stencilMeshes = planes.map((_, index) => [0, 1].map((side) => {
+    const stencilMesh = new THREE.Mesh(geometry, layers.map((layer) => layer.stencil[index][side]));
+    stencilMesh.renderOrder = 1 + index / maxSections;
     return stencilMesh;
-  });
-  const stencilGroup = new THREE.Group();
-  stencilGroup.add(...stencilMeshes);
+  }));
+  const stencilGroups = stencilMeshes.map((pair) => { const group = new THREE.Group(); group.add(...pair); return group; });
   scene.add(mesh, edgesGroup);
 
   let capGeometry = new THREE.PlaneGeometry(radius * 3, radius * 3);
-  const capMaterial = new THREE.MeshBasicMaterial({
-    side: THREE.DoubleSide,
-    stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
-    stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp,
-    stencilZPass: THREE.ReplaceStencilOp,
+  const caps = planes.map((_, index) => {
+    const cap = new THREE.Mesh(capGeometry, new THREE.MeshBasicMaterial({
+      side: THREE.DoubleSide,
+      stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
+      stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp,
+    }));
+    cap.renderOrder = 1 + (index + 0.5) / maxSections;
+    cap.onAfterRender = () => { renderer.clearStencil(); };
+    return cap;
   });
-  const cap = new THREE.Mesh(capGeometry, capMaterial);
-  cap.renderOrder = 2;
-  cap.onAfterRender = () => { renderer.clearStencil(); };
-  scene.add(stencilGroup, cap);
+  scene.add(...stencilGroups, ...caps);
 
   // The section manipulator, as in Onshape: an arrow toward the removed side, dragged to move
   // the plane along it and clicked to flip it, and two arcs dragged to tilt the plane about its
@@ -312,7 +321,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     vertexOverlays[overlay].visible = dots.length > 0;
   };
 
-  let settings: ViewSettings = { mode: 'edges', section: null };
+  let settings: ViewSettings = { mode: 'edges', sections: [] };
   let appearances: PartAppearances = {};
   let selected: string[] = [];
   // Hover comes from the pointer over the canvas, or from the legend; the pointer wins.
@@ -348,11 +357,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const look = (layer.piece ? appearances[layer.piece] : undefined) ?? (layer.part ? appearances[layer.part] : undefined);
     return { hidden: !!look?.hidden || look?.opacity === 0, opacity: look?.opacity ?? 1 };
   };
+  // Material is clipped where every plane removes it.
+  const clipped = (_layer: Layer, point: THREE.Vector3) => settings.sections.length > 0 &&
+    planes.slice(0, settings.sections.length).every(plane => plane.distanceToPoint(point) < 0);
   // Apply display mode, section, theme colors and per-part appearance to every layer.
   const apply = () => {
     const { mode } = settings;
-    const clipping = !!settings.section;
-    const planes = clipping ? [plane] : [];
+    const active = planes.slice(0, settings.sections.length);
     const colored = geometry.hasAttribute('colorLight');
     for (const layer of layers) {
       const { hidden, opacity } = visible(layer);
@@ -365,16 +376,21 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       // Translucent parts let parts behind them show through.
       layer.solid.depthWrite = !translucent;
       layer.solid.wireframe = mode === 'wireframe';
-      layer.solid.clippingPlanes = planes;
+      const cut = active;
+      layer.solid.clippingPlanes = cut;
+      layer.solid.clipIntersection = cut.length > 1;
       layer.solid.needsUpdate = true;
       layer.edges.material.transparent = translucent;
       layer.edges.material.opacity = opacity;
-      layer.edges.material.clippingPlanes = planes;
+      layer.edges.material.clippingPlanes = cut;
+      layer.edges.material.clipIntersection = cut.length > 1;
       layer.edges.material.needsUpdate = true;
-      // Section caps fill only fully opaque, visible parts.
-      layer.stencil.forEach((material) => { material.visible = !hidden && !translucent; });
+      // Section caps fill only fully opaque, visible, cut parts.
+      layer.stencil.forEach((pair, index) => {
+        pair.forEach((material) => { material.visible = !hidden && !translucent && index < cut.length; });
+      });
     }
-    stencilGroup.visible = cap.visible = clipping && mode !== 'wireframe';
+    stencilGroups.forEach((group, index) => { group.visible = caps[index].visible = index < active.length && mode !== 'wireframe'; });
     paint();
   };
 
@@ -387,7 +403,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     colors.edge = style.getPropertyValue('--cad-edge').trim();
     colors.selected = style.getPropertyValue('--cad-selected').trim() || '#c2006b';
     colors.hover = style.getPropertyValue('--cad-hover').trim() || '#e389c0';
-    capMaterial.color.set(style.getPropertyValue('--cad-section').trim());
+    caps.forEach((cap) => { cap.material.color.set(style.getPropertyValue('--cad-section').trim()); });
     handleColors.idle = style.getPropertyValue('--cad-section').trim();
     handleColors.active = colors.hover;
     paintHandle();
@@ -396,15 +412,20 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
 
   const setSettings = (next: ViewSettings) => {
     settings = next;
-    if (next.section) {
-      // Three keeps the side its plane faces, so the plane faces away from the removed side.
-      // Scene coordinates are model coordinates less the origin.
-      const normal = new THREE.Vector3(...next.section.normal);
-      plane.set(normal.clone().negate(), next.section.constant - normal.dot(origin));
-      plane.coplanarPoint(cap.position);
-      cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), plane.normal);
-    }
-    handle.visible = !!next.section && !!next.handle;
+    next.sections.slice(0, maxSections).forEach((section, index) => {
+      // Each plane faces away from the side it removes. Scene coordinates are model
+      // coordinates less the origin.
+      const normal = new THREE.Vector3(...section.normal);
+      planes[index].set(normal.clone().negate(), section.constant - normal.dot(origin));
+      planes[index].coplanarPoint(caps[index].position);
+      caps[index].quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), planes[index].normal);
+      capClips[index].copy(planes[index]).negate();
+    });
+    caps.forEach((cap, index) => {
+      cap.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < next.sections.length);
+      cap.material.needsUpdate = true;
+    });
+    handle.visible = next.sections.length > 0 && !!next.handle;
     if (next.handle) {
       const direction = new THREE.Vector3(...next.handle.arrow).normalize();
       handle.position.set(...next.handle.point).sub(origin);
@@ -529,11 +550,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     mesh.material = layers.map((layer) => layer.solid);
     edgesGroup.clear();
     edgesGroup.add(...layers.map((layer) => layer.edges));
-    stencilMeshes.forEach((stencilMesh, side) => {
-      stencilMesh.geometry = next;
-      stencilMesh.material = layers.map((layer) => layer.stencil[side]);
+    stencilMeshes.forEach((pair, index) => {
+      pair.forEach((stencilMesh, side) => {
+        stencilMesh.geometry = next;
+        stencilMesh.material = layers.map((layer) => layer.stencil[index][side]);
+      });
     });
-    cap.geometry = nextCap;
+    caps.forEach((cap) => { cap.geometry = nextCap; });
     size.copy(nextSize);
     sourceMin.copy(nextMin);
     radius = nextRadius;
@@ -587,7 +610,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
-      if (!layer || visible(layer).hidden || (settings.section && plane.distanceToPoint(hit.point) < 0)) continue;
+      if (!layer || visible(layer).hidden || clipped(layer, hit.point)) continue;
       return { hit, layer };
     }
     return null;
@@ -676,8 +699,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     projected.set(p[0], p[1], p[2]).project(camera);
     return { x: rect.left + (projected.x + 1) / 2 * rect.width, y: rect.top + (1 - projected.y) / 2 * rect.height, behind: projected.z > 1 };
   };
-  const unobstructed = (point: THREE.Vector3) => {
-    if (settings.section && plane.distanceToPoint(point) < 0) return false;
+  const unobstructed = (point: THREE.Vector3, owner: Layer) => {
+    if (clipped(owner, point)) return false;
     const direction = point.clone().sub(camera.position);
     const distance = direction.length();
     raycaster.set(camera.position, direction.normalize());
@@ -685,7 +708,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (hit.distance >= distance - radius * 2e-3) return true;
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
       const look = layer ? visible(layer) : undefined;
-      if (!layer || !look || look.hidden || look.opacity < 0.999 || (settings.section && plane.distanceToPoint(hit.point) < 0)) continue;
+      if (!layer || !look || look.hidden || look.opacity < 0.999 || clipped(layer, hit.point)) continue;
       return false;
     }
     return true;
@@ -693,14 +716,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // The nearest unobstructed vertex or edge within its snap distance, with the snapped point.
   const snapAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
-    const vertices: { key: string; distance: number; point: THREE.Vector3 }[] = [];
+    const vertices: { key: string; distance: number; point: THREE.Vector3; layer: Layer }[] = [];
     const edges: typeof vertices = [];
     layers.forEach((layer, l) => {
       if (visible(layer).hidden) return;
       layer.topology.vertices.forEach((p, v) => {
         const s = toScreen(p, rect);
         const distance = Math.hypot(s.x - x, s.y - y);
-        if (!s.behind && distance <= 8) vertices.push({ key: `vertex:${String(version)}:${String(l)}:${String(v)}`, distance, point: new THREE.Vector3(p[0], p[1], p[2]) });
+        if (!s.behind && distance <= 8) vertices.push({ key: `vertex:${String(version)}:${String(l)}:${String(v)}`, distance, point: new THREE.Vector3(p[0], p[1], p[2]), layer });
       });
       layer.topology.edges.forEach((edge, e) => {
         let best: (typeof vertices)[number] | null = null;
@@ -712,14 +735,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
           const distance = Math.hypot(a.x + t * dx - x, a.y + t * dy - y);
           if (distance > 6 || (best && best.distance <= distance)) continue;
           const point = new THREE.Vector3(...edge.points.slice(i, i + 3)).lerp(new THREE.Vector3(...edge.points.slice(i + 3, i + 6)), t);
-          best = { key: `edge:${String(version)}:${String(l)}:${String(e)}`, distance, point };
+          best = { key: `edge:${String(version)}:${String(l)}:${String(e)}`, distance, point, layer };
         }
         if (best) edges.push(best);
       });
     });
     for (const candidates of [vertices, edges]) {
       candidates.sort((a, b) => a.distance - b.distance);
-      for (const candidate of candidates.slice(0, 8)) if (unobstructed(candidate.point)) return candidate;
+      for (const candidate of candidates.slice(0, 8)) if (unobstructed(candidate.point, candidate.layer)) return candidate;
     }
     return null;
   };
@@ -755,7 +778,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
-      if (!layer || visible(layer).hidden || (settings.section && plane.distanceToPoint(hit.point) < 0)) continue;
+      if (!layer || visible(layer).hidden || clipped(layer, hit.point)) continue;
       return hit.point;
     }
     return null;
@@ -849,7 +872,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   renderer.domElement.addEventListener('pointercancel', onPointerCancel);
   renderer.domElement.addEventListener('blur', onBlur);
   setTheme();
-  setSettings({ mode: 'edges', section: null });
+  setSettings({ mode: 'edges', sections: [] });
   resize();
 
   return {
@@ -900,7 +923,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       geometry.dispose();
       disposeLayers(layers);
       capGeometry.dispose();
-      capMaterial.dispose();
+      caps.forEach((cap) => { cap.material.dispose(); });
       handleGeometries.forEach((part) => { part.dispose(); });
       [...handleMaterials, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
