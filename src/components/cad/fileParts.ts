@@ -3,11 +3,11 @@ import { pieceKey, type DisplayMesh } from './displayMesh';
 
 // Visitors' files have no part list, so their parts are numbered in file order, "Part 1",
 // "Part 2" and so on: each color of a colored OpenSCAD design, as OpenSCAD groups them, or
-// otherwise each separate solid, in a color of its own. A file of one solid, or of more than
-// `maxParts` parts, has none.
+// otherwise each solid, in a color of its own: those a text STL lists, or else each separate
+// closed surface. A file of one solid, or of more than `maxParts` parts, has none.
 export const maxParts = 50;
-export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' }
-interface Mesh { positions: Float32Array; normals: Float32Array }
+export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' }
+interface Mesh { positions: Float32Array; normals: Float32Array; groups?: { start: number; count: number }[] }
 
 const hex = (value: number) => Math.round(value * 255).toString(16).padStart(2, '0');
 function hsl(hue: number, saturation: number, lightness: number) {
@@ -141,6 +141,13 @@ export function solids(positions: Float32Array): { solidOf: Int32Array; count: n
   return { solidOf, count: order.size };
 }
 
+// A text STL may list its solids itself, as `solid … endsolid` blocks (vertex ranges here).
+function listedSolids(blocks: { start: number; count: number }[], triangles: number) {
+  const solidOf = new Int32Array(triangles);
+  blocks.forEach((block, index) => { solidOf.fill(index, block.start / 3, (block.start + block.count) / 3); });
+  return { solidOf, count: blocks.length };
+}
+
 // The mesh's triangles reordered by part, one display group per part.
 function regroup({ positions, normals }: Mesh, partOf: Int32Array, colors: string[]): DisplayMesh {
   const counts = colors.map(() => 0);
@@ -156,7 +163,7 @@ function regroup({ positions, normals }: Mesh, partOf: Int32Array, colors: strin
   return { ...next, groups: colors.map((color, part) => ({ start: starts[part] * 3, count: counts[part] * 3, color: rgba(color), mode: 'solid' })) };
 }
 
-// `display` is a colored design's mesh; `mesh` is the STL's.
+// `display` is a colored design's mesh; `mesh` is the STL's, with any solids a text STL lists.
 export function fileParts(display: DisplayMesh | undefined, mesh: Mesh | undefined): FileParts | undefined {
   const colors = [...new Set(display?.groups.map(group => pieceKey(group.color)))];
   if (display && colors.length > 1) {
@@ -169,11 +176,13 @@ export function fileParts(display: DisplayMesh | undefined, mesh: Mesh | undefin
     };
   }
   if (!mesh) return;
-  const { solidOf, count } = solids(mesh.positions);
+  const blocks = mesh.groups?.filter(group => group.count > 0) ?? [];
+  const listed = blocks.length > 1;
+  const { solidOf, count } = listed ? listedSolids(blocks, mesh.positions.length / 9) : solids(mesh.positions);
   if (count < 2 || count > maxParts) return;
   const palette = Array.from({ length: count }, (_, solid) => solidColor(solid));
   return {
-    display: regroup(mesh, solidOf, palette.map(({ color }) => color)), from: 'solid',
+    display: regroup(mesh, solidOf, palette.map(({ color }) => color)), from: listed ? 'listed' : 'solid',
     parts: palette.map((colors, solid) => ({ id: `solid-${String(solid + 1)}`, label: `Part ${String(solid + 1)}`, ...colors })),
   };
 }
