@@ -1,11 +1,11 @@
 # Cloudflare Pages
 
-Pages is configured with `BUN_VERSION=1.1.26`. Use **Bun 1.1.26** when changing dependencies or writing `bun.lockb`; newer Bun releases can write a binary lockfile that Pages cannot read. `package.json` records the expected version in `packageManager`, but Pages selects its Bun version from the `BUN_VERSION` environment variable in the dashboard.
+Pages is configured with `BUN_VERSION=1.4.2`. Use **Bun 1.4.2** when changing dependencies or writing the text `bun.lock`; a different Bun release can write a lockfile that Pages' frozen install rejects. `package.json` records the expected version in `packageManager`, but Pages selects its Bun version from the `BUN_VERSION` environment variable in the dashboard.
 
 Before pushing dependency changes, verify with that Bun version in a clean checkout:
 
 ```sh
-bun --version # must print 1.1.26
+bun --version # must print 1.4.2
 bun install --frozen-lockfile
 bun run build
 ```
