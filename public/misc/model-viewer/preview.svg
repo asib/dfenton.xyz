@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 112" width="176" height="112">
+  <!-- An isometric block measured across its front edge, as in the 3D viewer. -->
+  <g stroke="#123c50" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M88 16 124 35 88 54 52 35Z" fill="#397d9c" fill-opacity=".28"/>
+    <path d="M52 35 88 54 88 96 52 77Z" fill="#397d9c" fill-opacity=".5"/>
+    <path d="M88 54 124 35 124 77 88 96Z" fill="#397d9c" fill-opacity=".72"/>
+  </g>
+  <g stroke="#c2006b" stroke-width="1.6" stroke-linecap="round">
+    <path d="M93 104 129 85"/>
+    <path d="M90.5 99.5 95.5 108.5M126.5 80.5 131.5 89.5"/>
+  </g>
+  <g fill="#c2006b"><circle cx="88" cy="96" r="3"/><circle cx="124" cy="77" r="3"/></g>
+</svg>

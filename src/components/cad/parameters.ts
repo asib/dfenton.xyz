@@ -128,6 +128,33 @@ export function parameterLabel(name: string) {
   return name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' ');
 }
 
+// Source literals are JSON, apart from OpenSCAD numbers such as .5 and 5.
+const sourceLiteral = (text: string): unknown => /^\s*[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?\s*$/i.test(text) ? Number(text) : JSON.parse(text);
+
+// Visitors' own files (the model viewer): the parameters this panel can edit and write
+// back, and the names of the rest (vectors, say), which keep their values from the source.
+export function editableParameters(json: string, source: string): { parameters: Parameter[]; skipped: string[] } {
+  const schema: unknown = JSON.parse(json);
+  const items: unknown[] = isRecord(schema) && Array.isArray(schema.params) ? schema.params : [];
+  const parameters: Parameter[] = [], skipped: string[] = [];
+  const names = items.map(item => isRecord(item) && typeof item.name === 'string' ? item.name : 'unnamed');
+  for (const [index, item] of items.entries()) {
+    const name = names[index];
+    // OpenSCAD uses a reassigned name's last value where it was first assigned, so neither
+    // assignment can be edited alone.
+    if (names.indexOf(name) !== names.lastIndexOf(name)) {
+      if (!skipped.includes(name)) skipped.push(name);
+      continue;
+    }
+    try {
+      const [parameter] = parseParameters(JSON.stringify({ params: [item] }));
+      configuredSource(source, [parameter], defaults([parameter]));
+      parameters.push(parameter);
+    } catch { skipped.push(name); }
+  }
+  return { parameters, skipped };
+}
+
 // Replace the public literal assignments, preserving original comments, model
 // logic and attribution. The exact resulting source is compiled AND downloaded.
 export function configuredSource(source: string, parameters: Parameter[], values: Values): string {
@@ -143,12 +170,12 @@ export function configuredSource(source: string, parameters: Parameter[], values
     if (!match) throw new Error(`Cannot configure ${parameter.name} in this source.`);
     // Do not edit a derived expression or an identically named local variable.
     let original: unknown;
-    try { original = JSON.parse(match[2]); } catch { throw new Error(`Expected a literal default for ${parameter.name}.`); }
+    try { original = sourceLiteral(match[2]); } catch { throw new Error(`Expected a literal default for ${parameter.name}.`); }
     if (list ? JSON.stringify(original) !== JSON.stringify(parameter.value) : original !== parameter.value) {
       throw new Error(`The default for ${parameter.name} does not match the source.`);
     }
-    // An unchanged list keeps its original formatting.
-    if (list && JSON.stringify(value) === JSON.stringify(parameter.value)) continue;
+    // An unchanged value keeps its original formatting (.5 stays .5).
+    if (JSON.stringify(value) === JSON.stringify(parameter.value)) continue;
     result = result.replace(assignment, (_match, prefix: string, _literal: string, suffix: string) => `${prefix}${JSON.stringify(value)}${suffix}`);
   }
   return result;

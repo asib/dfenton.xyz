@@ -1,0 +1,9 @@
+{
+  "title": "3D model viewer",
+  "description": "Open your own STL or OpenSCAD file to view, section and measure it in the browser, with Customizer parameters as controls. Nothing is uploaded.",
+  "date": "2026-11-01",
+  "type": "viewer",
+  "preview": "preview.svg",
+  "previewDark": "preview-dark.svg",
+  "notes": "The viewer works as it does for the site's other models: right-drag to orbit about the point under the cursor, click edges and corners to measure them, use the cube at the top right for standard views, and switch on a section to look inside."
+}

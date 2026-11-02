@@ -1,9 +1,22 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import DarkModeToggle from './components/DarkModeToggle';
 import { miscEntries } from './misc';
 
 const CadViewer = lazy(() => import('./components/cad/CadViewer'));
+const ModelViewer = lazy(() => import('./components/cad/ModelViewer'));
 const titleTransitionName = (href: string) => `misc-${href.split('/')[2]}-title`;
+
+// A viewer whose code fails to load (a refused or dropped request, or a deploy replacing its
+// chunks) leaves a message in its place, rather than unmounting the whole page.
+class ViewerBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return <p role="alert">The model viewer couldn’t load.{' '}
+      <button type="button" className="underline underline-offset-4 decoration-dotted hover:decoration-solid" onClick={() => { window.location.reload(); }}>Reload the page</button> to try again.</p>;
+  }
+}
 
 export default function MiscPage() {
   const [height, setHeight] = useState(720);
@@ -44,7 +57,7 @@ export default function MiscPage() {
       {/* Opt in only on Misc pages; the browser keeps ordinary links and history. */}
       <style>{'@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }'}</style>
       <DarkModeToggle />
-      <main data-drawing-page={entry?.type === 'cad' && entry.customizer?.drawings ? true : undefined} className={`mx-auto my-4 px-6 md:px-12 ${entry?.type === 'cad' ? 'max-w-[1180px]' : entry ? 'max-w-[916px]' : 'max-w-[calc(65ch+6rem)]'}`}>
+      <main data-drawing-page={entry?.type === 'cad' && entry.customizer?.drawings ? true : undefined} className={`mx-auto my-4 px-6 md:px-12 ${entry?.type === 'cad' || entry?.type === 'viewer' ? 'max-w-[1180px]' : entry ? 'max-w-[916px]' : 'max-w-[calc(65ch+6rem)]'}`}>
         <nav aria-label="Site navigation" className="text-sm mb-8 pr-12" style={{ viewTransitionName: 'misc-navigation' }}>
           <a className="underline underline-offset-4 decoration-dotted hover:decoration-solid" href={isIndex ? '/' : '/misc/'}>
             ← {isIndex ? 'Jacob Fenton' : 'Misc'}
@@ -69,8 +82,9 @@ export default function MiscPage() {
             ))}
           </ul>
         )}
-        {entry?.type === 'cad' && <Suspense fallback={<p>Loading model viewer…</p>}><CadViewer key={entry.href} entry={entry} /></Suspense>}
-        {entry && entry.type !== 'cad' && <iframe ref={frame} onLoad={syncTheme} src={`${entry.href}diagram.html`} title={entry.title} className="block w-full border-0" style={{ height }} />}
+        {entry?.type === 'cad' && <ViewerBoundary><Suspense fallback={<p>Loading model viewer…</p>}><CadViewer key={entry.href} entry={entry} /></Suspense></ViewerBoundary>}
+        {entry?.type === 'viewer' && <ViewerBoundary><Suspense fallback={<p>Loading model viewer…</p>}><ModelViewer entry={entry} /></Suspense></ViewerBoundary>}
+        {entry && entry.type !== 'cad' && entry.type !== 'viewer' && <iframe ref={frame} onLoad={syncTheme} src={`${entry.href}diagram.html`} title={entry.title} className="block w-full border-0" style={{ height }} />}
         {!entry && !isIndex && <p>There’s no page at this address. <a className="underline" href="/misc/">Browse Misc</a>.</p>}
       </main>
     </>

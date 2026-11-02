@@ -68,8 +68,9 @@ export function parsePieceLabels(output: string): Map<string, string> {
 
 export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = []) {
   const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new BufferAttribute(display.positions, 3));
-  geometry.setAttribute('normal', new BufferAttribute(display.normals, 3));
+  // Copies, so scaling the geometry (as for an inch file) leaves the model's mesh as it was.
+  geometry.setAttribute('position', new BufferAttribute(display.positions.slice(), 3));
+  geometry.setAttribute('normal', new BufferAttribute(display.normals.slice(), 3));
   const light = new Float32Array(display.positions.length);
   const dark = new Float32Array(display.positions.length);
   // One geometry group per colored part lets the viewer fade, hide or select it.
