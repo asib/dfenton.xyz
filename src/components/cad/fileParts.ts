@@ -5,11 +5,12 @@ import { pieceKey, type DisplayMesh } from './displayMesh';
 // Visitors' files have no part list, so their parts are numbered in file order, "Part 1",
 // "Part 2" and so on: each color of a colored OpenSCAD design, as OpenSCAD groups them, or
 // otherwise each solid, in a color of its own: those a text STL lists, by their names where
-// it gives them, or else each separate closed surface. A file of one solid, or of more than
-// `maxParts` parts, has none.
+// it gives them, or else each separate closed surface. A STEP file's parts are its bodies, by
+// their names and in their colors. A file of one solid, or of more than `maxParts` parts, has none.
 export const maxParts = 50;
-export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' }
-interface Block { start: number; count: number; name: string }
+export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' | 'body' }
+// A text STL's solid or a STEP file's body, as a vertex range, with its name and any color.
+interface Block { start: number; count: number; name: string; color?: string }
 export interface Mesh { positions: Float32Array; normals: Float32Array; groups?: Block[] }
 
 // An STL as Three's STLLoader reads it: a text STL's `solid … endsolid` blocks become groups
@@ -165,8 +166,12 @@ function listedSolids(blocks: Block[], triangles: number) {
 // (Three's pattern crosses the line break), and exporters' placeholders name no part.
 const placeholder = /^(ascii|binary|stl|mesh|model|object|solid|openscad_model)$|^(exported|generated|created|made)\s+(from|by|with)\b/i;
 function blockName(name: string) {
+  const text = shortName(name);
+  return /^facet\b/i.test(text) || placeholder.test(text) ? '' : text;
+}
+// A name with its whitespace collapsed, cut at 60 characters.
+function shortName(name: string) {
   const text = name.replace(/\s+/g, ' ').trim();
-  if (!text || /^facet\b/i.test(text) || placeholder.test(text)) return '';
   return text.length > 60 ? `${text.slice(0, 59).trimEnd()}…` : text;
 }
 // Repeated labels are numbered, as pieces are: "Leg · 1", "Leg · 2".
@@ -188,6 +193,41 @@ function regroup({ positions, normals }: Pick<Mesh, 'positions' | 'normals'>, pa
     next.normals.set(normals.subarray(from, from + 9), to);
   });
   return { ...next, groups: colors.map((color, part) => ({ start: starts[part] * 3, count: counts[part] * 3, color: rgba(color), mode: 'solid' })) };
+}
+
+// Each part needs a color of its own for the legend to tell it apart, so a color repeated, as
+// for a file's several nuts, is shifted a step of 1/255 or two, too little to see.
+function distinctColors(colors: string[]) {
+  const used = new Set<string>();
+  return colors.map((color) => {
+    const rgb = (color.slice(1).match(/../g) ?? []).map(n => parseInt(n, 16));
+    let candidate = color;
+    for (let step = 1; used.has(candidate); step++) {
+      const shifted = rgb.map((value, i) => i === (step - 1) % 3 ? value + (value > 127 ? -1 : 1) * Math.ceil(step / 3) : value);
+      candidate = `#${shifted.map(value => value.toString(16).padStart(2, '0')).join('')}`;
+    }
+    used.add(candidate);
+    return candidate;
+  });
+}
+
+// A STEP file's bodies are its parts, by the names it gives them, or else numbered. They keep
+// the file's colors in both themes, as a colored design's do; a body without one is colored as
+// an STL's solids are.
+export function bodyParts(mesh: Mesh): FileParts | undefined {
+  const bodies = mesh.groups ?? [];
+  if (bodies.length < 2 || bodies.length > maxParts) return;
+  const looks = bodies.map((body, index) => body.color ? { color: body.color, darkColor: body.color } : solidColor(index));
+  const colors = distinctColors(looks.map(look => look.color));
+  const partOf = new Int32Array(mesh.positions.length / 9);
+  bodies.forEach((body, index) => { partOf.fill(index, body.start / 3, (body.start + body.count) / 3); });
+  return {
+    display: regroup(mesh, partOf, colors), from: 'body',
+    parts: distinct(bodies.map((body, index) => shortName(body.name) || `Part ${String(index + 1)}`)).map((label, index) => ({
+      id: `body-${String(index + 1)}`, label, color: colors[index],
+      darkColor: bodies[index].color ? colors[index] : looks[index].darkColor,
+    })),
+  };
 }
 
 // `display` is a colored design's mesh; `mesh` is the STL's, with any solids a text STL lists.
