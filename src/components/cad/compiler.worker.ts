@@ -6,9 +6,11 @@ import { compileDrawings } from './drawingCompiler';
 import type { DrawingSheet } from './drawings';
 import { analyzeConflicts, type Conflict, type ConflictInput } from './conflicts';
 
-// A conflicts job explains a failed assertion in `source` (see conflicts.ts).
-export interface CompileRequest { kind: 'parameters' | 'compile' | 'conflicts'; source: string; drawings?: boolean; inputs?: ConflictInput[]; precision?: number }
-export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh; drawings?: DrawingSheet }
+// A conflicts job explains a failed assertion in `source` (see conflicts.ts). A lenient
+// compile, for visitors' own files, returns warnings with the model instead of failing,
+// except for include and use files that can't be opened, which leave the model incomplete.
+export interface CompileRequest { kind: 'parameters' | 'compile' | 'conflicts'; source: string; drawings?: boolean; inputs?: ConflictInput[]; precision?: number; lenient?: boolean }
+export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh; drawings?: DrawingSheet; warnings?: string }
 export type CompileResponse = { kind: 'ready' } | { kind: 'parameters'; json: string } |
   CompiledModel | { kind: 'conflicts'; conflicts: Conflict[] | null } | { kind: 'error'; message: string };
 
@@ -31,12 +33,15 @@ self.onmessage = async ({ data }: MessageEvent<CompileRequest>) => {
     try {
       if (!result.ok) throw new Error(result.error);
       if (result.geom_errors) throw new Error(result.geom_errors);
-      if (result.warnings) throw new Error(result.warnings);
+      const missing = [...result.warnings.matchAll(/Can't open (?:include|'use') file '([^']+)'/g)].map(match => match[1]);
+      if (missing.length) throw new Error(`This design needs ${[...new Set(missing)].join(', ')}, which can’t be opened here; only single-file designs compile in this viewer.`);
+      if (result.warnings && !data.lenient) throw new Error(result.warnings);
       if (result.is_2d) throw new Error('This viewer requires a solid 3D model.');
+      if (!result.positions.length) throw new Error('The model is empty: it has no 3D geometry.');
       const stl = binaryStl(result.positions, result.normals);
       const display = displayMesh(result.preview_positions, result.preview_normals, result.groups);
       const drawings = data.drawings ? compileDrawings(data.source, render) : undefined;
-      self.postMessage({ kind: 'model', stl, output: result.echo, display, drawings } satisfies CompileResponse, { transfer: [stl] });
+      self.postMessage({ kind: 'model', stl, output: result.echo, display, drawings, warnings: result.warnings || undefined } satisfies CompileResponse, { transfer: [stl] });
     } finally {
       result.free();
     }
