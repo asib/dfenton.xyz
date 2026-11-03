@@ -54,7 +54,7 @@ export default function SheetLayoutTable({ output, title, filename, palette = []
   const settings = { sheetLength: number(field('sheetLength')), sheetWidth: number(field('sheetWidth')),
     kerf: number(field('kerf')), trim: number(field('trim')), grain, method };
   const layout = useMemo(() => layoutSheets(parsed.parts, settings),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- settings is rebuilt from these values.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- settings is rebuilt from these values.
     [parsed.parts, settings.sheetLength, settings.sheetWidth, settings.kerf, settings.trim, grain, method]);
   // A printable PDF, two sheets to a US Letter page; a changed layout cancels one in progress.
   // It and the CSV open in a new tab, to print or download.
