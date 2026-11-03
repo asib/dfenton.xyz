@@ -53,6 +53,21 @@
     :root.dark {
         color-scheme: dark;
     }
+
+    /* Tailwind 3's defaults, which Tailwind 4 changed: borders were gray-200 rather
+       than the text color, and buttons had a pointer cursor. */
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentcolor);
+    }
+
+    button:not(:disabled),
+    [role="button"]:not(:disabled) {
+        cursor: pointer;
+    }
 }
 
 /* Misc titles share a stable name between their list row and detail heading. */

@@ -229,7 +229,7 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
       <div className={clsx(
         "mt-5",
         "*:data-[type=timeline-item]:flex *:data-[type=timeline-item]:flex-col",
-        "*:data-[type=timeline-item]:space-y-2 *:data-[type=timeline-item]:border-y",
+        "*:data-[type=timeline-item]:gap-2 *:data-[type=timeline-item]:border-y",
         "sm:*:data-[type=timeline-item]:border *:data-[type=timeline-item]:p-4",
         "*:data-[type=timeline-item]:border-light-mode-text",
         "dark:*:data-[type=timeline-item]:border-dark-mode-text"
