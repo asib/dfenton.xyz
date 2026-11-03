@@ -457,6 +457,32 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (let i = 0; i + 5 < points.length; i += 3) pairs.push(...points.slice(i, i + 6));
     return pairs;
   };
+  // A face for measuring, in model coordinates: its triangles, area and centre, and its normal
+  // if it's flat. Kept until the model changes, as keys name it only for one version.
+  const faceShapes = new Map<string, { triangles: number[][][]; area: number; center: number[]; normal?: number[] }>();
+  const faceShape = (key: string, layer: Layer, face: number) => {
+    const known = faceShapes.get(key);
+    if (known) return known;
+    const points = faceTriangles(layer, face).map((n, i) => n + origin.getComponent(i % 3));
+    const triangles: number[][][] = [], center = [0, 0, 0];
+    let area = 0, first: THREE.Vector3 | undefined, flat = true;
+    const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    for (let i = 0; i < points.length; i += 9) {
+      a.fromArray(points, i); b.fromArray(points, i + 3); c.fromArray(points, i + 6);
+      const normal = b.clone().sub(a).cross(c.clone().sub(a)), size = normal.length() / 2;
+      triangles.push([a.toArray(), b.toArray(), c.toArray()]);
+      area += size;
+      for (let axis = 0; axis < 3; axis++) center[axis] += (a.getComponent(axis) + b.getComponent(axis) + c.getComponent(axis)) / 3 * size;
+      if (size > 0) {
+        normal.normalize();
+        if (!first) first = normal;
+        else if (normal.dot(first) < 1 - 1e-6) flat = false;
+      }
+    }
+    const shape = { triangles, area, center: center.map(n => area ? n / area : n), ...(flat && first ? { normal: first.toArray() } : {}) };
+    faceShapes.set(key, shape);
+    return shape;
+  };
   // A face's triangles, in scene coordinates.
   const faceTriangles = (layer: Layer, face: number) => {
     const positions = geometry.getAttribute('position').array, points: number[] = [];
@@ -743,6 +769,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     if (!Number.isFinite(nextRadius) || nextRadius <= 0) throw new Error('The model has invalid dimensions.');
     const nextLayers = buildLayers(next);
     version += 1;
+    faceShapes.clear();
     origin.copy(nextCenter);
     geometry.dispose();
     disposeLayers(layers);
@@ -1176,7 +1203,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (!found) return undefined;
       const toModel = (p: number[]) => p.map((n, i) => n + origin.getComponent(i));
       const owner = { part: found.layer.part, piece: found.layer.piece };
-      if (found.kind === 'face') return { ...owner, kind: 'face' as const };
+      if (found.kind === 'face') return { ...owner, kind: 'face' as const, ...faceShape(key, found.layer, found.face) };
       if (found.kind === 'vertex') return { ...owner, kind: 'vertex' as const, position: toModel(found.vertex) };
       const points: number[][] = [];
       for (let i = 0; i + 2 < found.edge.points.length; i += 3) points.push(toModel(found.edge.points.slice(i, i + 3)));

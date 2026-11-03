@@ -10,7 +10,7 @@ import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
 import { bodyParts, fileParts, stlMesh, type FileParts, type Mesh } from './fileParts';
 import { inches } from './cutList';
-import { measure, type Measurable } from './measure';
+import { measure, type Measurable, type MeasureRow } from './measure';
 import SheetLayoutTable from './SheetLayoutTable';
 import type { CutListOutput } from './cutList';
 import { useFullscreen } from './useFullscreen';
@@ -265,14 +265,20 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const selection = items.filter((item): item is Target => 'part' in item);
   const acting = [...selection, ...items.flatMap(item => 'entity' in item && item.entity.kind === 'face' && item.owner ? [item.owner] : [])]
     .filter((target, i, all) => all.findIndex(other => other.key === target.key) === i);
-  // Selected edges and vertices are measured automatically, as in Onshape.
+  // Selected faces, edges and vertices are measured automatically, as in Onshape, once per
+  // selection, as faces can be large.
   const measured = items.flatMap((item): Measurable[] => {
     if (!('entity' in item)) return [];
     const { entity } = item;
+    if (entity.kind === 'face') return [{ kind: 'face', triangles: entity.triangles, area: entity.area, center: entity.center, normal: entity.normal }];
     if (entity.kind === 'edge') return [{ kind: 'edge', points: entity.points, closed: entity.closed, length: entity.length }];
-    return entity.kind === 'vertex' ? [{ kind: 'vertex', position: entity.position }] : [];
+    return [{ kind: 'vertex', position: entity.position }];
   });
-  const measurement = measure(measured);
+  // The keys name the same entities until the model changes; a new scene (as for new units)
+  // reuses them, so it measures afresh too.
+  const measuredKey = items.filter(item => 'entity' in item).map(item => item.key).join(' ');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const measurement = useMemo(() => measure(measured), [measuredKey, viewer]);
   // Lengths in the model's units first, then the other; inches snap to 64ths within float precision.
   const inchText = (mm: number) => {
     const value = mm / 25.4, sixtyFourths = Math.round(value * 64);
@@ -287,7 +293,12 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     const text = units === 'inches' ? inchText(Math.abs(mm)) : `${Math.abs(mm).toFixed(1)} mm`;
     return mm < 0 && /[1-9]/.test(text) ? `−${text}` : text;
   };
-  const formatRow = (row: { value: number; unit: 'length' | 'angle' }) => row.unit === 'angle' ? [`${row.value.toFixed(2)}°`, ''] : formatLength(row.value);
+  // Areas in the model's units first too, square inches to three places.
+  const formatArea = (mm2: number) => {
+    const square = [`${mm2.toFixed(2)} mm²`, `${(mm2 / 25.4 ** 2).toFixed(3)} in²`];
+    return units === 'inches' ? [square[1], square[0]] : square;
+  };
+  const formatRow = (row: MeasureRow) => row.unit === 'angle' ? [`${row.value.toFixed(2)}°`, ''] : row.unit === 'area' ? formatArea(row.value) : formatLength(row.value);
   const measurementKey = measurement ? JSON.stringify(measurement) : '';
   useEffect(() => {
     if (!viewer) return;
