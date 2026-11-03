@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { BufferAttribute, BufferGeometry, EdgesGeometry } from 'three';
 import { render } from 'openrscad-engine/node';
-import { edgeTopology } from '../src/components/cad/topology';
+import { edgeTopology, faceRegions } from '../src/components/cad/topology';
 
 // Crease segments of an actual compiled OpenSCAD solid, as the viewer sees them.
 function creases(scad) {
@@ -60,4 +60,65 @@ test('tessellated circles become single closed edges, while kinks stay corners',
   // An 8 degree kink between unequal segments is a corner, not a curve.
   const kink = edgeTopology([0, 0, 0, 10, 0, 0, 10, 0, 0, 10 + 3 * Math.cos(0.14), 3 * Math.sin(0.14), 0]);
   expect(kink.edges).toHaveLength(2);
+});
+
+// The triangles of an actual compiled OpenSCAD solid, as the viewer gets them.
+function triangles(scad) {
+  const result = render(scad);
+  try {
+    expect(result.ok).toBe(true);
+    return result.positions.slice();
+  } finally { result.free(); }
+}
+
+test('a box has six faces, each the triangles its drawn edges enclose', () => {
+  const positions = triangles('cube([40, 20, 10]);');
+  const { faceOf, count } = faceRegions(positions);
+  expect(count).toBe(6);
+  // Each face's triangles share one normal.
+  for (let face = 0; face < count; face++) {
+    const normals = new Set();
+    faceOf.forEach((of, t) => {
+      if (of !== face) return;
+      const o = t * 9, u = [3, 4, 5].map(i => positions[o + i] - positions[o + i - 3]), v = [6, 7, 8].map(i => positions[o + i] - positions[o + i - 6]);
+      const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], l = Math.hypot(...n);
+      normals.add(n.map(x => Math.round(x / l)).join(','));
+    });
+    expect(normals.size).toBe(1);
+  }
+});
+
+test('a cylinder’s side is one face, its facets meeting at under the crease angle', () => {
+  const { faceOf, count } = faceRegions(triangles('cylinder(h = 10, r = 5, $fn = 48);'));
+  // The side and two ends.
+  expect(count).toBe(3);
+  expect(new Set(faceOf).size).toBe(3);
+  // Coarser facets meet at more than 25°, so each is a face of its own.
+  expect(faceRegions(triangles('cylinder(h = 10, r = 5, $fn = 8);')).count).toBe(10);
+});
+
+test('a STEP file’s own faces are renumbered from zero', () => {
+  const positions = new Float32Array(27);
+  expect([...faceRegions(positions, 25, [7, 7, 3]).faceOf]).toEqual([0, 0, 1]);
+  expect(faceRegions(positions, 25, [7, 7, 3]).count).toBe(2);
+});
+
+test('an edge split at different points by the faces either side is still one edge', () => {
+  // As SketchUp writes a 60 mm end edge: one face splits it at 18 mm, the other at 18 and
+  // 42 mm, so it arrives as overlapping segments meeting three at a point. Corners close it.
+  const segments = [
+    [150, 32.625, 21.25, 150, 50.625, 21.25], [150, 92.625, 21.25, 150, 50.625, 21.25],
+    [150, 74.625, 21.25, 150, 92.625, 21.25], [150, 74.625, 21.25, 150, 50.625, 21.25],
+    [150, 32.625, 21.25, 0, 32.625, 21.25], [150, 92.625, 21.25, 0, 92.625, 21.25],
+  ].flat();
+  const topology = edgeTopology(segments, 1e-3);
+  expect(lengths(topology)).toEqual([60, 150, 150]);
+  expect(topology.vertices).toHaveLength(4);
+});
+
+test('triangles joined at a T-junction are one face', () => {
+  // A square's diagonal is one side of one triangle, and two sides of the other half's two.
+  const triangle = (...corners) => corners.flatMap(([x, y]) => [x, y, 0]);
+  const positions = new Float32Array([...triangle([0, 0], [10, 0], [10, 10]), ...triangle([0, 0], [5, 5], [0, 10]), ...triangle([5, 5], [10, 10], [0, 10])]);
+  expect(faceRegions(positions).count).toBe(1);
 });

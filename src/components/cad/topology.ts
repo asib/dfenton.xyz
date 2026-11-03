@@ -5,13 +5,58 @@
 // (equal-length segments turning gently, as OpenSCAD circles do). Corners and
 // T-junctions end an edge, as in a B-rep model; edge endpoints are vertices. A B-rep model's
 // own edges (`whole`) are already whole, so they join through every point where two meet.
+// Some exporters (SketchUp's, for one) write meshes whose faces split a shared edge at
+// different points, so it arrives as overlapping segments; collinear segments that overlap
+// are first made one run, cut at every endpoint along it, each piece once (`runs`).
 export interface TopoEdge { points: number[]; closed: boolean; length: number }
 export interface Topology { edges: TopoEdge[]; vertices: number[][] }
 
 const collinear = Math.cos(0.5 * Math.PI / 180);
 const curved = Math.cos(20 * Math.PI / 180);
 
-export function edgeTopology(segments: ArrayLike<number>, tolerance = 1e-4, whole = false): Topology {
+// The line through a and b, keyed so collinear segments share it (to `tolerance`), and their
+// positions along it; null for a segment too short to have one.
+function lineOf(a: number[], b: number[], tolerance: number) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], length = Math.hypot(d[0], d[1], d[2]);
+  if (length <= tolerance) return null;
+  let direction = d.map(n => n / length);
+  // One of each pair of opposite directions.
+  if ((direction.find(n => Math.abs(n) > 1e-6) ?? 1) < 0) direction = direction.map(n => -n || 0);
+  const along = (p: number[]) => p[0] * direction[0] + p[1] * direction[1] + p[2] * direction[2];
+  const foot = a.map((n, i) => n - direction[i] * along(a));
+  return { key: [...direction.map(n => Math.round(n * 1e5)), ...foot.map(n => Math.round(n / tolerance))].join(','), from: along(a), to: along(b) };
+}
+
+// Collinear segments as runs: each line's segments cut at every endpoint along it, and the
+// pieces they cover each given once, with the endpoints' own coordinates.
+function runs(segments: ArrayLike<number>, tolerance: number): number[] {
+  const lines = new Map<string, { cuts: { t: number; p: number[] }[]; spans: [number, number][] }>();
+  for (let offset = 0; offset + 5 < segments.length; offset += 6) {
+    const a = [segments[offset], segments[offset + 1], segments[offset + 2]], b = [segments[offset + 3], segments[offset + 4], segments[offset + 5]];
+    const line = lineOf(a, b, tolerance);
+    if (!line) continue;
+    let entry = lines.get(line.key);
+    if (!entry) { entry = { cuts: [], spans: [] }; lines.set(line.key, entry); }
+    entry.cuts.push({ t: line.from, p: a }, { t: line.to, p: b });
+    entry.spans.push([Math.min(line.from, line.to), Math.max(line.from, line.to)]);
+  }
+  const out: number[] = [];
+  for (const entry of lines.values()) {
+    const sorted = entry.cuts.sort((x, y) => x.t - y.t);
+    const cuts = sorted.filter((cut, i) => i === 0 || cut.t - sorted[i - 1].t > tolerance);
+    const pieces = new Set<number>();
+    for (const [from, to] of entry.spans) {
+      let low = 0, high = cuts.length;
+      while (low < high) { const middle = (low + high) >> 1; if (cuts[middle].t < from - tolerance) low = middle + 1; else high = middle; }
+      for (let i = low; i + 1 < cuts.length && cuts[i + 1].t <= to + tolerance; i++) pieces.add(i);
+    }
+    for (const i of [...pieces].sort((x, y) => x - y)) out.push(...cuts[i].p, ...cuts[i + 1].p);
+  }
+  return out;
+}
+
+export function edgeTopology(crease: ArrayLike<number>, tolerance = 1e-4, whole = false): Topology {
+  const segments = runs(crease, tolerance);
   // Weld endpoints to shared points.
   const points: number[][] = [];
   const index = new Map<string, number>();
@@ -93,4 +138,66 @@ export function faceEdges(positions: ArrayLike<number>, faces: ArrayLike<number>
     for (const corner of [from, to]) segments.push(positions[corner * 3], positions[corner * 3 + 1], positions[corner * 3 + 2]);
   }
   return new Float32Array(segments);
+}
+
+// A model's faces, as regions of its triangles: a STEP file's own faces (`faces`, renumbered
+// from 0), or else regions bounded by the creases the viewer draws as edges, so a face is
+// what its drawn edges enclose. Triangles join where their sides overlap along a line (to
+// 1e-3), as a shared side does, or a long side and the shorter ones a T-junction splits it
+// into, and they meet at under `crease` degrees. Returns each triangle's face and the
+// number of faces.
+export function faceRegions(positions: ArrayLike<number>, crease = 25, faces?: ArrayLike<number>): { faceOf: Int32Array; count: number } {
+  const triangles = Math.floor(positions.length / 9), faceOf = new Int32Array(triangles);
+  if (faces) {
+    const numbers = new Map<number, number>();
+    for (let triangle = 0; triangle < triangles; triangle++) {
+      let face = numbers.get(faces[triangle]);
+      if (face === undefined) { face = numbers.size; numbers.set(faces[triangle], face); }
+      faceOf[triangle] = face;
+    }
+    return { faceOf, count: numbers.size };
+  }
+  const normals = new Float64Array(triangles * 3);
+  for (let triangle = 0; triangle < triangles; triangle++) {
+    const o = triangle * 9;
+    const ux = positions[o + 3] - positions[o], uy = positions[o + 4] - positions[o + 1], uz = positions[o + 5] - positions[o + 2];
+    const vx = positions[o + 6] - positions[o], vy = positions[o + 7] - positions[o + 1], vz = positions[o + 8] - positions[o + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, length = Math.hypot(nx, ny, nz) || 1;
+    normals.set([nx / length, ny / length, nz / length], triangle * 3);
+  }
+  const lines = new Map<string, { triangle: number; from: number; to: number }[]>();
+  const corner = (triangle: number, i: number) => [0, 1, 2].map(axis => positions[triangle * 9 + i * 3 + axis]);
+  for (let triangle = 0; triangle < triangles; triangle++) {
+    for (let i = 0; i < 3; i++) {
+      const line = lineOf(corner(triangle, i), corner(triangle, (i + 1) % 3), 1e-3);
+      if (!line) continue;
+      const spans = lines.get(line.key), span = { triangle, from: Math.min(line.from, line.to), to: Math.max(line.from, line.to) };
+      if (spans) spans.push(span);
+      else lines.set(line.key, [span]);
+    }
+  }
+  const parent = Int32Array.from({ length: triangles }, (_, triangle) => triangle);
+  const find = (triangle: number) => {
+    while (parent[triangle] !== triangle) { parent[triangle] = parent[parent[triangle]]; triangle = parent[triangle]; }
+    return triangle;
+  };
+  const smooth = Math.cos(crease * Math.PI / 180);
+  for (const spans of lines.values()) {
+    spans.sort((x, y) => x.from - y.from);
+    for (let i = 0; i < spans.length; i++) {
+      for (let j = i + 1; j < spans.length && spans[j].from < spans[i].to - 1e-3; j++) {
+        const a = spans[i].triangle, b = spans[j].triangle;
+        if (Math.min(spans[i].to, spans[j].to) - spans[j].from <= 1e-3 || a === b) continue;
+        if (normals[a * 3] * normals[b * 3] + normals[a * 3 + 1] * normals[b * 3 + 1] + normals[a * 3 + 2] * normals[b * 3 + 2] > smooth) parent[find(a)] = find(b);
+      }
+    }
+  }
+  const numbers = new Map<number, number>();
+  for (let triangle = 0; triangle < triangles; triangle++) {
+    const root = find(triangle);
+    let face = numbers.get(root);
+    if (face === undefined) { face = numbers.size; numbers.set(root, face); }
+    faceOf[triangle] = face;
+  }
+  return { faceOf, count: numbers.size };
 }
