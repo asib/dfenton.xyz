@@ -53,7 +53,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
   const [manualShare, setManualShare] = useState<{ kind: 'link' | 'config'; text: string } | null>(null);
   const job = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
-  const updateTimer = useRef<number>();
+  const updateTimer = useRef<number | undefined>(undefined);
   const draftValues = useRef<Values>({});
   const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;

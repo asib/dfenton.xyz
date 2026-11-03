@@ -60,7 +60,7 @@ export default function SheetLayoutTable({ output, title, filename, palette = []
   // It and the CSV open in a new tab, to print or download.
   const [pdfBusy, setPdfBusy] = useState(false);
   const [fileStatus, setFileStatus] = useState('');
-  const pdfJob = useRef<AbortController>();
+  const pdfJob = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => { pdfJob.current?.abort(); }, [layout, output.stale]);
   if (parsed.error) return <p className="cad-error" role="alert">{parsed.error}</p>;
   if (!parsed.parts.length) return null;
