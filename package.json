@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-spring/web": "^9.7.4",
+    "@react-spring/web": "^10.1.2",
     "clsx": "^2.1.1",
     "jspdf": "4.2.1",
     "occt-import-js": "0.0.23",
