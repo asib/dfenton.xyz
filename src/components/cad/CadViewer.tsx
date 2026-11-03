@@ -308,7 +308,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     const shown = measurementKey ? JSON.parse(measurementKey) as NonNullable<typeof measurement> : null;
     viewer.setMeasurement(shown ? { line: shown.line, anchor: shown.anchor, text: formatRow(shown.rows[0])[0] } : null);
     // formatRow depends only on the units, and a change of units rebuilds the viewer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, measurementKey]);
   const selectionKey = items.map(item => item.key).join(' ');
   useEffect(() => {

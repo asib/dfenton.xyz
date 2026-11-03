@@ -52,7 +52,7 @@ Useful resources for meta tag info: https://stackoverflow.com/questions/19778620
 
 # React + TypeScript + Vite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This template provides a minimal setup to get React working in Vite with HMR.
 
 Currently, two official plugins are available:
 
@@ -61,7 +61,7 @@ Currently, two official plugins are available:
 
 ## Linting
 
-`bun run lint` runs [Oxlint](https://oxc.rs/docs/guide/usage/linter) with `.oxlintrc.json`, which `@oxlint/migrate` generated from the ESLint config this site used to have: typescript-eslint's `strictTypeChecked` and `stylisticTypeChecked`, and the React, React Hooks and React Refresh recommended rules, on `.ts` and `.tsx` files. `options.typeAware` turns on the type-aware rules, which `oxlint-tsgolint` runs on TypeScript 7's compiler; it bundles that compiler, so it doesn't use the `typescript` package. `options.typeCheck` reports TypeScript's own errors too, for `tsconfig.app.json` and `tsconfig.node.json`, so lint also stands in for `tsc -b`; the build doesn't typecheck, since Vite only strips types. A few rules, `typescript/no-unnecessary-condition` among them, are still in Oxlint's nursery and may change between releases. Oxlint honours the existing `eslint-disable` comments.
+`bun run lint` runs [Oxlint](https://oxc.rs/docs/guide/usage/linter) with `.oxlintrc.json`, which `@oxlint/migrate` generated from the ESLint config this site used to have: typescript-eslint's `strictTypeChecked` and `stylisticTypeChecked`, and the React, React Hooks and React Refresh recommended rules, on `.ts` and `.tsx` files. `options.typeAware` turns on the type-aware rules, which `oxlint-tsgolint` runs on TypeScript 7's compiler; it bundles that compiler, so it doesn't use the `typescript` package. `options.typeCheck` reports TypeScript's own errors too, for `tsconfig.app.json` and `tsconfig.node.json`, so lint also stands in for `tsc -b`; the build doesn't typecheck, since Vite only strips types. A few rules, `typescript/no-unnecessary-condition` among them, are still in Oxlint's nursery and may change between releases. To silence a rule on one line, use `// oxlint-disable-next-line <rule>` with the rule's name as Oxlint prints it, such as `react-hooks/exhaustive-deps`; `oxlint --report-unused-disable-directives` finds ones that no longer suppress anything.
 
 ## Block all traffic
 
