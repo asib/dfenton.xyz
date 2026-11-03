@@ -4,7 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { SectionPlane } from './section';
-import { edgeTopology, faceEdges, type Topology } from './topology';
+import { edgeTopology, faceEdges, faceRegions, type Topology } from './topology';
 import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
@@ -56,8 +56,10 @@ interface Layer {
   piece: string | null;
   // The group's first vertex, whose color is the piece's.
   first: number;
-  // Whole edges and vertices of the piece, in scene coordinates.
+  // Whole edges and vertices of the piece, in scene coordinates, and its faces: each triangle's
+  // face, numbered from 0, as regions its drawn edges enclose, or a STEP file's own faces.
   topology: Topology;
+  faces: { faceOf: Int32Array; count: number };
   solid: THREE.MeshStandardMaterial;
   // The piece's own triangles, sharing the model's buffer, for its stencil count, and the
   // sphere around them, which places its caps.
@@ -231,6 +233,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
         first: group.start,
         // Picking uses exactly the creases that are drawn, joined into whole edges.
         topology: edgeTopology(edges.geometry.getAttribute('position').array, 1e-3, !!faces),
+        faces: faceRegions(positions.subarray(group.start * 3, (group.start + group.count) * 3), 25, faces?.subarray(group.start / 3, (group.start + group.count) / 3)),
         solid: new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
         view,
         bounds,
@@ -380,6 +383,17 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     lines.visible = false;
     return lines;
   });
+  // Selected and hovered faces draw over the model in the selection colors, half see-through.
+  const faceMaterials = [0, 1].map(() => new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  }));
+  const faceOverlays = faceMaterials.map((material) => {
+    const overlay = new THREE.Mesh(new THREE.BufferGeometry(), material);
+    overlay.renderOrder = 5;
+    overlay.visible = false;
+    return overlay;
+  });
   const dotCanvas = document.createElement('canvas');
   dotCanvas.width = dotCanvas.height = 32;
   const dotContext = dotCanvas.getContext('2d');
@@ -418,17 +432,18 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     measureLabel.hidden = p.z > 1;
     measureLabel.style.transform = `translate(${String((p.x + 1) / 2 * host.clientWidth)}px, ${String((1 - p.y) / 2 * host.clientHeight)}px) translate(-50%, -135%)`;
   };
-  scene.add(...edgeOverlays, ...vertexOverlays, pivotMarker, measureLine, measureEnds);
+  scene.add(...faceOverlays, ...edgeOverlays, ...vertexOverlays, pivotMarker, measureLine, measureEnds);
 
-  // Edges and vertices are keyed "edge:<version>:<layer>:<index>"; regenerating the
+  // Faces, edges and vertices are keyed "edge:<version>:<layer>:<index>"; regenerating the
   // model bumps the version, so a stale key can never name a different edge.
   let version = 0;
   const entityAt = (key: string | null) => {
-    const match = key ? /^(edge|vertex):(\d+):(\d+):(\d+)$/.exec(key) : null;
+    const match = key ? /^(face|edge|vertex):(\d+):(\d+):(\d+)$/.exec(key) : null;
     if (!match || Number(match[2]) !== version) return undefined;
     const layer = layers[Number(match[3])] as Layer | undefined;
     const index = Number(match[4]);
     if (!layer) return undefined;
+    if (match[1] === 'face') return index < layer.faces.count ? { kind: 'face' as const, layer, face: index } : undefined;
     if (match[1] === 'edge') {
       const edge = layer.topology.edges[index] as Topology['edges'][number] | undefined;
       return edge ? { kind: 'edge' as const, layer, edge } : undefined;
@@ -442,8 +457,29 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (let i = 0; i + 5 < points.length; i += 3) pairs.push(...points.slice(i, i + 6));
     return pairs;
   };
+  // A face's triangles, in scene coordinates.
+  const faceTriangles = (layer: Layer, face: number) => {
+    const positions = geometry.getAttribute('position').array, points: number[] = [];
+    layer.faces.faceOf.forEach((of, triangle) => {
+      if (of !== face) return;
+      const from = (layer.first / 3 + triangle) * 9;
+      for (let i = 0; i < 9; i++) points.push(positions[from + i]);
+    });
+    return points;
+  };
   const drawEntities = (keys: string[], overlay: 0 | 1) => {
     const found = keys.map(entityAt).filter((item) => !!item && !visible(item.layer).hidden);
+    const shapes = found.flatMap((item) => item?.kind === 'face' ? faceTriangles(item.layer, item.face) : []);
+    const area = new THREE.BufferGeometry();
+    area.setAttribute('position', new THREE.Float32BufferAttribute(shapes, 3));
+    faceOverlays[overlay].geometry.dispose();
+    faceOverlays[overlay].geometry = area;
+    faceOverlays[overlay].visible = shapes.length > 0;
+    // Cut as the model is, unless every face shown is on a part left whole.
+    const cut = found.every(item => item?.kind === 'face' ? whole(item.layer) : true) ? [] : planes.slice(0, settings.sections.length);
+    faceMaterials[overlay].clippingPlanes = cut;
+    faceMaterials[overlay].clipIntersection = cut.length > 1;
+    faceMaterials[overlay].needsUpdate = true;
     const segments = found.flatMap((item) => item?.kind === 'edge' ? edgeSegments(item.edge.points) : []);
     const dots = found.flatMap((item) => item?.kind === 'vertex' ? item.vertex : []);
     // Fresh geometries each time: a refilled instanced line geometry keeps the
@@ -488,6 +524,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       for (const cap of layer.caps) cap.material.color.copy(cut);
     }
     for (const lines of cutLines) lines.material.color.set(colors.edge);
+    faceMaterials[0].color.set(colors.selected);
+    faceMaterials[1].color.set(colors.hover);
     lineMaterials[0].color.set(colors.selected);
     lineMaterials[1].color.set(colors.hover);
     pivotMaterial.color.set(colors.edge);
@@ -907,7 +945,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     }
     return null;
   };
-  const pickEntityAt = (x: number, y: number): string | null => snapAt(x, y)?.key ?? pickAt(x, y);
+  // The face under a client position, as a key.
+  const faceKeyAt = (x: number, y: number) => {
+    const found = hitAt(x, y), triangle = found?.hit.faceIndex;
+    if (!found || typeof triangle !== 'number') return null;
+    const face = found.layer.faces.faceOf[triangle - found.layer.first / 3] as number | undefined;
+    return face === undefined ? null : `face:${String(version)}:${String(layers.indexOf(found.layer))}:${String(face)}`;
+  };
+  // A corner or edge near the pointer, or else the face under it.
+  const pickEntityAt = (x: number, y: number): string | null => snapAt(x, y)?.key ?? faceKeyAt(x, y);
   // A click (not an orbit or pan drag) selects. Hover is picked at most once per
   // animation frame, not while dragging or for touch, and again after the view
   // or appearance changes; keyboard shortcuts also use the last pointer position.
@@ -1130,6 +1176,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (!found) return undefined;
       const toModel = (p: number[]) => p.map((n, i) => n + origin.getComponent(i));
       const owner = { part: found.layer.part, piece: found.layer.piece };
+      if (found.kind === 'face') return { ...owner, kind: 'face' as const };
       if (found.kind === 'vertex') return { ...owner, kind: 'vertex' as const, position: toModel(found.vertex) };
       const points: number[][] = [];
       for (let i = 0; i + 2 < found.edge.points.length; i += 3) points.push(toModel(found.edge.points.slice(i, i + 3)));
@@ -1169,6 +1216,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       [...handleGeometries, ...outlineGeometries].forEach((part) => { part.dispose(); });
       [...handleMaterials, outlineMaterial, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
+      faceOverlays.forEach((overlay) => { overlay.geometry.dispose(); });
+      faceMaterials.forEach((material) => { material.dispose(); });
       vertexOverlays.forEach((points) => { points.geometry.dispose(); });
       [...lineMaterials, ...pointMaterials].forEach((material) => { material.dispose(); });
       dotTexture.dispose();

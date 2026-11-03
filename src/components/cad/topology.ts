@@ -94,3 +94,61 @@ export function faceEdges(positions: ArrayLike<number>, faces: ArrayLike<number>
   }
   return new Float32Array(segments);
 }
+
+// A model's faces, as regions of its triangles: a STEP file's own faces (`faces`, renumbered
+// from 0), or else regions bounded by the creases the viewer draws as edges, so a face is
+// what its drawn edges enclose. Triangles join across a side exactly two share, where they
+// meet at under `crease` degrees; corners at the same position (to 1e-4) are the same point.
+// Returns each triangle's face and the number of faces.
+export function faceRegions(positions: ArrayLike<number>, crease = 25, faces?: ArrayLike<number>): { faceOf: Int32Array; count: number } {
+  const triangles = Math.floor(positions.length / 9), faceOf = new Int32Array(triangles);
+  if (faces) {
+    const numbers = new Map<number, number>();
+    for (let triangle = 0; triangle < triangles; triangle++) {
+      let face = numbers.get(faces[triangle]);
+      if (face === undefined) { face = numbers.size; numbers.set(faces[triangle], face); }
+      faceOf[triangle] = face;
+    }
+    return { faceOf, count: numbers.size };
+  }
+  const key = (corner: number) => `${String(Math.round(positions[corner * 3] * 1e4))},${String(Math.round(positions[corner * 3 + 1] * 1e4))},${String(Math.round(positions[corner * 3 + 2] * 1e4))}`;
+  const normals = new Float64Array(triangles * 3);
+  for (let triangle = 0; triangle < triangles; triangle++) {
+    const o = triangle * 9;
+    const ux = positions[o + 3] - positions[o], uy = positions[o + 4] - positions[o + 1], uz = positions[o + 5] - positions[o + 2];
+    const vx = positions[o + 6] - positions[o], vy = positions[o + 7] - positions[o + 1], vz = positions[o + 8] - positions[o + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, length = Math.hypot(nx, ny, nz) || 1;
+    normals.set([nx / length, ny / length, nz / length], triangle * 3);
+  }
+  const sides = new Map<string, number[]>();
+  for (let triangle = 0; triangle < triangles; triangle++) {
+    const corners = [0, 1, 2].map(i => key(triangle * 3 + i));
+    for (let i = 0; i < 3; i++) {
+      const a = corners[i], b = corners[(i + 1) % 3];
+      if (a === b) continue;
+      const side = a < b ? `${a}|${b}` : `${b}|${a}`;
+      const list = sides.get(side);
+      if (list) list.push(triangle);
+      else sides.set(side, [triangle]);
+    }
+  }
+  const parent = Int32Array.from({ length: triangles }, (_, triangle) => triangle);
+  const find = (triangle: number) => {
+    while (parent[triangle] !== triangle) { parent[triangle] = parent[parent[triangle]]; triangle = parent[triangle]; }
+    return triangle;
+  };
+  const smooth = Math.cos(crease * Math.PI / 180);
+  for (const list of sides.values()) {
+    if (list.length !== 2) continue;
+    const [a, b] = list;
+    if (normals[a * 3] * normals[b * 3] + normals[a * 3 + 1] * normals[b * 3 + 1] + normals[a * 3 + 2] * normals[b * 3 + 2] > smooth) parent[find(a)] = find(b);
+  }
+  const numbers = new Map<number, number>();
+  for (let triangle = 0; triangle < triangles; triangle++) {
+    const root = find(triangle);
+    let face = numbers.get(root);
+    if (face === undefined) { face = numbers.size; numbers.set(root, face); }
+    faceOf[triangle] = face;
+  }
+  return { faceOf, count: numbers.size };
+}

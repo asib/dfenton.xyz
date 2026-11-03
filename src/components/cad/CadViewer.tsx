@@ -249,22 +249,29 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     return piece && partPieces(part.id).length > 1 ? { key: piece.key, part, piece, label: pieceLabel(piece) } : { key: part.id, part, piece: undefined, label: part.label };
   };
   type Target = NonNullable<ReturnType<typeof resolve>>;
-  // Edges and vertices are measured, not hidden: they belong to a part for labels only.
+  // Edges and vertices are measured, not hidden: they belong to a part for labels only. A
+  // face stands for its part when hiding, fading or isolating, as in Onshape.
   const resolveEntity = (key: string | null) => {
     const entity = key ? viewer?.entity(key) : undefined;
     if (!key || !entity) return null;
     const owner = resolve(entity.piece ?? entity.part);
-    const kind = entity.kind === 'edge' ? 'Edge' : 'Vertex';
+    const kind = entity.kind === 'face' ? 'Face' : entity.kind === 'edge' ? 'Edge' : 'Vertex';
     return { key, entity, owner, label: owner ? `${kind} · ${owner.label}` : kind };
   };
   type EntityTarget = NonNullable<ReturnType<typeof resolveEntity>>;
   const items = selected.map(key => resolve(key) ?? resolveEntity(key)).filter((item): item is Target | EntityTarget => !!item);
-  // Appearance actions apply to the selected parts and pieces.
+  // The selected parts and pieces, which the legend shows; appearance actions apply to them
+  // and to the parts of selected faces.
   const selection = items.filter((item): item is Target => 'part' in item);
+  const acting = [...selection, ...items.flatMap(item => 'entity' in item && item.entity.kind === 'face' && item.owner ? [item.owner] : [])]
+    .filter((target, i, all) => all.findIndex(other => other.key === target.key) === i);
   // Selected edges and vertices are measured automatically, as in Onshape.
-  const measured = items.flatMap((item): Measurable[] => 'entity' in item ? [item.entity.kind === 'edge'
-    ? { kind: 'edge', points: item.entity.points, closed: item.entity.closed, length: item.entity.length }
-    : { kind: 'vertex', position: item.entity.position }] : []);
+  const measured = items.flatMap((item): Measurable[] => {
+    if (!('entity' in item)) return [];
+    const { entity } = item;
+    if (entity.kind === 'edge') return [{ kind: 'edge', points: entity.points, closed: entity.closed, length: entity.length }];
+    return entity.kind === 'vertex' ? [{ kind: 'vertex', position: entity.position }] : [];
+  });
   const measurement = measure(measured);
   // Lengths in the model's units first, then the other; inches snap to 64ths within float precision.
   const inchText = (mm: number) => {
@@ -418,7 +425,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     setPicking(false);
   };
   // Selected parts and pieces join those left whole.
-  const excludeSelection = () => { setExcluded(current => [...new Set([...current, ...selection.map(target => target.key)])]); };
+  const excludeSelection = () => { setExcluded(current => [...new Set([...current, ...acting.map(target => target.key)])]); };
   // Look back along the section's normal, at the cut face on.
   const viewNormal = () => { if (section) viewer?.lookAlong(sectionPlane(section).normal); };
   // Dragging the manipulator moves or tilts the section from where the drag began, tilts to a
@@ -577,8 +584,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
           <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
-            ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
-            : ' Click edges or corners to measure them, adding them to the selection or removing them; click empty space to clear it. Space clears the selection.'}</p>
+            ? ' Click faces, edges or corners, or parts in the legend, to add them to the selection or remove them; click empty space to clear it. A selected face stands for its part: Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
+            : ' Click faces, edges or corners to add them to the selection or remove them, measuring edges and corners; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
             <label>Display
@@ -633,7 +640,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 <button type="button" onClick={viewNormal} title="View normal to the section (N)" aria-keyshortcuts="N">View normal</button>
                 <button type="button" onClick={() => { setPicking(true); }}>Pick a face</button>
                 {hasLegend && <div className="cad-section-excluded">
-                  <button type="button" disabled={!selection.length} onClick={excludeSelection}>Leave selection uncut</button>
+                  <button type="button" disabled={!acting.length} onClick={excludeSelection}>Leave selection uncut</button>
                   {excluded.length > 0 && <>
                     <span>Uncut:</span>
                     {excluded.map(key => <button key={key} type="button" className="cad-section-uncut" title="Cut it again" onClick={() => { setExcluded(current => current.filter(item => item !== key)); }}>
@@ -680,19 +687,19 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                   </button>
                 </li>)}
               </ul>}
-              {selection.length > 0 && <>
-              <label className="cad-slider">Opacity <output>{Math.round(look(selection[0].key).opacity * 100)}%</output>
-                <input type="range" min="0" max="100" step="5" value={Math.round(look(selection[0].key).opacity * 100)}
-                  onChange={(event) => { const opacity = Number(event.target.value) / 100; setLooks(selection, () => ({ opacity, hidden: false })); }} />
+              {acting.length > 0 && <>
+              <label className="cad-slider">Opacity <output>{Math.round(look(acting[0].key).opacity * 100)}%</output>
+                <input type="range" min="0" max="100" step="5" value={Math.round(look(acting[0].key).opacity * 100)}
+                  onChange={(event) => { const opacity = Number(event.target.value) / 100; setLooks(acting, () => ({ opacity, hidden: false })); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={() => { hideOrShow(selection); }} title={allHidden(selection) ? 'Show (Shift+Y)' : 'Hide (Y)'}
-                  aria-keyshortcuts={allHidden(selection) ? 'Shift+Y' : 'Y'}>
-                  {allHidden(selection) ? 'Show' : 'Hide'}
+                <button type="button" onClick={() => { hideOrShow(acting); }} title={allHidden(acting) ? 'Show (Shift+Y)' : 'Hide (Y)'}
+                  aria-keyshortcuts={allHidden(acting) ? 'Shift+Y' : 'Y'}>
+                  {allHidden(acting) ? 'Show' : 'Hide'}
                 </button>
-                <button type="button" onClick={() => { toggleIsolation('hide', selection); }} aria-pressed={isolated('hide')}
+                <button type="button" onClick={() => { toggleIsolation('hide', acting); }} aria-pressed={isolated('hide')}
                   title={isolated('hide') ? 'Restore the other parts' : 'Hide everything else'}>{isolated('hide') ? 'Unisolate' : 'Isolate'}</button>
-                <button type="button" onClick={() => { toggleIsolation('ghost', selection); }} aria-pressed={isolated('ghost')}
+                <button type="button" onClick={() => { toggleIsolation('ghost', acting); }} aria-pressed={isolated('ghost')}
                   title={isolated('ghost') ? 'Restore the other parts (Shift+I)' : 'Fade everything else (Shift+I)'} aria-keyshortcuts="Shift+I">{isolated('ghost') ? 'Unghost others' : 'Ghost others'}</button>
               </div>
               </>}
