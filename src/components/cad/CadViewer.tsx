@@ -37,6 +37,19 @@ function DraftNumber({ label, value, step, unit, onValue }: { label: string; val
   </label>;
 }
 
+// The projection is a viewing preference, kept in this browser for every model and visit.
+// Blocked storage (private windows, site data off) just means it lasts for the page.
+const projectionKey = 'cad-projection';
+function savedPerspective() {
+  try { return window.localStorage.getItem(projectionKey) === 'perspective'; } catch { return false; }
+}
+function savePerspective(perspective: boolean) {
+  try {
+    if (perspective) window.localStorage.setItem(projectionKey, 'perspective');
+    else window.localStorage.removeItem(projectionKey);
+  } catch { /* It still applies until the page is left. */ }
+}
+
 // What a visitor's file's parts are, for the legend.
 const partsHints: Record<FileParts['from'], string> = {
   color: 'Each color in this file is a part, numbered in file order.',
@@ -87,6 +100,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [status, setStatus] = useState('Loading model…');
   const [mode, setMode] = useState<RenderMode>('edges');
+  // Orthographic, as Onshape shows models, unless Perspective is ticked; Reset view keeps it.
+  const [perspective, setPerspective] = useState(savedPerspective);
   // The section view (section.ts), or null when off; Shift+X brings back the last one.
   // `picking` waits for a click on a face to section through.
   // Up to `maxSections` planes cut at once; the controls and manipulator edit the active one.
@@ -200,11 +215,11 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   useEffect(() => {
     const plane = section && sectionPlane(section);
     viewer?.setSettings({
-      mode, sections: sections.map(sectionPlane), excluded,
+      mode, perspective, sections: sections.map(sectionPlane), excluded,
       handle: section && plane && !picking ? { point: section.point, arrow: plane.normal, axes: sectionFrame(section).axes } : null,
     });
     if (sections.length) lastSections.current = { sections, active };
-  }, [viewer, mode, sections, active, section, excluded, picking]);
+  }, [viewer, mode, perspective, sections, active, section, excluded, picking]);
   // A change of units rescales the model, so the section moves with it.
   const sectionScale = useRef(scale);
   useEffect(() => {
@@ -561,7 +576,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
               : section ? `${planeNames[section.reference.plane]} section${sections.length > 1 ? ` ${String(active + 1)} of ${String(sections.length)}` : ''} · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
             ? ' Click parts, edges or corners to add them to the selection or remove them; click empty space to clear it. Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click edges or corners to measure them, adding them to the selection or removing them; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -573,6 +588,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 <option value="wireframe">Wireframe</option>
               </select>
             </label>
+            <label className="cad-checkbox"><input type="checkbox" checked={perspective} onChange={(event) => { setPerspective(event.target.checked); savePerspective(event.target.checked); }} />Perspective</label>
             <label>Section
               <select value={picking ? 'face' : section?.reference.plane ?? 'off'} aria-keyshortcuts="Shift+X" onChange={(event) => { chooseSection(event.target.value); }}>
                 <option value="off">Off</option>
