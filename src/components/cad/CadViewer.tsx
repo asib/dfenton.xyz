@@ -403,16 +403,10 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     setLooks(targets, key => ({ hidden: !show, opacity: look(key).opacity || 1 }));
   };
   // Shows the hidden targets, otherwise every hidden part and piece; fades are kept.
-  const showHidden = (targets: Target[]) => {
-    const hidden = targets.filter(target => look(target.key).hidden);
-    if (hidden.length) { setLooks(hidden, key => ({ hidden: false, opacity: look(key).opacity || 1 })); return; }
-    setAppearances(previous => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, hidden: false }])));
-  };
   const toggleTransparent = (targets: Target[]) => {
     const fade = targets.every(target => look(target.key).opacity >= 1);
     setLooks(targets, () => ({ hidden: false, opacity: fade ? 0.3 : 1 }));
   };
-  const anyHidden = Object.values(appearances).some(value => value?.hidden);
   // A default plane from the Section menu opens through the middle of the model; "Face" waits
   // for a click on one. Shift+X brings back the last section, or else the front plane.
   const start = (plane: DefaultPlane) => viewer && startSection(defaultPlanes[plane], tuple(viewer.sourceMin), tuple(viewer.size));
@@ -476,8 +470,10 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     tilt[drag.axis] = Math.round((start.tilt[drag.axis] + drag.degrees) * 10) / 10;
     setSection({ ...start, tilt });
   };
-  // Onshape-style keys: Y hides, Shift+Y shows, Shift+I ghosts everything else, Shift+T toggles
-  // transparency, and Space (from the 3D view) clears the selection. Shift+X turns the section
+  // Onshape-style keys: Y hides, Shift+I ghosts everything else, Shift+T toggles transparency,
+  // and Space (from the 3D view) clears the selection. Shift+Y shows every part and clears
+  // fades, transparency and isolation, as Show all parts does, where Onshape's shows hidden
+  // parts only. Shift+X turns the section
   // off and on, N views normal to it, and Escape stops picking a face. Actions apply to
   // the selection or, with nothing selected, to the part under the cursor. Returns whether the
   // key was used. From the 3D view Space is always used, so it never scrolls the page. Models
@@ -496,7 +492,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     else if (code === 'Escape' && picking) setPicking(false);
     else if (code === 'Space' && fromCanvas) setSelected(current => current.length ? [] : current);
     else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
-    else if (code === 'KeyY' && shift && (anyHidden || targets.some(target => look(target.key).hidden))) showHidden(targets);
+    else if (code === 'KeyY' && shift && !alt && changedParts > 0) setAppearances({});
     else if (code === 'KeyI' && shift && (targets.length || isolated('ghost'))) toggleIsolation('ghost', targets);
     else if (code === 'KeyT' && shift && targets.length) toggleTransparent(targets);
     else return false;
@@ -620,7 +616,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
           <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face from the Section menu; with a face selected, its Selected face, Shift+X and Add plane cut through that face. Drag the section’s arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
-            ? ' Click faces, edges or corners, or parts in the legend, to add them to the selection or remove them; click empty space to clear it. A selected face stands for its part: Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
+            ? ' Click faces, edges or corners, or parts in the legend, to add them to the selection or remove them; click empty space to clear it. A selected face stands for its part: Y hides; Shift+Y shows every part and clears fades, as Show all parts does; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click faces, edges or corners to add them to the selection or remove them, measuring edges and corners; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
             <legend className="sr-only">Model display controls</legend>
@@ -729,8 +725,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                   onChange={(event) => { const opacity = Number(event.target.value) / 100; setLooks(acting, () => ({ opacity, hidden: false })); }} />
               </label>
               <div className="cad-part-actions">
-                <button type="button" onClick={() => { hideOrShow(acting); }} title={allHidden(acting) ? 'Show (Shift+Y)' : 'Hide (Y)'}
-                  aria-keyshortcuts={allHidden(acting) ? 'Shift+Y' : 'Y'}>
+                <button type="button" onClick={() => { hideOrShow(acting); }} title={allHidden(acting) ? 'Show' : 'Hide (Y)'}
+                  aria-keyshortcuts={allHidden(acting) ? undefined : 'Y'}>
                   {allHidden(acting) ? 'Show' : 'Hide'}
                 </button>
                 <button type="button" onClick={() => { toggleIsolation('hide', acting); }} aria-pressed={isolated('hide')}
@@ -753,7 +749,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                   </li>)}
                 </ul>)}
             </div>}
-            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts and clear fades">Show all parts ({changedParts} changed)</button>}
+            {changedParts > 0 && <button type="button" className="cad-part-reset" onClick={() => { setAppearances({}); }} title="Show all parts and clear fades (Shift+Y)" aria-keyshortcuts="Shift+Y">Show all parts ({changedParts} changed)</button>}
           </details>}
           {entry.customizer && entry.source && <details id="cad-parameter-panel" className="cad-panel" open={parametersOpen} onToggle={(event) => { setParametersOpen(event.currentTarget.open); }}>
             <summary>Model parameters</summary>
