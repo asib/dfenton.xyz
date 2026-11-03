@@ -1,6 +1,6 @@
 {
   "title": "3D model viewer",
-  "description": "Open your own STL or OpenSCAD file to view, section and measure it in the browser, with Customizer parameters as controls. Nothing is uploaded.",
+  "description": "Open your own STL, STEP or OpenSCAD file to view, section and measure it in the browser, with an OpenSCAD file’s Customizer parameters as controls. Nothing is uploaded.",
   "date": "2026-11-01",
   "type": "viewer",
   "preview": "preview.svg",

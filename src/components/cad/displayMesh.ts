@@ -1,8 +1,12 @@
 import { BufferAttribute, BufferGeometry, Color, SRGBColorSpace } from 'three';
 import type { PartColor } from '../../misc';
 
-interface Group { start: number; count: number; color: number[]; mode: string }
-export interface DisplayMesh { positions: Float32Array; normals: Float32Array; groups: Group[] }
+// A group's color names its piece and, within a few 1/255 steps, its legend part, unless it
+// names the part itself (`part`), as a STEP file's repeated bodies do.
+interface Group { start: number; count: number; color: number[]; mode: string; part?: string }
+// `faces`, for a STEP file, gives each triangle's face in its B-rep: the viewer draws edges where
+// faces meet, rather than at creases.
+export interface DisplayMesh { positions: Float32Array; normals: Float32Array; groups: Group[]; faces?: Int32Array }
 
 export function parseDisplayMesh(data: unknown): DisplayMesh {
   const numbers = (value: unknown): value is number[] => Array.isArray(value) &&
@@ -76,7 +80,7 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   // One geometry group per colored part lets the viewer fade, hide or select it.
   const partIds: (string | null)[] = [], pieceKeys: string[] = [];
   for (const [index, group] of display.groups.entries()) {
-    const part = legendPart(group.color, palette);
+    const part = group.part ? palette.find(candidate => candidate.id === group.part) : legendPart(group.color, palette);
     const base = part ? new Color(part.color) : new Color().setRGB(group.color[0], group.color[1], group.color[2], SRGBColorSpace);
     const night = part ? new Color(part.darkColor) : base;
     geometry.addGroup(group.start, group.count, index);
@@ -92,6 +96,7 @@ export function coloredGeometry(display: DisplayMesh, palette: PartColor[] = [])
   geometry.setAttribute('color', geometry.getAttribute('colorLight'));
   geometry.userData.partIds = partIds;
   geometry.userData.pieceKeys = pieceKeys;
+  if (display.faces) geometry.userData.brepFaces = display.faces;
   return geometry;
 }
 

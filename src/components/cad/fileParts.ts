@@ -5,12 +5,15 @@ import { pieceKey, type DisplayMesh } from './displayMesh';
 // Visitors' files have no part list, so their parts are numbered in file order, "Part 1",
 // "Part 2" and so on: each color of a colored OpenSCAD design, as OpenSCAD groups them, or
 // otherwise each solid, in a color of its own: those a text STL lists, by their names where
-// it gives them, or else each separate closed surface. A file of one solid, or of more than
-// `maxParts` parts, has none.
+// it gives them, or else each separate closed surface. A STEP file's parts are its bodies, by
+// their names and in their colors, its repeated bodies one part with a piece each. A file of
+// one solid, or of more than `maxParts` parts, has none.
 export const maxParts = 50;
-export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' }
-interface Block { start: number; count: number; name: string }
-export interface Mesh { positions: Float32Array; normals: Float32Array; groups?: Block[] }
+export interface FileParts { display: DisplayMesh; parts: PartColor[]; from: 'color' | 'solid' | 'listed' | 'body' }
+// A text STL's solid or a STEP file's body, as a vertex range, with its name and any color.
+interface Block { start: number; count: number; name: string; color?: string }
+// `faces` gives each triangle's face in a STEP file's B-rep, whose meeting lines are its edges.
+export interface Mesh { positions: Float32Array; normals: Float32Array; groups?: Block[]; faces?: Int32Array }
 
 // An STL as Three's STLLoader reads it: a text STL's `solid … endsolid` blocks become groups
 // (vertex ranges), their names the rest of each `solid` line.
@@ -165,8 +168,12 @@ function listedSolids(blocks: Block[], triangles: number) {
 // (Three's pattern crosses the line break), and exporters' placeholders name no part.
 const placeholder = /^(ascii|binary|stl|mesh|model|object|solid|openscad_model)$|^(exported|generated|created|made)\s+(from|by|with)\b/i;
 function blockName(name: string) {
+  const text = shortName(name);
+  return /^facet\b/i.test(text) || placeholder.test(text) ? '' : text;
+}
+// A name with its whitespace collapsed, cut at 60 characters.
+function shortName(name: string) {
   const text = name.replace(/\s+/g, ' ').trim();
-  if (!text || /^facet\b/i.test(text) || placeholder.test(text)) return '';
   return text.length > 60 ? `${text.slice(0, 59).trimEnd()}…` : text;
 }
 // Repeated labels are numbered, as pieces are: "Leg · 1", "Leg · 2".
@@ -188,6 +195,53 @@ function regroup({ positions, normals }: Pick<Mesh, 'positions' | 'normals'>, pa
     next.normals.set(normals.subarray(from, from + 9), to);
   });
   return { ...next, groups: colors.map((color, part) => ({ start: starts[part] * 3, count: counts[part] * 3, color: rgba(color), mode: 'solid' })) };
+}
+
+// Each part needs a color of its own for the legend to tell it apart, so a color repeated, as
+// for a file's several nuts, is shifted a step of 1/255 or two, too little to see.
+function distinctColors(colors: string[]) {
+  const used = new Set<string>();
+  return colors.map((color) => {
+    const rgb = (color.slice(1).match(/../g) ?? []).map(n => parseInt(n, 16));
+    let candidate = color;
+    for (let step = 1; used.has(candidate); step++) {
+      const shifted = rgb.map((value, i) => i === (step - 1) % 3 ? value + (value > 127 ? -1 : 1) * Math.ceil(step / 3) : value);
+      candidate = `#${shifted.map(value => value.toString(16).padStart(2, '0')).join('')}`;
+    }
+    used.add(candidate);
+    return candidate;
+  });
+}
+
+// A STEP file's bodies are its parts, by the names it gives them, or else numbered. Bodies of
+// the same name and color are copies of one part, as an assembly's nuts are: one part, with a
+// piece for each, which can be selected on its own. Parts keep the file's colors in both
+// themes, as a colored design's do; a body without one is colored as an STL's solids are.
+// Pieces name their part, so their colors need only differ: each is its part's, shifted a step
+// of 1/255 or two where repeated.
+export function bodyParts(mesh: Mesh): FileParts | undefined {
+  const bodies = mesh.groups?.filter(body => body.count > 0) ?? [];
+  if (bodies.length < 2) return;
+  const kinds = new Map<string, number>(), partOf = bodies.map((body, index) => {
+    const kind = body.name.trim() ? `${body.name}\u0000${body.color ?? ''}` : `#${String(index)}`;
+    if (!kinds.has(kind)) kinds.set(kind, kinds.size);
+    return kinds.get(kind) ?? 0;
+  });
+  if (kinds.size < 2 || kinds.size > maxParts) return;
+  const firsts = [...kinds.values()].map(part => bodies[partOf.indexOf(part)]);
+  const looks = firsts.map((body, part) => body.color ? { color: body.color, darkColor: body.color } : solidColor(part));
+  const colors = distinctColors(looks.map(look => look.color));
+  const parts = distinct(firsts.map((body, part) => shortName(body.name) || `Part ${String(part + 1)}`)).map((label, part) => ({
+    id: `body-${String(part + 1)}`, label, color: colors[part], darkColor: firsts[part].color ? colors[part] : looks[part].darkColor,
+  }));
+  const pieces = distinctColors(partOf.map(part => colors[part]));
+  return {
+    display: {
+      positions: mesh.positions, normals: mesh.normals, faces: mesh.faces,
+      groups: bodies.map((body, index) => ({ start: body.start, count: body.count, color: rgba(pieces[index]), mode: 'solid', part: parts[partOf[index]].id })),
+    },
+    parts, from: 'body',
+  };
 }
 
 // `display` is a colored design's mesh; `mesh` is the STL's, with any solids a text STL lists.

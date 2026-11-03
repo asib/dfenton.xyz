@@ -16,3 +16,16 @@ export function binaryStl(positions: Float32Array, normals: Float32Array): Array
   }
   return buffer;
 }
+
+// Each triangle's own normal, at its three corners, for a mesh whose normals are smoothed
+// across curved faces: an STL facet's normal is the facet's.
+export function faceNormals(positions: Float32Array): Float32Array {
+  const normals = new Float32Array(positions.length);
+  for (let offset = 0; offset < positions.length; offset += 9) {
+    const ux = positions[offset + 3] - positions[offset], uy = positions[offset + 4] - positions[offset + 1], uz = positions[offset + 5] - positions[offset + 2];
+    const vx = positions[offset + 6] - positions[offset], vy = positions[offset + 7] - positions[offset + 1], vz = positions[offset + 8] - positions[offset + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, length = Math.hypot(nx, ny, nz) || 1;
+    for (let corner = 0; corner < 3; corner++) normals.set([nx / length, ny / length, nz / length], offset + corner * 3);
+  }
+  return normals;
+}

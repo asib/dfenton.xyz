@@ -46,9 +46,12 @@ updates:
           - minor
           - patch
         # The CAD engine is 0.x and the drawings and tests depend on its
-        # output, so it gets PRs of its own.
+        # output, so it gets PRs of its own. So does the STEP reader, third-party
+        # WebAssembly (OpenCascade) run on visitors' files, so that a new version
+        # is reviewed on its own rather than merged in a batch.
         exclude-patterns:
           - openrscad-engine
+          - occt-import-js
       dev-dependencies:
         dependency-type: development
         update-types:

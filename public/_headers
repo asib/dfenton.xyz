@@ -1,0 +1,11 @@
+# Cloudflare Pages response headers.
+
+# The workers that read visitors' files run third-party WebAssembly: OpenCascade for STEP
+# files and the OpenSCAD engine. A worker takes its Content-Security-Policy from its own
+# response, so this one limits where their requests can go: only to this site, which they
+# need for the WebAssembly, so not even a compromised engine can send a visitor's file
+# anywhere else. Their scripts come only from this site too. 'unsafe-eval' lets them compile
+# WebAssembly and lets OpenCascade's generated bindings build functions from strings; code
+# that already runs in the worker gains nothing from that, as it can't reach the network.
+/assets/workers/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src 'self'

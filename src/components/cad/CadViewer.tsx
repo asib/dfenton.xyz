@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
+import { BufferAttribute, BufferGeometry } from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import type { CadEntry, PartColor } from '../../misc';
 import { createScene, maxSections, type HandleDrag, type PartAppearances, type PickedFace, type RenderMode } from './scene';
@@ -7,7 +8,7 @@ import ParametricControls, { type LocalModel } from './ParametricControls';
 import { coloredGeometry, geometryPieces, parseDisplayMesh, parsePieceLabels, visiblePartColors, type DisplayMesh } from './displayMesh';
 import type { CompiledModel } from './compiler.worker';
 import CutListTable from './CutListTable';
-import { fileParts, stlMesh, type FileParts } from './fileParts';
+import { bodyParts, fileParts, stlMesh, type FileParts, type Mesh } from './fileParts';
 import { inches } from './cutList';
 import { measure, type Measurable } from './measure';
 import SheetLayoutTable from './SheetLayoutTable';
@@ -41,6 +42,7 @@ const partsHints: Record<FileParts['from'], string> = {
   color: 'Each color in this file is a part, numbered in file order.',
   solid: 'Each separate solid in this file is a part, numbered in file order.',
   listed: 'Each solid this file lists is a part, by the name it gives, or else numbered in file order.',
+  body: 'Each body in this STEP file is a part, by the name it gives, or else numbered in file order. Copies of a body, alike in name and color, are one part with a piece each.',
 };
 
 // A model's geometry and the parts its legend lists. The site's models name their parts; a
@@ -57,13 +59,26 @@ function modelGeometry(display: DisplayMesh | undefined, stl: ArrayBuffer | unde
   return { geometry: new STLLoader().parse(stl), parts: palette, from: undefined };
 }
 
+// A STEP file's geometry, its bodies listed as parts when it has several. Copies, so scaling
+// the geometry (for an inch file) leaves the file's mesh as it was.
+function stepGeometry(mesh: Mesh) {
+  const found = bodyParts(mesh);
+  if (found) return { geometry: coloredGeometry(found.display, found.parts), parts: found.parts, from: found.from };
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(mesh.positions.slice(), 3));
+  geometry.setAttribute('normal', new BufferAttribute(mesh.normals.slice(), 3));
+  if (mesh.faces) geometry.userData.brepFaces = mesh.faces;
+  return { geometry, parts: undefined, from: undefined };
+}
+
 // `downloads` offers the model and source files; the model viewer turns it off for visitors' own
-// files. `local` is a visitor's SCAD file, compiled already, which opens without a request.
+// files. `local` is a visitor's SCAD file, compiled already, which opens without a request;
+// `step` is a visitor's STEP file, read already, its triangles grouped by body.
 // `fileUnits` are a visitor's file's units: an inch file is scaled to the scene's millimetres,
 // and lengths show in its units first. Site models give their units in the customizer instead.
 // `genericParts` numbers a visitor's file's colors or solids as parts, for the legend.
-export default function CadViewer({ entry, local, fileUnits, genericParts = false, downloads = true }: {
-  entry: CadEntry & { href: string }; local?: LocalModel; fileUnits?: 'mm' | 'inches'; genericParts?: boolean; downloads?: boolean;
+export default function CadViewer({ entry, local, step, fileUnits, genericParts = false, downloads = true }: {
+  entry: CadEntry & { href: string }; local?: LocalModel; step?: Mesh; fileUnits?: 'mm' | 'inches'; genericParts?: boolean; downloads?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
@@ -145,13 +160,13 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
         let display: DisplayMesh | undefined, stl: ArrayBuffer | undefined;
         const model = local && (latestModel.current ?? local.model);
         if (model) ({ display, stl } = model);
-        else {
+        else if (!step) {
           const response = await fetch(displayUrl ?? modelUrl, { signal: controller.signal });
           if (!response.ok) throw new Error('Model request failed.');
           if (displayUrl) display = parseDisplayMesh(await response.json());
           else stl = await response.arrayBuffer();
         }
-        const { geometry, parts, from } = modelGeometry(display, stl, palette, genericParts);
+        const { geometry, parts, from } = step ? stepGeometry(step) : modelGeometry(display, stl, palette, genericParts);
         if (scale !== 1) geometry.scale(scale, scale, scale);
         if (controller.signal.aborted) { geometry.dispose(); return; }
         setVisibleParts(parts);
@@ -178,7 +193,7 @@ export default function CadViewer({ entry, local, fileUnits, genericParts = fals
       element.querySelector('canvas')?.removeEventListener('webglcontextlost', lost);
       active?.dispose();
     };
-  }, [local, modelUrl, displayUrl, palette, genericParts, camera, downloads, scale]);
+  }, [local, step, modelUrl, displayUrl, palette, genericParts, camera, downloads, scale]);
 
   // The manipulator sits at the section's point, its arrow toward the removed side; it hides
   // while a face is being picked.
