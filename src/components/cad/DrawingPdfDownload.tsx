@@ -5,7 +5,7 @@ import { openTab, showPdf } from './openFile';
 export default function DrawingPdfDownload({ output, title }: { output: DrawingOutput; title: string }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const active = useRef<AbortController>();
+  const active = useRef<AbortController | undefined>(undefined);
   const latest = useRef(output);
   latest.current = output;
   useEffect(() => () => { active.current?.abort(); }, [output.sheet, output.stale]);
