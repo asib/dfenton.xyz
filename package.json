@@ -23,11 +23,11 @@
     "use-sound": "^4.0.3"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "0.186.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.6.2",
     "oxlint": "^1.91.0",
     "oxlint-tsgolint": "^7.0.2005",
     "postcss": "^8.5.32",

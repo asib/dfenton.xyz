@@ -1,6 +1,45 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* index.html puts .dark on <html> from the stored theme or the system's. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    /* The highlights are also in :root below, for the sun shadows. */
+    --color-dark-mode-text: #f4a460;
+    --color-dark-mode-highlight: #f0e891;
+    --color-dark-mode-bg: #1f1f1f;
+    --color-light-mode-text: #0c2231;
+    --color-light-mode-bg: #efe6ee;
+    --color-light-mode-highlight: #8a4f7d;
+
+    --ease-bounce: cubic-bezier(.47, 1.64, .41, .8);
+
+    --drop-shadow-sun-shadow: var(--sun-shadow);
+    --drop-shadow-sun-shadow-dark: var(--sun-shadow-dark);
+
+    @keyframes flash {
+        0%, 100% { opacity: 0; }
+        50% { opacity: 1; }
+    }
+
+    @keyframes dark-flash {
+        0%, 100% { opacity: 0; }
+        50% { opacity: 0.7; }
+    }
+
+    @keyframes bounce-y {
+        0% { transform: translateY(0%); }
+        4% { transform: translateY(-1.54%); }
+        8% { transform: translateY(-0.66%); }
+        18% { transform: translateY(-6.25%); }
+        26% { transform: translateY(-1.63%); }
+        46% { transform: translateY(-24.98%); }
+        64% { transform: translateY(-1.99%); }
+        76% { transform: translateY(-56.44%); }
+        88% { transform: translateY(-89.11%); }
+        100% { transform: translateY(-100%); }
+    }
+}
 
 @layer base {
     :root {
