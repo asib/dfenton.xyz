@@ -13,8 +13,10 @@ export type RenderMode = 'solid' | 'edges' | 'wireframe';
 // `handle` places one plane's manipulator, or null hides it. `excluded` parts and pieces (by
 // legend part ID or piece key) are left whole.
 export const maxSections = 3;
+// `perspective` shows the model in perspective; it's orthographic otherwise, as Onshape shows it.
 export interface ViewSettings {
   mode: RenderMode;
+  perspective?: boolean;
   sections: SectionPlane[];
   handle?: SectionHandle | null;
   excluded?: string[];
@@ -89,6 +91,30 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, radius / 100, radius * 100);
   camera.up.set(0, 0, 1);
+  // The perspective camera is the eye that orbiting, panning, zooming and the named views move.
+  // Shown orthographically, as by default, the orthographic camera copies its view each time
+  // the view is drawn, picked or measured (`lens`): it sees as much as the perspective camera
+  // does at the target's distance, so moving the eye nearer still zooms, and the point under
+  // the pointer stays put as in perspective. It sits well back along the line of sight, so the
+  // model is always in front of it, however near the eye has come.
+  const ortho = new THREE.OrthographicCamera();
+  let perspective = false;
+  const lens = (): THREE.Camera => {
+    if (perspective) return camera;
+    const half = camera.position.distanceTo(controls.target) * Math.tan(camera.fov * Math.PI / 360);
+    ortho.left = -half * camera.aspect;
+    ortho.right = half * camera.aspect;
+    ortho.top = half;
+    ortho.bottom = -half;
+    const back = controls.target.length() + radius * 4;
+    ortho.near = radius / 100;
+    ortho.far = back + controls.target.length() + radius * 2;
+    ortho.position.copy(controls.target).addScaledVector(camera.getWorldDirection(new THREE.Vector3()), -back);
+    ortho.quaternion.copy(camera.quaternion);
+    ortho.updateProjectionMatrix();
+    ortho.updateMatrixWorld();
+    return ortho;
+  };
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.minDistance = radius * 0.25;
   controls.maxDistance = radius * 15;
@@ -114,7 +140,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     rotate: (axis, angle) => { rotate(axis, angle); focusCanvas(); },
     view: name => { view(name); },
   });
-  const render = () => { placeHandle(); renderer.render(scene, camera); placeLabel(); viewCube.update(camera); };
+  const render = () => { placeHandle(); renderer.render(scene, lens()); placeLabel(); viewCube.update(camera); };
   controls.addEventListener('change', render);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.6));
@@ -249,7 +275,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   };
   placeHandle = () => {
     if (!handle.visible) return;
-    const pixels = 2 * camera.position.distanceTo(handle.position) * Math.tan(camera.fov * Math.PI / 360) / (renderer.domElement.clientHeight || 1);
+    // A pixel's size where the handle is; orthographically, the same at every depth.
+    const pixels = 2 * camera.position.distanceTo(perspective ? handle.position : controls.target) * Math.tan(camera.fov * Math.PI / 360) / (renderer.domElement.clientHeight || 1);
     handle.scale.setScalar(pixels * 84);
   };
 
@@ -295,7 +322,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const labelAnchor = new THREE.Vector3();
   placeLabel = () => {
     if (!measureLabel.textContent) return;
-    const p = labelAnchor.clone().project(camera);
+    const p = labelAnchor.clone().project(lens());
     measureLabel.hidden = p.z > 1;
     measureLabel.style.transform = `translate(${String((p.x + 1) / 2 * host.clientWidth)}px, ${String((1 - p.y) / 2 * host.clientHeight)}px) translate(-50%, -135%)`;
   };
@@ -434,6 +461,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
 
   const setSettings = (next: ViewSettings) => {
     settings = next;
+    perspective = !!next.perspective;
     next.sections.slice(0, maxSections).forEach((section, index) => {
       // Each plane faces away from the side it removes. Scene coordinates are model
       // coordinates less the origin.
@@ -629,7 +657,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const raycaster = new THREE.Raycaster();
   const hitAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
-    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
+    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), lens());
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
       if (!layer || visible(layer).hidden || clipped(layer, hit.point)) continue;
@@ -644,7 +672,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // The manipulator's handle under a client position: 0 for the arrow, 1 and 2 for the arcs.
   const rayAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
-    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
+    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), lens());
     return raycaster.ray;
   };
   const handleAt = (x: number, y: number) => {
@@ -718,14 +746,17 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // hidden behind opaque material; hidden or translucent parts never occlude.
   const projected = new THREE.Vector3();
   const toScreen = (p: number[], rect: DOMRect) => {
-    projected.set(p[0], p[1], p[2]).project(camera);
+    projected.set(p[0], p[1], p[2]).project(lens());
     return { x: rect.left + (projected.x + 1) / 2 * rect.width, y: rect.top + (1 - projected.y) / 2 * rect.height, behind: projected.z > 1 };
   };
   const unobstructed = (point: THREE.Vector3, owner: Layer) => {
     if (clipped(owner, point)) return false;
-    const direction = point.clone().sub(camera.position);
+    // The line of sight to the point: from the eye, or orthographically straight along the
+    // view from beyond the model.
+    const from = perspective ? camera.position.clone() : point.clone().addScaledVector(camera.getWorldDirection(new THREE.Vector3()), -radius * 3);
+    const direction = point.clone().sub(from);
     const distance = direction.length();
-    raycaster.set(camera.position, direction.normalize());
+    raycaster.set(from, direction.normalize());
     for (const hit of raycaster.intersectObject(mesh, false)) {
       if (hit.distance >= distance - radius * 2e-3) return true;
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
@@ -797,7 +828,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   let orbiting: { id: number; x: number; y: number } | null = null;
   const surfaceAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
-    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), camera);
+    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), lens());
     for (const hit of raycaster.intersectObject(mesh, false)) {
       const layer = layers[hit.face?.materialIndex ?? -1] as Layer | undefined;
       if (!layer || visible(layer).hidden || clipped(layer, hit.point)) continue;
