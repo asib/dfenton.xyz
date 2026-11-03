@@ -272,6 +272,38 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       });
     });
   };
+  // Each plane outlines its pieces' cuts, where it crosses their triangles, so pieces of one
+  // color that touch still show their joint. The lines sit a hair toward the removed side, in
+  // front of the caps, and are drawn in Solid + edges, as the model's edges are.
+  const cutLines = planes.map(() => {
+    const lines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial());
+    lines.renderOrder = 4;
+    return lines;
+  });
+  scene.add(...cutLines);
+  const outlineCuts = (index: number, pieces: Layer[]) => {
+    const plane = planes[index], positions = geometry.getAttribute('position').array, segments: number[] = [];
+    const lift = plane.normal.clone().multiplyScalar(-radius * 5e-4), corner = new THREE.Vector3();
+    // Where the side from one corner to another crosses the plane.
+    const cross = (from: number, to: number, a: number, b: number) => {
+      const t = a / (a - b);
+      for (let axis = 0; axis < 3; axis++) segments.push(positions[from + axis] + (positions[to + axis] - positions[from + axis]) * t + lift.getComponent(axis));
+    };
+    for (const layer of pieces) {
+      const { start, count } = layer.view.drawRange;
+      for (let vertex = start; vertex < start + count; vertex += 3) {
+        const a = vertex * 3, b = a + 3, c = a + 6;
+        const da = plane.distanceToPoint(corner.fromArray(positions, a)), db = plane.distanceToPoint(corner.fromArray(positions, b)), dc = plane.distanceToPoint(corner.fromArray(positions, c));
+        if ((da < 0) !== (db < 0)) cross(a, b, da, db);
+        if ((db < 0) !== (dc < 0)) cross(b, c, db, dc);
+        if ((dc < 0) !== (da < 0)) cross(c, a, dc, da);
+      }
+    }
+    cutLines[index].geometry.dispose();
+    const next = new THREE.BufferGeometry();
+    next.setAttribute('position', new THREE.Float32BufferAttribute(segments, 3));
+    cutLines[index].geometry = next;
+  };
   // A cap covers only where the plane crosses its piece's bounding sphere: the square around
   // that disk. So caps fill no more of the screen than their pieces, and a piece the plane
   // misses draws no stencil count or cap at all.
@@ -454,6 +486,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (selectedLayer || hovered) cut.lerp(new THREE.Color(tint), selectedLayer ? 0.35 : 0.22);
       for (const cap of layer.caps) cap.material.color.copy(cut);
     }
+    for (const lines of cutLines) lines.material.color.set(colors.edge);
     lineMaterials[0].color.set(colors.selected);
     lineMaterials[1].color.set(colors.hover);
     pivotMaterial.color.set(colors.edge);
@@ -478,6 +511,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const { mode } = settings;
     const active = planes.slice(0, settings.sections.length);
     const colored = geometry.hasAttribute('colorLight');
+    const capped = planes.map((): Layer[] => []);
     for (const layer of layers) {
       const { hidden, opacity } = visible(layer);
       const translucent = opacity < 0.999;
@@ -500,12 +534,17 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       layer.edges.material.needsUpdate = true;
       // Section caps fill only fully opaque, visible, cut parts.
       layer.stencil.forEach((pair, index) => {
-        const capped = !hidden && !translucent && index < cut.length && layer.crossed[index];
-        pair.forEach((material) => { material.visible = capped; });
-        layer.caps[index].visible = capped;
+        const shown = !hidden && !translucent && index < cut.length && layer.crossed[index];
+        pair.forEach((material) => { material.visible = shown; });
+        layer.caps[index].visible = shown;
+        if (shown) capped[index].push(layer);
       });
     }
     cutGroups.forEach((group, index) => { group.visible = index < active.length && mode !== 'wireframe'; });
+    cutLines.forEach((lines, index) => {
+      lines.visible = index < active.length && mode === 'edges';
+      if (lines.visible) outlineCuts(index, capped[index]);
+    });
     paint();
   };
 
@@ -533,6 +572,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
         cap.material.needsUpdate = true;
       });
     }
+    cutLines.forEach((lines, index) => {
+      lines.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < settings.sections.length);
+      lines.material.needsUpdate = true;
+    });
   };
   const setSettings = (next: ViewSettings) => {
     settings = next;
@@ -1121,6 +1164,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       geometry.dispose();
       disposeLayers(layers);
       capGeometry.dispose();
+      cutLines.forEach((lines) => { lines.geometry.dispose(); lines.material.dispose(); });
       [...handleGeometries, ...outlineGeometries].forEach((part) => { part.dispose(); });
       [...handleMaterials, outlineMaterial, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
