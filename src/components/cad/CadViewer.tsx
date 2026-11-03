@@ -319,10 +319,16 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
       return [...current, target.key];
     });
   };
+  // Where each face was clicked, so a section can be set through it.
+  const faceClicks = useRef(new Map<string, PickedFace>());
   // A click selects, or while picking, sections through the face clicked.
   const pick = useRef<(key: string | null, face: PickedFace | null) => void>(toggleSelect);
   pick.current = (key, face) => {
-    if (!picking) { toggleSelect(key); return; }
+    if (!picking) {
+      if (key?.startsWith('face:') && face) faceClicks.current.set(key, face);
+      toggleSelect(key);
+      return;
+    }
     if (!face || !viewer) return;
     setSection(startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size)));
     setPicking(false);
@@ -396,7 +402,13 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   // A default plane from the Section menu opens through the middle of the model; "Face" waits
   // for a click on one. Shift+X brings back the last section, or else the front plane.
   const start = (plane: DefaultPlane) => viewer && startSection(defaultPlanes[plane], tuple(viewer.sourceMin), tuple(viewer.size));
+  // The selected face, the last one clicked, if any: turning the section on, from the menu's
+  // Face, Shift+X or Add plane, cuts through it, where it was clicked.
+  const selectedFace = [...selected].reverse().map(key => faceClicks.current.get(key)).find(face => !!face);
+  const throughFace = () => selectedFace && viewer && startSection(facePlane(selectedFace.point, selectedFace.normal), tuple(viewer.sourceMin), tuple(viewer.size));
   const chooseSection = (value: string) => {
+    const face = value === 'face' ? throughFace() : null;
+    if (face) { setPicking(false); setSection(face); return; }
     if (value === 'face') { setPicking(true); return; }
     setPicking(false);
     const next = value === 'off' ? null : start(value as DefaultPlane);
@@ -406,7 +418,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const toggleSection = () => {
     setPicking(false);
     if (sections.length) { setSections([]); setActive(0); return; }
-    const restored = lastSections.current ?? { sections: [start('front')].filter(item => !!item), active: 0 };
+    const face = throughFace();
+    const restored = face ? { sections: [face], active: 0 } : lastSections.current ?? { sections: [start('front')].filter(item => !!item), active: 0 };
     setSections(restored.sections);
     setActive(restored.active);
   };
@@ -414,7 +427,10 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   // second plane makes a corner cutaway. It becomes the active one.
   const addSection = () => {
     const used = new Set(sections.map(item => item.reference.plane));
-    const next = start((['front', 'right', 'top'] as const).find(plane => !used.has(plane)) ?? 'front');
+    // The selected face, unless a plane already passes where it was clicked.
+    const face = throughFace();
+    const faceUsed = !!face && sections.some(item => item.reference.anchor?.every((n, i) => n === face.reference.anchor?.[i]));
+    const next = face && !faceUsed ? face : start((['front', 'right', 'top'] as const).find(plane => !used.has(plane)) ?? 'front');
     if (!next || sections.length >= maxSections) return;
     setSections([...sections, next]);
     setActive(sections.length);
@@ -583,7 +599,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
               : section ? `${planeNames[section.reference.plane]} section${sections.length > 1 ? ` ${String(active + 1)} of ${String(sections.length)}` : ''} · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face you click, from the Section menu; drag its arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face from the Section menu; with a face selected, its Selected face, Shift+X and Add plane cut through that face. Drag the section’s arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
             ? ' Click faces, edges or corners, or parts in the legend, to add them to the selection or remove them; click empty space to clear it. A selected face stands for its part: Y hides and Shift+Y shows; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click faces, edges or corners to add them to the selection or remove them, measuring edges and corners; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -602,7 +618,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 <option value="front">Front plane</option>
                 <option value="top">Top plane</option>
                 <option value="right">Right plane</option>
-                <option value="face">{section?.reference.plane === 'face' ? 'Face' : 'Face…'}</option>
+                <option value="face">{section?.reference.plane === 'face' ? 'Face' : selectedFace ? 'Selected face' : 'Face…'}</option>
               </select>
             </label>
             {sections.length > 0 && <div className="cad-section-planes" role="group" aria-label="Section planes">
