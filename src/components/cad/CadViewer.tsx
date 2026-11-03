@@ -632,7 +632,6 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 <label className="cad-checkbox"><input type="checkbox" checked={section.flipped} onChange={(event) => { setSection({ ...section, flipped: event.target.checked }); }} />Flip cut</label>
                 <button type="button" onClick={viewNormal} title="View normal to the section (N)" aria-keyshortcuts="N">View normal</button>
                 <button type="button" onClick={() => { setPicking(true); }}>Pick a face</button>
-                {mode !== 'wireframe' && <span className="cad-section-key"><i aria-hidden="true" />Cut surface</span>}
                 {hasLegend && <div className="cad-section-excluded">
                   <button type="button" disabled={!selection.length} onClick={excludeSelection}>Leave selection uncut</button>
                   {excluded.length > 0 && <>

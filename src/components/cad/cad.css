@@ -101,8 +101,6 @@
 /* A checkbox among the display controls sits beside its label, in the controls' text size. */
 .cad-controls > .cad-checkbox { display: flex; font-size: 14px; }
 .cad-checkbox input { width: 16px; height: 16px; accent-color: var(--cad-section); }
-.cad-section-key { display: flex; align-items: center; gap: 7px; font-size: 12px; }
-.cad-section-key i { width: 12px; height: 12px; background: var(--cad-section); }
 .cad-section-number { display: grid; gap: 6px; font-size: 12px; }
 .cad-section-number span { display: flex; align-items: center; gap: 6px; }
 .cad-section-number input { width: 7em; min-height: 40px; padding: 8px; color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 4px; font: inherit; font-size: 14px; }
