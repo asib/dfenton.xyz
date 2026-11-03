@@ -177,10 +177,11 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       clippingPlanes: [plane],
     });
   };
-  // A cut shows its piece's color, a little darker, hatched as a section is in a drawing with
-  // diagonal lines darker still, so it reads as a cut in any color. The lines are spaced on
-  // the screen, so zooming doesn't spread them.
-  const cutShade = 0.85, hatch = { shade: 0.6, spacing: 7 * renderer.getPixelRatio(), width: 1.5 * renderer.getPixelRatio() };
+  // A cut shows its piece's color brightened, toward white, so it stands out from the model's
+  // lit faces, hatched as a section is in a drawing with diagonal lines darker, so it reads as
+  // a cut in any color. The lines are spaced on the screen, so zooming doesn't spread them.
+  const cutLift = 0.2, hatch = { shade: 0.6, spacing: 7 * renderer.getPixelRatio(), width: 1.5 * renderer.getPixelRatio() };
+  const white = new THREE.Color(1, 1, 1);
   const hatchCut = (shader: THREE.WebGLProgramParametersWithUniforms) => {
     shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
       if (mod(gl_FragCoord.x - gl_FragCoord.y, ${hatch.spacing.toFixed(1)}) < ${hatch.width.toFixed(1)}) gl_FragColor.rgb *= ${hatch.shade.toFixed(2)};`);
@@ -480,9 +481,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       layer.solid.emissiveIntensity = selectedLayer ? 0.35 : hovered ? 0.22 : 0;
       layer.edges.visible = !visible(layer).hidden && (settings.mode === 'edges' || selectedLayer || hovered);
       layer.edges.material.color.set(selectedLayer ? colors.selected : hovered ? colors.hover : colors.edge);
-      // A cut shows its piece's color, a shade darker than its lit faces, and is tinted as they are.
+      // A cut shows its piece's color brightened, and is tinted as its faces are.
       const cut = pieceColors ? new THREE.Color().fromBufferAttribute(pieceColors, layer.first) : new THREE.Color(colors.body);
-      cut.multiplyScalar(cutShade);
+      cut.lerp(white, cutLift);
       if (selectedLayer || hovered) cut.lerp(new THREE.Color(tint), selectedLayer ? 0.35 : 0.22);
       for (const cap of layer.caps) cap.material.color.copy(cut);
     }
