@@ -4,7 +4,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { SectionPlane } from './section';
-import { edgeTopology, faceEdges, type Topology } from './topology';
+import { edgeTopology, faceEdges, faceRegions, type Topology } from './topology';
 import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
@@ -50,15 +50,27 @@ export type PartAppearances = Partial<Record<string, PartAppearance>>;
 const defaultCamera: [number, number, number] = [1.35, 1.8, 1.1];
 
 // One layer per geometry group (a colored piece, or the whole STL), so each
-// piece can be faded, hidden or highlighted with its own edges and stencil.
+// piece can be faded, hidden or highlighted with its own edges, and cut with its own cap.
 interface Layer {
   part: string | null;
   piece: string | null;
-  // Whole edges and vertices of the piece, in scene coordinates.
+  // The group's first vertex, whose color is the piece's.
+  first: number;
+  // Whole edges and vertices of the piece, in scene coordinates, and its faces: each triangle's
+  // face, numbered from 0, as regions its drawn edges enclose, or a STEP file's own faces.
   topology: Topology;
+  faces: { faceOf: Int32Array; count: number };
   solid: THREE.MeshStandardMaterial;
-  // Back and front stencil materials for each section plane.
+  // The piece's own triangles, sharing the model's buffer, for its stencil count, and the
+  // sphere around them, which places its caps.
+  view: THREE.BufferGeometry;
+  bounds: THREE.Sphere;
+  // Whether each section plane passes through the piece.
+  crossed: boolean[];
+  // Back and front stencil materials and meshes, and the cap, for each section plane.
   stencil: THREE.MeshBasicMaterial[][];
+  counts: THREE.Mesh[][];
+  caps: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   edges: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
 }
 
@@ -156,7 +168,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   const capClips = planes.map(() => new THREE.Plane());
   // Count back/front intersections in stencil so the cut is filled only inside
   // the solid. Cavities remain empty. Based on Three.js's clipping-stencil example;
-  // each plane counts with only itself clipping, then fills its cap and clears.
+  // for each plane, each piece counts with only that plane clipping, then fills its own
+  // cap, in its own color, and clears, so pieces that touch keep their own colors.
   const stencilMaterial = (side: THREE.Side, plane: THREE.Plane) => {
     const operation = side === THREE.BackSide ? THREE.IncrementWrapStencilOp : THREE.DecrementWrapStencilOp;
     return new THREE.MeshBasicMaterial({
@@ -166,6 +179,31 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       clippingPlanes: [plane],
     });
   };
+  // A cut shows its piece's color brightened, toward white, so it stands out from the model's
+  // lit faces, hatched as a section is in a drawing with diagonal lines darker, so it reads as
+  // a cut in any color. The lines are spaced on the screen, so zooming doesn't spread them.
+  const cutLift = 0.2, hatch = { shade: 0.6, spacing: 7 * renderer.getPixelRatio(), width: 1.5 * renderer.getPixelRatio() };
+  const white = new THREE.Color(1, 1, 1);
+  const hatchCut = (shader: THREE.WebGLProgramParametersWithUniforms) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+      if (mod(gl_FragCoord.x - gl_FragCoord.y, ${hatch.spacing.toFixed(1)}) < ${hatch.width.toFixed(1)}) gl_FragColor.rgb *= ${hatch.shade.toFixed(2)};`);
+  };
+  // A cap: a square on the plane, filled where its piece's count is nonzero.
+  const capMesh = (shape: THREE.PlaneGeometry) => {
+    const material = new THREE.MeshBasicMaterial({
+      side: THREE.DoubleSide,
+      stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
+      stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp,
+    });
+    material.onBeforeCompile = hatchCut;
+    material.customProgramCacheKey = () => 'hatched-cut';
+    const cap = new THREE.Mesh(shape, material);
+    cap.onAfterRender = () => { renderer.clearStencil(); };
+    return cap;
+  };
+  // Every cap is this unit square, placed and sized on its plane for its piece.
+  const capGeometry = new THREE.PlaneGeometry(1, 1);
   const buildLayers = (source: THREE.BufferGeometry): Layer[] => {
     if (!source.groups.length) source.addGroup(0, source.getAttribute('position').count, 0);
     const parts = (source.userData.partIds ?? []) as (string | null)[];
@@ -181,16 +219,28 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (faces) lines.setAttribute('position', new THREE.BufferAttribute(faceEdges(slice.getAttribute('position').array, faces.subarray(group.start / 3, (group.start + group.count) / 3)), 3));
       else lines = new THREE.EdgesGeometry(slice, 25);
       const edges = new THREE.LineSegments(lines, new THREE.LineBasicMaterial());
-      slice.dispose();
       edges.renderOrder = 4;
       const part = parts[index] ?? null;
+      const view = new THREE.BufferGeometry();
+      view.setAttribute('position', source.getAttribute('position'));
+      view.setDrawRange(group.start, group.count);
+      const bounds = new THREE.Box3().setFromBufferAttribute(slice.getAttribute('position') as THREE.BufferAttribute).getBoundingSphere(new THREE.Sphere());
+      slice.dispose();
+      const stencil = planes.map(plane => [stencilMaterial(THREE.BackSide, plane), stencilMaterial(THREE.FrontSide, plane)]);
       return {
         part,
         piece: part ? pieces[index] ?? null : null,
+        first: group.start,
         // Picking uses exactly the creases that are drawn, joined into whole edges.
         topology: edgeTopology(edges.geometry.getAttribute('position').array, 1e-3, !!faces),
+        faces: faceRegions(positions.subarray(group.start * 3, (group.start + group.count) * 3), 25, faces?.subarray(group.start / 3, (group.start + group.count) / 3)),
         solid: new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
-        stencil: planes.map(plane => [stencilMaterial(THREE.BackSide, plane), stencilMaterial(THREE.FrontSide, plane)]),
+        view,
+        bounds,
+        crossed: planes.map(() => false),
+        stencil,
+        counts: stencil.map(pair => pair.map(material => new THREE.Mesh(view, material))),
+        caps: planes.map(() => capMesh(capGeometry)),
         edges,
       };
     });
@@ -199,6 +249,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (const layer of old) {
       layer.solid.dispose();
       layer.stencil.flat().forEach((material) => { material.dispose(); });
+      layer.caps.forEach((cap) => { cap.material.dispose(); });
+      layer.view.dispose();
       layer.edges.geometry.dispose();
       layer.edges.material.dispose();
     }
@@ -208,28 +260,71 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   mesh.renderOrder = 3;
   const edgesGroup = new THREE.Group();
   edgesGroup.add(...layers.map((layer) => layer.edges));
-  // Each plane's stencil count and cap draw in turn, between the model and its edges.
-  const stencilMeshes = planes.map((_, index) => [0, 1].map((side) => {
-    const stencilMesh = new THREE.Mesh(geometry, layers.map((layer) => layer.stencil[index][side]));
-    stencilMesh.renderOrder = 1 + index / maxSections;
-    return stencilMesh;
-  }));
-  const stencilGroups = stencilMeshes.map((pair) => { const group = new THREE.Group(); group.add(...pair); return group; });
   scene.add(mesh, edgesGroup);
-
-  let capGeometry = new THREE.PlaneGeometry(radius * 3, radius * 3);
-  const caps = planes.map((_, index) => {
-    const cap = new THREE.Mesh(capGeometry, new THREE.MeshBasicMaterial({
-      side: THREE.DoubleSide,
-      stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
-      stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp,
-      stencilZPass: THREE.ReplaceStencilOp,
-    }));
-    cap.renderOrder = 1 + (index + 0.5) / maxSections;
-    cap.onAfterRender = () => { renderer.clearStencil(); };
-    return cap;
+  // Each plane's pieces count their stencils and fill their caps in turn, between the model
+  // and its edges.
+  const cutGroups = planes.map(() => new THREE.Group());
+  const mountCuts = () => {
+    const steps = maxSections * layers.length;
+    cutGroups.forEach((group, index) => {
+      group.clear();
+      layers.forEach((layer, l) => {
+        const order = 1 + 1.9 * (index * layers.length + l) / steps;
+        layer.counts[index].forEach((count) => { count.renderOrder = order; group.add(count); });
+        layer.caps[index].renderOrder = order + 0.9 / steps;
+        group.add(layer.caps[index]);
+      });
+    });
+  };
+  // Each plane outlines its pieces' cuts, where it crosses their triangles, so pieces of one
+  // color that touch still show their joint. The lines sit a hair toward the removed side, in
+  // front of the caps, and are drawn in Solid + edges, as the model's edges are.
+  const cutLines = planes.map(() => {
+    const lines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial());
+    lines.renderOrder = 4;
+    return lines;
   });
-  scene.add(...stencilGroups, ...caps);
+  scene.add(...cutLines);
+  const outlineCuts = (index: number, pieces: Layer[]) => {
+    const plane = planes[index], positions = geometry.getAttribute('position').array, segments: number[] = [];
+    const lift = plane.normal.clone().multiplyScalar(-radius * 5e-4), corner = new THREE.Vector3();
+    // Where the side from one corner to another crosses the plane.
+    const cross = (from: number, to: number, a: number, b: number) => {
+      const t = a / (a - b);
+      for (let axis = 0; axis < 3; axis++) segments.push(positions[from + axis] + (positions[to + axis] - positions[from + axis]) * t + lift.getComponent(axis));
+    };
+    for (const layer of pieces) {
+      const { start, count } = layer.view.drawRange;
+      for (let vertex = start; vertex < start + count; vertex += 3) {
+        const a = vertex * 3, b = a + 3, c = a + 6;
+        const da = plane.distanceToPoint(corner.fromArray(positions, a)), db = plane.distanceToPoint(corner.fromArray(positions, b)), dc = plane.distanceToPoint(corner.fromArray(positions, c));
+        if ((da < 0) !== (db < 0)) cross(a, b, da, db);
+        if ((db < 0) !== (dc < 0)) cross(b, c, db, dc);
+        if ((dc < 0) !== (da < 0)) cross(c, a, dc, da);
+      }
+    }
+    cutLines[index].geometry.dispose();
+    const next = new THREE.BufferGeometry();
+    next.setAttribute('position', new THREE.Float32BufferAttribute(segments, 3));
+    cutLines[index].geometry = next;
+  };
+  // A cap covers only where the plane crosses its piece's bounding sphere: the square around
+  // that disk. So caps fill no more of the screen than their pieces, and a piece the plane
+  // misses draws no stencil count or cap at all.
+  const placeCaps = (index: number) => {
+    const plane = planes[index];
+    for (const layer of layers) {
+      const distance = plane.distanceToPoint(layer.bounds.center), reach = layer.bounds.radius ** 2 - distance ** 2;
+      layer.crossed[index] = reach > 0;
+      if (reach <= 0) continue;
+      const cap = layer.caps[index];
+      cap.position.copy(layer.bounds.center).addScaledVector(plane.normal, -distance);
+      cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), plane.normal);
+      cap.scale.setScalar(2 * Math.sqrt(reach));
+    }
+  };
+  mountCuts();
+  scene.add(...cutGroups);
 
   // The section manipulator, as in Onshape: an arrow toward the removed side, dragged to move
   // the plane along it and clicked to flip it, and two arcs dragged to tilt the plane about its
@@ -288,6 +383,17 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     lines.visible = false;
     return lines;
   });
+  // Selected and hovered faces draw over the model in the selection colors, half see-through.
+  const faceMaterials = [0, 1].map(() => new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  }));
+  const faceOverlays = faceMaterials.map((material) => {
+    const overlay = new THREE.Mesh(new THREE.BufferGeometry(), material);
+    overlay.renderOrder = 5;
+    overlay.visible = false;
+    return overlay;
+  });
   const dotCanvas = document.createElement('canvas');
   dotCanvas.width = dotCanvas.height = 32;
   const dotContext = dotCanvas.getContext('2d');
@@ -326,17 +432,18 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     measureLabel.hidden = p.z > 1;
     measureLabel.style.transform = `translate(${String((p.x + 1) / 2 * host.clientWidth)}px, ${String((1 - p.y) / 2 * host.clientHeight)}px) translate(-50%, -135%)`;
   };
-  scene.add(...edgeOverlays, ...vertexOverlays, pivotMarker, measureLine, measureEnds);
+  scene.add(...faceOverlays, ...edgeOverlays, ...vertexOverlays, pivotMarker, measureLine, measureEnds);
 
-  // Edges and vertices are keyed "edge:<version>:<layer>:<index>"; regenerating the
+  // Faces, edges and vertices are keyed "edge:<version>:<layer>:<index>"; regenerating the
   // model bumps the version, so a stale key can never name a different edge.
   let version = 0;
   const entityAt = (key: string | null) => {
-    const match = key ? /^(edge|vertex):(\d+):(\d+):(\d+)$/.exec(key) : null;
+    const match = key ? /^(face|edge|vertex):(\d+):(\d+):(\d+)$/.exec(key) : null;
     if (!match || Number(match[2]) !== version) return undefined;
     const layer = layers[Number(match[3])] as Layer | undefined;
     const index = Number(match[4]);
     if (!layer) return undefined;
+    if (match[1] === 'face') return index < layer.faces.count ? { kind: 'face' as const, layer, face: index } : undefined;
     if (match[1] === 'edge') {
       const edge = layer.topology.edges[index] as Topology['edges'][number] | undefined;
       return edge ? { kind: 'edge' as const, layer, edge } : undefined;
@@ -350,8 +457,55 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     for (let i = 0; i + 5 < points.length; i += 3) pairs.push(...points.slice(i, i + 6));
     return pairs;
   };
+  // A face for measuring, in model coordinates: its triangles, area and centre, and its normal
+  // if it's flat. Kept until the model changes, as keys name it only for one version.
+  const faceShapes = new Map<string, { triangles: number[][][]; area: number; center: number[]; normal?: number[] }>();
+  const faceShape = (key: string, layer: Layer, face: number) => {
+    const known = faceShapes.get(key);
+    if (known) return known;
+    const points = faceTriangles(layer, face).map((n, i) => n + origin.getComponent(i % 3));
+    const triangles: number[][][] = [], center = [0, 0, 0];
+    let area = 0, first: THREE.Vector3 | undefined, flat = true;
+    const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    for (let i = 0; i < points.length; i += 9) {
+      a.fromArray(points, i); b.fromArray(points, i + 3); c.fromArray(points, i + 6);
+      const normal = b.clone().sub(a).cross(c.clone().sub(a)), size = normal.length() / 2;
+      triangles.push([a.toArray(), b.toArray(), c.toArray()]);
+      area += size;
+      for (let axis = 0; axis < 3; axis++) center[axis] += (a.getComponent(axis) + b.getComponent(axis) + c.getComponent(axis)) / 3 * size;
+      if (size > 0) {
+        normal.normalize();
+        if (!first) first = normal;
+        else if (normal.dot(first) < 1 - 1e-6) flat = false;
+      }
+    }
+    const shape = { triangles, area, center: center.map(n => area ? n / area : n), ...(flat && first ? { normal: first.toArray() } : {}) };
+    faceShapes.set(key, shape);
+    return shape;
+  };
+  // A face's triangles, in scene coordinates.
+  const faceTriangles = (layer: Layer, face: number) => {
+    const positions = geometry.getAttribute('position').array, points: number[] = [];
+    layer.faces.faceOf.forEach((of, triangle) => {
+      if (of !== face) return;
+      const from = (layer.first / 3 + triangle) * 9;
+      for (let i = 0; i < 9; i++) points.push(positions[from + i]);
+    });
+    return points;
+  };
   const drawEntities = (keys: string[], overlay: 0 | 1) => {
     const found = keys.map(entityAt).filter((item) => !!item && !visible(item.layer).hidden);
+    const shapes = found.flatMap((item) => item?.kind === 'face' ? faceTriangles(item.layer, item.face) : []);
+    const area = new THREE.BufferGeometry();
+    area.setAttribute('position', new THREE.Float32BufferAttribute(shapes, 3));
+    faceOverlays[overlay].geometry.dispose();
+    faceOverlays[overlay].geometry = area;
+    faceOverlays[overlay].visible = shapes.length > 0;
+    // Cut as the model is, unless every face shown is on a part left whole.
+    const cut = found.every(item => item?.kind === 'face' ? whole(item.layer) : true) ? [] : planes.slice(0, settings.sections.length);
+    faceMaterials[overlay].clippingPlanes = cut;
+    faceMaterials[overlay].clipIntersection = cut.length > 1;
+    faceMaterials[overlay].needsUpdate = true;
     const segments = found.flatMap((item) => item?.kind === 'edge' ? edgeSegments(item.edge.points) : []);
     const dots = found.flatMap((item) => item?.kind === 'vertex' ? item.vertex : []);
     // Fresh geometries each time: a refilled instanced line geometry keeps the
@@ -380,6 +534,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   // pointer never recompiles materials.
   const paint = () => {
     const hover = pointerHover ?? externalHover;
+    const pieceColors = geometry.hasAttribute('colorLight') ? geometry.getAttribute('color') : undefined;
     for (const layer of layers) {
       const selectedLayer = selected.some(key => matches(layer, key));
       const hovered = !selectedLayer && matches(layer, hover);
@@ -388,7 +543,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       layer.solid.emissiveIntensity = selectedLayer ? 0.35 : hovered ? 0.22 : 0;
       layer.edges.visible = !visible(layer).hidden && (settings.mode === 'edges' || selectedLayer || hovered);
       layer.edges.material.color.set(selectedLayer ? colors.selected : hovered ? colors.hover : colors.edge);
+      // A cut shows its piece's color brightened, and is tinted as its faces are.
+      const cut = pieceColors ? new THREE.Color().fromBufferAttribute(pieceColors, layer.first) : new THREE.Color(colors.body);
+      cut.lerp(white, cutLift);
+      if (selectedLayer || hovered) cut.lerp(new THREE.Color(tint), selectedLayer ? 0.35 : 0.22);
+      for (const cap of layer.caps) cap.material.color.copy(cut);
     }
+    for (const lines of cutLines) lines.material.color.set(colors.edge);
+    faceMaterials[0].color.set(colors.selected);
+    faceMaterials[1].color.set(colors.hover);
     lineMaterials[0].color.set(colors.selected);
     lineMaterials[1].color.set(colors.hover);
     pivotMaterial.color.set(colors.edge);
@@ -413,6 +576,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const { mode } = settings;
     const active = planes.slice(0, settings.sections.length);
     const colored = geometry.hasAttribute('colorLight');
+    const capped = planes.map((): Layer[] => []);
     for (const layer of layers) {
       const { hidden, opacity } = visible(layer);
       const translucent = opacity < 0.999;
@@ -435,10 +599,17 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       layer.edges.material.needsUpdate = true;
       // Section caps fill only fully opaque, visible, cut parts.
       layer.stencil.forEach((pair, index) => {
-        pair.forEach((material) => { material.visible = !hidden && !translucent && index < cut.length; });
+        const shown = !hidden && !translucent && index < cut.length && layer.crossed[index];
+        pair.forEach((material) => { material.visible = shown; });
+        layer.caps[index].visible = shown;
+        if (shown) capped[index].push(layer);
       });
     }
-    stencilGroups.forEach((group, index) => { group.visible = caps[index].visible = index < active.length && mode !== 'wireframe'; });
+    cutGroups.forEach((group, index) => { group.visible = index < active.length && mode !== 'wireframe'; });
+    cutLines.forEach((lines, index) => {
+      lines.visible = index < active.length && mode === 'edges';
+      if (lines.visible) outlineCuts(index, capped[index]);
+    });
     paint();
   };
 
@@ -451,7 +622,6 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     colors.edge = style.getPropertyValue('--cad-edge').trim();
     colors.selected = style.getPropertyValue('--cad-selected').trim() || '#c2006b';
     colors.hover = style.getPropertyValue('--cad-hover').trim() || '#e389c0';
-    caps.forEach((cap) => { cap.material.color.set(style.getPropertyValue('--cad-section').trim()); });
     handleColors.idle = style.getPropertyValue('--cad-handle').trim();
     handleColors.active = style.getPropertyValue('--cad-handle-active').trim();
     outlineMaterial.color.set(style.getPropertyValue('--cad-handle-outline').trim());
@@ -459,6 +629,19 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     apply();
   };
 
+  // A plane's caps are kept only where the other planes remove material.
+  const clipCaps = () => {
+    for (const layer of layers) {
+      layer.caps.forEach((cap, index) => {
+        cap.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < settings.sections.length);
+        cap.material.needsUpdate = true;
+      });
+    }
+    cutLines.forEach((lines, index) => {
+      lines.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < settings.sections.length);
+      lines.material.needsUpdate = true;
+    });
+  };
   const setSettings = (next: ViewSettings) => {
     settings = next;
     perspective = !!next.perspective;
@@ -466,15 +649,13 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       // Each plane faces away from the side it removes. Scene coordinates are model
       // coordinates less the origin.
       const normal = new THREE.Vector3(...section.normal);
-      planes[index].set(normal.clone().negate(), section.constant - normal.dot(origin));
-      planes[index].coplanarPoint(caps[index].position);
-      caps[index].quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), planes[index].normal);
+      // Cut a hair past the plane, so a face lying on it is removed rather than flickering
+      // against the cut of the piece behind it.
+      planes[index].set(normal.clone().negate(), section.constant - normal.dot(origin) - radius * 1e-4);
+      placeCaps(index);
       capClips[index].copy(planes[index]).negate();
     });
-    caps.forEach((cap, index) => {
-      cap.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < next.sections.length);
-      cap.material.needsUpdate = true;
-    });
+    clipCaps();
     handle.visible = next.sections.length > 0 && !!next.handle;
     if (next.handle) {
       const direction = new THREE.Vector3(...next.handle.arrow).normalize();
@@ -587,26 +768,18 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const nextRadius = next.boundingSphere?.radius ?? 0;
     if (!Number.isFinite(nextRadius) || nextRadius <= 0) throw new Error('The model has invalid dimensions.');
     const nextLayers = buildLayers(next);
-    const nextCap = new THREE.PlaneGeometry(nextRadius * 3, nextRadius * 3);
     version += 1;
+    faceShapes.clear();
     origin.copy(nextCenter);
     geometry.dispose();
     disposeLayers(layers);
-    capGeometry.dispose();
     geometry = next;
     layers = nextLayers;
-    capGeometry = nextCap;
     mesh.geometry = next;
     mesh.material = layers.map((layer) => layer.solid);
     edgesGroup.clear();
     edgesGroup.add(...layers.map((layer) => layer.edges));
-    stencilMeshes.forEach((pair, index) => {
-      pair.forEach((stencilMesh, side) => {
-        stencilMesh.geometry = next;
-        stencilMesh.material = layers.map((layer) => layer.stencil[index][side]);
-      });
-    });
-    caps.forEach((cap) => { cap.geometry = nextCap; });
+    mountCuts();
     size.copy(nextSize);
     sourceMin.copy(nextMin);
     radius = nextRadius;
@@ -810,7 +983,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     }
     return null;
   };
-  const pickEntityAt = (x: number, y: number): string | null => snapAt(x, y)?.key ?? pickAt(x, y);
+  // The face under a client position, as a key.
+  const faceKeyAt = (x: number, y: number) => {
+    const found = hitAt(x, y), triangle = found?.hit.faceIndex;
+    if (!found || typeof triangle !== 'number') return null;
+    const face = found.layer.faces.faceOf[triangle - found.layer.first / 3] as number | undefined;
+    return face === undefined ? null : `face:${String(version)}:${String(layers.indexOf(found.layer))}:${String(face)}`;
+  };
+  // A corner or edge near the pointer, or else the face under it.
+  const pickEntityAt = (x: number, y: number): string | null => snapAt(x, y)?.key ?? faceKeyAt(x, y);
   // A click (not an orbit or pan drag) selects. Hover is picked at most once per
   // animation frame, not while dragging or for touch, and again after the view
   // or appearance changes; keyboard shortcuts also use the last pointer position.
@@ -1033,6 +1214,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       if (!found) return undefined;
       const toModel = (p: number[]) => p.map((n, i) => n + origin.getComponent(i));
       const owner = { part: found.layer.part, piece: found.layer.piece };
+      if (found.kind === 'face') return { ...owner, kind: 'face' as const, ...faceShape(key, found.layer, found.face) };
       if (found.kind === 'vertex') return { ...owner, kind: 'vertex' as const, position: toModel(found.vertex) };
       const points: number[][] = [];
       for (let i = 0; i + 2 < found.edge.points.length; i += 3) points.push(toModel(found.edge.points.slice(i, i + 3)));
@@ -1068,10 +1250,12 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       geometry.dispose();
       disposeLayers(layers);
       capGeometry.dispose();
-      caps.forEach((cap) => { cap.material.dispose(); });
+      cutLines.forEach((lines) => { lines.geometry.dispose(); lines.material.dispose(); });
       [...handleGeometries, ...outlineGeometries].forEach((part) => { part.dispose(); });
       [...handleMaterials, outlineMaterial, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
+      faceOverlays.forEach((overlay) => { overlay.geometry.dispose(); });
+      faceMaterials.forEach((material) => { material.dispose(); });
       vertexOverlays.forEach((points) => { points.geometry.dispose(); });
       [...lineMaterials, ...pointMaterials].forEach((material) => { material.dispose(); });
       dotTexture.dispose();
