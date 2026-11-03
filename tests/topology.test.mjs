@@ -102,3 +102,23 @@ test('a STEP file’s own faces are renumbered from zero', () => {
   expect([...faceRegions(positions, 25, [7, 7, 3]).faceOf]).toEqual([0, 0, 1]);
   expect(faceRegions(positions, 25, [7, 7, 3]).count).toBe(2);
 });
+
+test('an edge split at different points by the faces either side is still one edge', () => {
+  // As SketchUp writes a 60 mm end edge: one face splits it at 18 mm, the other at 18 and
+  // 42 mm, so it arrives as overlapping segments meeting three at a point. Corners close it.
+  const segments = [
+    [150, 32.625, 21.25, 150, 50.625, 21.25], [150, 92.625, 21.25, 150, 50.625, 21.25],
+    [150, 74.625, 21.25, 150, 92.625, 21.25], [150, 74.625, 21.25, 150, 50.625, 21.25],
+    [150, 32.625, 21.25, 0, 32.625, 21.25], [150, 92.625, 21.25, 0, 92.625, 21.25],
+  ].flat();
+  const topology = edgeTopology(segments, 1e-3);
+  expect(lengths(topology)).toEqual([60, 150, 150]);
+  expect(topology.vertices).toHaveLength(4);
+});
+
+test('triangles joined at a T-junction are one face', () => {
+  // A square's diagonal is one side of one triangle, and two sides of the other half's two.
+  const triangle = (...corners) => corners.flatMap(([x, y]) => [x, y, 0]);
+  const positions = new Float32Array([...triangle([0, 0], [10, 0], [10, 10]), ...triangle([0, 0], [5, 5], [0, 10]), ...triangle([5, 5], [10, 10], [0, 10])]);
+  expect(faceRegions(positions).count).toBe(1);
+});
