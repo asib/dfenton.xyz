@@ -37,6 +37,19 @@ function DraftNumber({ label, value, step, unit, onValue }: { label: string; val
   </label>;
 }
 
+// The projection is a viewing preference, kept in this browser for every model and visit.
+// Blocked storage (private windows, site data off) just means it lasts for the page.
+const projectionKey = 'cad-projection';
+function savedPerspective() {
+  try { return window.localStorage.getItem(projectionKey) === 'perspective'; } catch { return false; }
+}
+function savePerspective(perspective: boolean) {
+  try {
+    if (perspective) window.localStorage.setItem(projectionKey, 'perspective');
+    else window.localStorage.removeItem(projectionKey);
+  } catch { /* It still applies until the page is left. */ }
+}
+
 // What a visitor's file's parts are, for the legend.
 const partsHints: Record<FileParts['from'], string> = {
   color: 'Each color in this file is a part, numbered in file order.',
@@ -88,7 +101,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const [status, setStatus] = useState('Loading model…');
   const [mode, setMode] = useState<RenderMode>('edges');
   // Orthographic, as Onshape shows models, unless Perspective is ticked; Reset view keeps it.
-  const [perspective, setPerspective] = useState(false);
+  const [perspective, setPerspective] = useState(savedPerspective);
   // The section view (section.ts), or null when off; Shift+X brings back the last one.
   // `picking` waits for a click on a face to section through.
   // Up to `maxSections` planes cut at once; the controls and manipulator edit the active one.
@@ -575,7 +588,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 <option value="wireframe">Wireframe</option>
               </select>
             </label>
-            <label className="cad-checkbox"><input type="checkbox" checked={perspective} onChange={(event) => { setPerspective(event.target.checked); }} />Perspective</label>
+            <label className="cad-checkbox"><input type="checkbox" checked={perspective} onChange={(event) => { setPerspective(event.target.checked); savePerspective(event.target.checked); }} />Perspective</label>
             <label>Section
               <select value={picking ? 'face' : section?.reference.plane ?? 'off'} aria-keyshortcuts="Shift+X" onChange={(event) => { chooseSection(event.target.value); }}>
                 <option value="off">Off</option>
