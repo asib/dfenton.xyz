@@ -620,7 +620,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     setSettings(settings);
     scheduleHover();
   };
-  let previousWidth = 0;
+  let previousWidth = 0, previousAspect = 1;
   const resize = () => {
     const { width, height } = host.getBoundingClientRect();
     if (!width || !height) return;
@@ -629,7 +629,18 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     renderer.setSize(width, height);
     [...lineMaterials, measureMaterial].forEach((material) => { material.resolution.set(width, height); });
     if (!previousWidth) reset();
+    else {
+      // The view keeps what its narrower side shows, as the fit does: one that becomes narrower
+      // than it is tall (fullscreen on a phone, with the controls hidden) moves back to keep the
+      // model across it, rather than cutting it off at the sides.
+      const scale = Math.min(previousAspect, 1) / Math.min(camera.aspect, 1);
+      if (Math.abs(scale - 1) > 1e-6) {
+        camera.position.sub(controls.target).multiplyScalar(scale).clampLength(controls.minDistance, controls.maxDistance).add(controls.target);
+        controls.update();
+      }
+    }
     previousWidth = width;
+    previousAspect = camera.aspect;
     render();
   };
   const observer = new ResizeObserver(resize);

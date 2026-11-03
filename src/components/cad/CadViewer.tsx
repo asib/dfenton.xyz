@@ -95,6 +95,9 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
 }) {
   const host = useRef<HTMLDivElement>(null);
   const { workspace, toggleButton, fullscreen, enter, leave } = useFullscreen();
+  // Fullscreen fits everything on the screen at once, so the controls can be hidden to give
+  // the model all of it.
+  const [controlsHidden, setControlsHidden] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
   const [parametersOpen, setParametersOpen] = useState(true);
   const [viewer, setViewer] = useState<Viewer | null>(null);
@@ -543,12 +546,18 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     <section className="cad" aria-label="CAD model">
       <p className="cad-description">{entry.description}</p>
       {entry.customizer?.drawings && <p className="cad-drawing-jump"><a href="#cad-drawings-title">View drawings ↓</a></p>}
-      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined}
+      <div ref={workspace} className="cad-workspace" data-fullscreen={fullscreen || undefined} data-controls-hidden={(fullscreen && controlsHidden) || undefined}
         onKeyDown={(event) => { pointerTarget.current = null; onShortcut(event); }} onPointerDown={(event) => { pointerTarget.current = event.target; }}
         onClick={onWorkspaceClick} onChange={onWorkspaceChange}
         role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? `${entry.title} fullscreen viewer` : undefined}>
         <div className="cad-workspace-toolbar">
           <span className="cad-workspace-title">{entry.title}</span>
+          {fullscreen && <button type="button" onClick={() => { setControlsHidden(!controlsHidden); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d={controlsHidden ? 'M4 4h16v16H4zM4 14h16M9 9l3-3 3 3' : 'M4 4h16v16H4zM4 14h16M9 6l3 3 3-3'} />
+            </svg>
+            {controlsHidden ? 'Show controls' : 'Hide controls'}
+          </button>}
           <button ref={toggleButton} type="button" aria-pressed={fullscreen} onClick={() => { if (fullscreen) void leave(); else void enter(); }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
               <path d={fullscreen ? 'M4 9h5V4m6 0v5h5M4 15h5v5m6 0v-5h5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5'} />
