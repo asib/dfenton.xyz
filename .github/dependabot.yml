@@ -30,6 +30,12 @@ updates:
         patterns:
           - jspdf
           - svg2pdf.js
+      # @tailwindcss/postcss depends on the exact tailwindcss version it was
+      # released with, so a bump to one alone leaves two copies installed.
+      tailwind:
+        patterns:
+          - tailwindcss
+          - "@tailwindcss/*"
       # oxlint runs oxlint-tsgolint for its type-aware rules, so keep them in
       # step. tsgolint bundles its own TypeScript compiler, so the typescript
       # package (editors, tsc) can move separately.
