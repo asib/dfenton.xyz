@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import DocumentCopyIcon from './components/DocumentCopyIcon';
 import DocumentCopyTickIcon from './components/DocumentCopyTickIcon';
 import DownloadIcon from './components/DownloadIcon';
+import Comment from './components/Comment';
 import useSound from 'use-sound';
 import { useReducedMotion } from '@react-spring/web';
 
@@ -329,33 +330,6 @@ function ContactItem({ copyable, icon, label, children }: { copyable?: string, i
 
 function Icon({ icon, className }: { icon: ({ className }: { className: string }) => React.JSX.Element, className?: string }) {
   return <>{icon({ className: clsx("size-4 fill-transparent stroke-light-mode-text dark:stroke-dark-mode-text", className) })}</>
-}
-
-function Comment({ children }: { children: string }) {
-  return <div dangerouslySetInnerHTML={{ __html: `<!-- ${children} -->` }} />
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function Button({ children }: { children: React.ReactNode }) {
-  return (
-    <button className={clsx([
-      "group border-none rounded-[12px] p-0 cursor-pointer",
-      "bg-light-mode-text dark:bg-[#a63c06]",
-    ])}>
-      <Comment>Taken from Josh Comeau: https://www.joshwcomeau.com/animation/3d-button</Comment>
-      <span className={clsx([
-        "block py-[12px] px-[42px] rounded-[12px] -translate-y-[4px]",
-        "focus:outline-none focus-visible:ring-2",
-        "bg-light-mode-highlight dark:bg-dark-mode-text",
-        "text-light-mode-bg dark:text-dark-mode-bg",
-        "transition-transform duration-[600ms] ease-[cubic-bezier(.3, .7, .4, 1)]",
-        "group-hover:-translate-y-[6px] group-hover:duration-[250ms] group-hover:ease-[cubic-bezier(.3, .7, .4, 1.5)]",
-        "group-active:-translate-y-[2px] group-active:duration-[34ms]",
-      ])}>
-        {children}
-      </span>
-    </button>
-  )
 }
 
 export default App
