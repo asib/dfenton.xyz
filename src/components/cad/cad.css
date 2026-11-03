@@ -392,3 +392,6 @@ html[data-cad-fullscreen] main { transform: none !important; filter: none !impor
   .cad-workspace[data-fullscreen] .cad-controls { gap: 8px; padding: 6px 0; margin: 6px 0; }
   .cad-workspace[data-fullscreen] .cad-controls :is(select, button) { min-height: 36px; padding: 6px 8px; font-size: 12px; }
 }
+/* With its controls hidden, fullscreen is the model alone: the toolbar, the view and its cube. */
+.cad-workspace[data-fullscreen][data-controls-hidden] :is(.cad-controls, .cad-dimensions, .cad-sidebar) { display: none; }
+.cad-workspace[data-fullscreen][data-controls-hidden] .cad-workbench[data-has-panels] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
