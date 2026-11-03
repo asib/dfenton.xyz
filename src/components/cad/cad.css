@@ -376,7 +376,9 @@ html[data-cad-fullscreen] main { transform: none !important; filter: none !impor
 .cad-workspace[data-fullscreen] .cad-stage { flex: 1; min-height: 100px; margin: 0 0 8px; }
 .cad-workspace[data-fullscreen] .cad-canvas { position: absolute; inset: 0; height: 100%; }
 .cad-workspace[data-fullscreen] .cad-controls { flex-shrink: 0; gap: 10px; padding: 10px 0; margin: 8px 0; }
-.cad-workspace[data-fullscreen] .cad-help { flex-shrink: 0; font-size: 11px; }
+/* Fullscreen gives the model the room; the instructions return on leaving it, and the 3D view still
+   describes itself with them (aria-describedby reads hidden text). */
+.cad-workspace[data-fullscreen] .cad-help { display: none; }
 .cad-workspace[data-fullscreen] .cad-dimensions { flex-shrink: 0; font-size: 11px; }
 .cad-workspace[data-fullscreen] .cad-sidebar { overflow-y: auto; overscroll-behavior: contain; margin: 0; padding-right: 8px; scrollbar-gutter: stable; }
 .cad-workspace[data-fullscreen] .cad-sidebar .cad-panel:first-child > summary { padding-top: 4px; }
