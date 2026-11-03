@@ -52,7 +52,7 @@ Useful resources for meta tag info: https://stackoverflow.com/questions/19778620
 
 # React + TypeScript + Vite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This template provides a minimal setup to get React working in Vite with HMR.
 
 Currently, two official plugins are available:
 
