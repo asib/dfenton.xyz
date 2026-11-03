@@ -14,6 +14,8 @@ Dependabot opens weekly dependency PRs, configured in `.github/dependabot.yml`. 
 
 Dependabot leaves `occt-import-js` alone: it runs third-party WebAssembly on visitors' STEP files, so a new version is taken by hand, after review.
 
+`public/_headers` sets Pages' response headers. It gives the workers that read visitors' files (`dist/assets/workers/`, where `vite.config.ts` puts them) a Content-Security-Policy allowing requests only to this site, so their third-party WebAssembly can't send a file anywhere else. `vite preview` ignores `_headers`; check headers on a Pages preview.
+
 Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
 
 Use a `[Skip CI]` prefix to tell Pages not to deploy a given commit.

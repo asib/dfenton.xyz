@@ -12,4 +12,9 @@ export default defineConfig({
       handler: (html) => html.replace('<script type="module"', '<script type="module" blocking="render"'),
     },
   }],
+  // Workers read visitors' files with third-party WebAssembly (the OpenSCAD engine and
+  // OpenCascade), so public/_headers gives this directory a strict Content-Security-Policy.
+  worker: {
+    rollupOptions: { output: { entryFileNames: 'assets/workers/[name]-[hash].js', chunkFileNames: 'assets/workers/[name]-[hash].js' } },
+  },
 })
