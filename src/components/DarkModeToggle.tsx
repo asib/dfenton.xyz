@@ -66,11 +66,11 @@ export default function DarkModeToggle() {
         >
             <div className="w-full flex justify-end">
                 {darkMode && <div className={clsx(
-                    "max-sm:hidden w-[100vw] h-[100vh] opacity-0 z-[-1] absolute top-[0.75rem] left-[0.75rem]",
+                    "max-sm:hidden w-screen h-screen opacity-0 z-[-1] absolute top-3 left-3",
                     "rotate-90 origin-top-left pointer-events-none overflow-visible blur-2xl",
                     "[background:radial-gradient(circle_at_0_0,var(--dark-mode-highlight),transparent_50%)]",
                     "motion-safe:transition-opacity motion-safe:ease-bounce motion-safe:duration-500",
-                    "group-hover:opacity-[15%] group-active:opacity-[15%]"
+                    "group-hover:opacity-15 group-active:opacity-15"
                 )}></div>}
                 <button onClick={handleToggle} aria-label="toggle dark mode" title="toggle dark mode" className={clsx(
                     "relative",

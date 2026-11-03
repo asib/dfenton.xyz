@@ -82,12 +82,12 @@ function App() {
       <main className={clsx(
         "grid grid-cols-[1fr_min(65ch,100%)_1fr]",
         "*:col-start-2 *:col-end-3",
-        "max-sm:*:mx-6 md:mx-12 my-4 break-words",
+        "max-sm:*:mx-6 md:mx-12 my-4 wrap-break-word",
       )}>
         <header className="text-3xl md:text-4xl mb-3">Jacob Fenton</header>
         <nav aria-label="Site navigation" className="text-sm mb-4"><a href="/misc/" className="underline underline-offset-4 decoration-dotted hover:decoration-solid">Misc →</a></nav>
 
-        <section className="text-sm mb-[2rem] grid grid-cols-[auto_1fr] gap-y-2">
+        <section className="text-sm mb-8 grid grid-cols-[auto_1fr] gap-y-2">
           <ContactItem icon={GitHubIcon} label="github profile">
             <a href="https://github.com/asib" target="_blank" rel="noreferrer">github.com/asib</a>
           </ContactItem>
@@ -100,10 +100,10 @@ function App() {
         </section>
 
         <nav className={clsx(
-          "!col-start-1 !col-end-2 row-start-4 row-end-5",
+          "col-start-1! col-end-2! row-start-4 row-end-5",
           "text-xs pr-4",
           "motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.37,0,0.63,1)]",
-          "hidden lg:block h-0 relative top-[3rem] opacity-0",
+          "hidden lg:block h-0 relative top-12 opacity-0",
           "lg:[&:has(+details[open])]:h-[calc(100%-3rem)] lg:[&:has(+details[open])]:opacity-100",
         )}
           aria-label="Experience navigation"
@@ -133,7 +133,7 @@ function App() {
               </WorkItem>
 
               {itemIndex !== workItems.length - 1 &&
-                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-[4rem] pl-8" aria-hidden="true"
+                <div key={`work-item-separator-${itemIndex.toString()}`} id={`work-item-separator-${itemIndex.toString()}`} className="w-full h-16 pl-8" aria-hidden="true"
                   style={{
                     animation: 'appear 1ms linear both',
                     animationTimeline: 'view()',
@@ -151,7 +151,7 @@ function App() {
         <Accordion summary="Education">
           <section data-type="timeline-item">
             <header className="flex flex-col mb-2">
-              <h1 className="text-xl font-semibold mb-[0.25rem]">University of Cambridge</h1>
+              <h1 className="text-xl font-semibold mb-1">University of Cambridge</h1>
               <h3 className="text-xs mb-1">Fitzwilliam College</h3>
               <h3 className="text-xs font-mono tracking-tight text-[#8c1a35] dark:text-dark-mode-highlight mb-4">October 2015 - July 2018</h3>
 
@@ -220,7 +220,7 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
     <details
       className={clsx(
         "[&:has(+details)+details]:mt-2 [&[open]:has(+details)+details]:mt-5",
-        "max-sm:!col-span-full max-sm:!mx-0",
+        "max-sm:col-span-full! max-sm:mx-0!",
         className
       )}
       open
@@ -228,11 +228,11 @@ function Accordion({ children, className, summary }: { children: React.ReactNode
       <summary className="text-lg cursor-pointer max-w-full max-sm:pl-6">{summary}</summary>
       <div className={clsx(
         "mt-5",
-        "[&>[data-type=timeline-item]]:flex [&>[data-type=timeline-item]]:flex-col",
-        "[&>[data-type=timeline-item]]:space-y-2 [&>[data-type=timeline-item]]:border-y",
-        "[&>[data-type=timeline-item]]:sm:border [&>[data-type=timeline-item]]:p-4",
-        "[&>[data-type=timeline-item]]:border-light-mode-text",
-        "[&>[data-type=timeline-item]]:dark:border-dark-mode-text"
+        "*:data-[type=timeline-item]:flex *:data-[type=timeline-item]:flex-col",
+        "*:data-[type=timeline-item]:space-y-2 *:data-[type=timeline-item]:border-y",
+        "sm:*:data-[type=timeline-item]:border *:data-[type=timeline-item]:p-4",
+        "*:data-[type=timeline-item]:border-light-mode-text",
+        "dark:*:data-[type=timeline-item]:border-dark-mode-text"
       )}>
         {children}
       </div>
