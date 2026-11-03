@@ -541,7 +541,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       // Each plane faces away from the side it removes. Scene coordinates are model
       // coordinates less the origin.
       const normal = new THREE.Vector3(...section.normal);
-      planes[index].set(normal.clone().negate(), section.constant - normal.dot(origin));
+      // Cut a hair past the plane, so a face lying on it is removed rather than flickering
+      // against the cut of the piece behind it.
+      planes[index].set(normal.clone().negate(), section.constant - normal.dot(origin) - radius * 1e-4);
       placeCaps(index);
       capClips[index].copy(planes[index]).negate();
     });
