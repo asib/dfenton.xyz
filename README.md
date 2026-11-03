@@ -12,6 +12,8 @@ To change the toolchain, bump `packageManager` in a PR; its Pages preview builds
 
 Dependabot opens weekly dependency PRs, configured in `.github/dependabot.yml`. It rewrites `bun.lock` with its own Bun, 1.4.2 at the time of writing (see `BUN_VERSION` in [dependabot-core's `bun/Dockerfile`](https://github.com/dependabot/dependabot-core/blob/main/bun/Dockerfile)). Check each PR's Pages preview build before merging: a frozen-install failure there usually means Dependabot's Bun and `packageManager` have drifted apart, so bump `packageManager` to match.
 
+Dependabot leaves `occt-import-js` alone: it runs third-party WebAssembly on visitors' STEP files, so a new version is taken by hand, after review.
+
 Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
 
 Use a `[Skip CI]` prefix to tell Pages not to deploy a given commit.

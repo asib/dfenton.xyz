@@ -10,6 +10,10 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # The STEP reader runs third-party WebAssembly (OpenCascade) on visitors'
+    # files, so a new version is taken by hand, after review, not proposed here.
+    ignore:
+      - dependency-name: occt-import-js
     # A dependency goes into the first group it matches. The named groups take
     # every update type; anything else gets its minor and patch updates batched
     # and a separate PR for each major.
