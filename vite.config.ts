@@ -15,6 +15,6 @@ export default defineConfig({
   // Workers read visitors' files with third-party WebAssembly (the OpenSCAD engine and
   // OpenCascade), so public/_headers gives this directory a strict Content-Security-Policy.
   worker: {
-    rollupOptions: { output: { entryFileNames: 'assets/workers/[name]-[hash].js', chunkFileNames: 'assets/workers/[name]-[hash].js' } },
+    rolldownOptions: { output: { entryFileNames: 'assets/workers/[name]-[hash].js', chunkFileNames: 'assets/workers/[name]-[hash].js' } },
   },
 })
