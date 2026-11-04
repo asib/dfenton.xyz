@@ -94,7 +94,6 @@
 .cad-controls button:hover { border-color: currentColor; }
 .cad-controls :is(select, button, input):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .cad-controls:disabled { opacity: .5; }
-.cad-section-controls { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .cad-slider { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; flex: 1 1 240px; font-size: 12px; }
 .cad-slider input { grid-column: 1 / -1; width: 100%; min-height: 24px; accent-color: var(--cad-section); }
 .cad-checkbox { display: flex; align-items: center; gap: 8px; min-height: 40px; }
@@ -106,11 +105,15 @@
 .cad-section-number input { width: 7em; min-height: 40px; padding: 8px; color: inherit; background: var(--cad-control); border: 1px solid var(--cad-border); border-radius: 4px; font: inherit; font-size: 14px; }
 .cad-section-pick { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; font-size: 14px; }
 .cad-stage[data-picking] canvas { cursor: crosshair; }
-.cad-section-planes { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
-.cad-section-plane { display: flex; }
-.cad-controls .cad-section-plane button[aria-pressed=true] { border-color: currentColor; box-shadow: inset 0 -3px 0 var(--cad-section); }
-.cad-controls .cad-section-plane .cad-section-remove { margin-left: -1px; padding: 8px 10px; }
-.cad-section-excluded { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+/* Each plane's controls, a row apiece, as Onshape shows every plane at once. */
+.cad-section-planes { flex-basis: 100%; display: grid; gap: 12px; }
+.cad-section-plane { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 16px; }
+.cad-section-plane + .cad-section-plane { border-top: 1px dashed var(--cad-border); padding-top: 12px; }
+.cad-section-reference { display: flex; align-items: end; }
+.cad-section-reference label { display: grid; gap: 6px; font-size: 12px; }
+.cad-controls .cad-section-reference .cad-section-remove { margin-left: -1px; padding: 8px 10px; }
+.cad-section-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.cad-section-excluded { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
 .cad-controls .cad-section-uncut { min-height: 32px; padding: 4px 10px; font-size: 13px; }
 .cad-dimensions { opacity: .65; font-size: 12px; }
 .cad-downloads { display: flex; flex-wrap: wrap; gap: 16px 24px; margin: 24px 0; }

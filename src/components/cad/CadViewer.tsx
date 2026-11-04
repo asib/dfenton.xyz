@@ -105,26 +105,17 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const [mode, setMode] = useState<RenderMode>('edges');
   // Orthographic, as Onshape shows models, unless Perspective is ticked; Reset view keeps it.
   const [perspective, setPerspective] = useState(savedPerspective);
-  // The section view (section.ts), or null when off; Shift+X brings back the last one.
-  // `picking` waits for a click on a face to section through.
-  // Up to `maxSections` planes cut at once, each with its manipulator; the controls edit the
-  // active one, which dragging a manipulator also makes active.
+  // The section view (section.ts): up to `maxSections` planes cutting at once, none when off,
+  // each with its own manipulator and row of controls, as in Onshape. Shift+X brings back the
+  // last planes. `picking` is the plane waiting for a click on a face to section through.
   // `excluded` parts and pieces are left whole.
   const [sections, setSections] = useState<SectionState[]>([]);
-  const [active, setActive] = useState(0);
-  const section = (sections[active] as SectionState | undefined) ?? null;
   const [excluded, setExcluded] = useState<string[]>([]);
-  const [picking, setPicking] = useState(false);
-  const lastSections = useRef<{ sections: SectionState[]; active: number } | null>(null);
-  // Changes a plane, or with none, adds it.
+  const [picking, setPicking] = useState<number | null>(null);
+  const lastSections = useRef<SectionState[] | null>(null);
   const setPlane = (plane: number, update: SectionState | ((current: SectionState) => SectionState)) => {
-    setSections((list) => {
-      const current = list[plane] as SectionState | undefined;
-      if (!current) return typeof update === 'function' ? list : [update];
-      return list.map((item, index) => index === plane ? typeof update === 'function' ? update(item) : update : item);
-    });
+    setSections(list => list.map((item, index) => index === plane ? typeof update === 'function' ? update(item) : update : item));
   };
-  const setSection = (update: SectionState | ((current: SectionState) => SectionState)) => { setPlane(active, update); };
   const [, setRevision] = useState(0);
   const [cutList, setCutList] = useState<CutListOutput>({ text: '', stale: true });
   const [drawings, setDrawings] = useState<DrawingOutput>({ stale: true });
@@ -220,10 +211,10 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   useEffect(() => {
     viewer?.setSettings({
       mode, perspective, sections: sections.map(sectionPlane), excluded,
-      handles: picking ? [] : sections.map(item => ({ point: item.point, arrow: sectionPlane(item).normal, axes: sectionFrame(item).axes })),
+      handles: picking !== null ? [] : sections.map(item => ({ point: item.point, arrow: sectionPlane(item).normal, axes: sectionFrame(item).axes })),
     });
-    if (sections.length) lastSections.current = { sections, active };
-  }, [viewer, mode, perspective, sections, active, excluded, picking]);
+    if (sections.length) lastSections.current = sections;
+  }, [viewer, mode, perspective, sections, excluded, picking]);
   // A change of units rescales the model, so the section moves with it.
   const sectionScale = useRef(scale);
   useEffect(() => {
@@ -235,7 +226,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
       ...current, point: times(current.point),
       reference: { ...current.reference, offset: current.reference.offset * ratio, anchor: current.reference.anchor && times(current.reference.anchor) },
     });
-    if (lastSections.current) lastSections.current = { ...lastSections.current, sections: lastSections.current.sections.map(rescale) };
+    if (lastSections.current) lastSections.current = lastSections.current.map(rescale);
     setSections(list => list.map(rescale));
   }, [scale]);
 
@@ -336,17 +327,17 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   };
   // Where each face was clicked, so a section can be set through it.
   const faceClicks = useRef(new Map<string, PickedFace>());
-  // A click selects, or while picking, sections through the face clicked.
+  // A click selects, or while picking, sets the plane through the face clicked.
   const pick = useRef<(key: string | null, face: PickedFace | null) => void>(toggleSelect);
   pick.current = (key, face) => {
-    if (!picking) {
+    if (picking === null) {
       if (key?.startsWith('face:') && face) faceClicks.current.set(key, face);
       toggleSelect(key);
       return;
     }
     if (!face || !viewer) return;
-    setSection(startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size)));
-    setPicking(false);
+    setPlane(picking, startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size)));
+    setPicking(null);
   };
   // Hovering an edge or vertex marks the part it belongs to in the legend.
   const hoverTarget = resolve(canvasHover) ?? resolveEntity(canvasHover)?.owner ?? null;
@@ -408,32 +399,27 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     const fade = targets.every(target => look(target.key).opacity >= 1);
     setLooks(targets, () => ({ hidden: false, opacity: fade ? 0.3 : 1 }));
   };
-  // A default plane from the Section menu opens through the middle of the model; "Face" waits
-  // for a click on one. Shift+X brings back every plane of the last section, in order, with the
-  // same one active; with none yet, it cuts through the selected face, or else the front plane.
+  // A default plane opens through the middle of the model. Shift+X brings back every plane of
+  // the last section, in order; with none yet, it cuts through the selected face, or else the
+  // front plane.
   const start = (plane: DefaultPlane) => viewer && startSection(defaultPlanes[plane], tuple(viewer.sourceMin), tuple(viewer.size));
-  // The selected face, the last one clicked, if any: the menu's Face, Add plane and, with no
+  // The selected face, the last one clicked, if any: a plane's Face, Add plane and, with no
   // section to bring back, Shift+X cut through it, where it was clicked.
   const selectedFace = [...selected].reverse().map(key => faceClicks.current.get(key)).find(face => !!face);
   const throughFace = () => selectedFace && viewer && startSection(facePlane(selectedFace.point, selectedFace.normal), tuple(viewer.sourceMin), tuple(viewer.size));
-  const chooseSection = (value: string) => {
-    const face = value === 'face' ? throughFace() : null;
-    if (face) { setPicking(false); setSection(face); return; }
-    if (value === 'face') { setPicking(true); return; }
-    setPicking(false);
-    const next = value === 'off' ? null : start(value as DefaultPlane);
-    if (next) setSection(next);
-    else { setSections([]); setActive(0); }
+  // A plane's menu: a default plane, or Face, through the selected face or else the next one clicked.
+  const choosePlane = (index: number, value: string) => {
+    const next = value === 'face' ? throughFace() : start(value as DefaultPlane);
+    setPicking(next ? null : index);
+    if (next) setPlane(index, next);
   };
   const toggleSection = () => {
-    setPicking(false);
-    if (sections.length) { setSections([]); setActive(0); return; }
-    const restored = lastSections.current ?? { sections: [throughFace() ?? start('front')].filter(item => !!item), active: 0 };
-    setSections(restored.sections);
-    setActive(restored.active);
+    setPicking(null);
+    if (sections.length) { setSections([]); return; }
+    setSections(lastSections.current ?? [throughFace() ?? start('front')].filter(item => !!item));
   };
   // Another plane, as Onshape allows up to three: the first default plane not yet used, so a
-  // second plane leaves a quarter of the model and a third an eighth. It becomes the active one.
+  // second plane leaves a quarter of the model and a third an eighth.
   const addSection = () => {
     const used = new Set(sections.map(item => item.reference.plane));
     // The selected face, unless a plane already passes where it was clicked.
@@ -442,23 +428,26 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     const next = face && !faceUsed ? face : start((['front', 'right', 'top'] as const).find(plane => !used.has(plane)) ?? 'front');
     if (!next || sections.length >= maxSections) return;
     setSections([...sections, next]);
-    setActive(sections.length);
   };
   const removeSection = (index: number) => {
     setSections(sections.filter((_, other) => other !== index));
-    setActive(Math.max(0, Math.min(active > index ? active - 1 : active, sections.length - 2)));
-    setPicking(false);
+    setPicking(null);
   };
   // Selected parts and pieces join those left whole.
   const excludeSelection = () => { setExcluded(current => [...new Set([...current, ...acting.map(target => target.key)])]); };
-  // Look back along the section's normal, at the cut face on.
-  const viewNormal = () => { if (section) viewer?.lookAlong(sectionPlane(section).normal); };
-  // Dragging a plane's manipulator makes it active and moves or tilts it from where the drag
-  // began, tilts to a tenth of a degree; clicking its arrow flips it.
+  // Look back along a plane's normal, at its cut face on. N looks along each plane in turn,
+  // starting after the last one looked along.
+  const lastNormal = useRef(-1);
+  const viewNormal = (index: number) => {
+    if (index >= sections.length) return;
+    lastNormal.current = index;
+    viewer?.lookAlong(sectionPlane(sections[index]).normal);
+  };
+  // Dragging a plane's manipulator moves or tilts it from where the drag began, tilts to a
+  // tenth of a degree; clicking its arrow flips it.
   const dragStart = useRef<SectionState | null>(null);
   const onHandle = useRef<(drag: HandleDrag) => void>(() => undefined);
   onHandle.current = (drag) => {
-    setActive(drag.plane);
     if (drag.kind === 'flip') { setPlane(drag.plane, current => ({ ...current, flipped: !current.flipped })); return; }
     const start = dragStart.current ?? (drag.plane < sections.length ? sections[drag.plane] : null);
     if (!start) return;
@@ -476,9 +465,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   // and Space (from the 3D view) clears the selection. Shift+Y shows every part and clears
   // fades, transparency and isolation, as Show all parts does, where Onshape's shows hidden
   // parts only. Shift+X turns the section off and on, Alt+X adds a plane as Add plane does (or
-  // with the section off, turns it on), 1–3 make that plane active, Delete or Backspace removes
-  // the active plane while another is left, N views normal to the active plane, and Escape stops
-  // picking a face. Actions apply to the selection or, with nothing selected, to the part under
+  // with the section off, turns it on), Delete or Backspace removes the last plane while another
+  // is left, N views normal to each plane in turn, and Escape stops picking a face. Actions apply to the selection or, with nothing selected, to the part under
   // the cursor. Returns whether the key was used. From the 3D view Space is always used, so it
   // never scrolls the page. Models without a legend have no parts, but their edges and corners
   // can be selected, so Space works for every model.
@@ -492,15 +480,12 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
       ? owners.length ? owners : [hovered()].filter((target): target is Target => !!target) : [];
     if (code === 'KeyX' && shift && !alt) toggleSection();
     else if (code === 'KeyX' && alt && !shift) {
-      setPicking(false);
+      setPicking(null);
       if (sections.length) addSection();
       else toggleSection();
-    } else if (/^Digit[1-3]$/.test(code) && !shift && !alt && Number(code.slice(5)) <= sections.length) {
-      setActive(Number(code.slice(5)) - 1);
-      setPicking(false);
-    } else if ((code === 'Delete' || code === 'Backspace') && !shift && !alt && sections.length > 1) removeSection(active);
-    else if (code === 'KeyN' && !shift && !alt && section) viewNormal();
-    else if (code === 'Escape' && picking) setPicking(false);
+    } else if ((code === 'Delete' || code === 'Backspace') && !shift && !alt && sections.length > 1) removeSection(sections.length - 1);
+    else if (code === 'KeyN' && !shift && !alt && sections.length) viewNormal((lastNormal.current + 1) % sections.length);
+    else if (code === 'Escape' && picking !== null) setPicking(null);
     else if (code === 'Space' && fromCanvas) setSelected(current => current.length ? [] : current);
     else if (code === 'KeyY' && !shift && targets.length && !allHidden(targets)) setLooks(targets, key => ({ hidden: true, opacity: look(key).opacity || 1 }));
     else if (code === 'KeyY' && shift && !alt && changedParts > 0) setAppearances({});
@@ -565,9 +550,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const reset = () => {
     setMode('edges');
     setSections([]);
-    setActive(0);
     setExcluded([]);
-    setPicking(false);
+    setPicking(null);
     viewer?.reset();
   };
   const onCompiled = useCallback((model: CompiledModel) => {
@@ -608,7 +592,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
         </div>
         <div className="cad-workbench" data-has-panels={hasPanels || undefined}>
         <div className="cad-viewer">
-          <div className="cad-stage" data-picking={picking || undefined}>
+          <div className="cad-stage" data-picking={picking !== null || undefined}>
             <div ref={host} className="cad-canvas" aria-hidden={!!status} />
             {status && <div className="cad-fallback">
               <img className={entry.previewDark ? 'cad-preview-light' : ''} src={`${entry.href}${entry.preview}`} alt={entry.title} />
@@ -622,11 +606,12 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 return <div key={row.label}><dt>{row.label}</dt><dd>{primary}{secondary && <span>{secondary}</span>}</dd></div>;
               })}</dl> : <p>{measured.length === 1 ? 'Select another edge or vertex to measure a distance.' : 'Select up to two items, or only edges, to measure.'}</p>}
             </div>}
-            {!status && <span className="cad-stage-label" aria-hidden="true">{picking ? 'Click a face to section through it'
-              : section ? `${planeNames[section.reference.plane]} section${sections.length > 1 ? ` ${String(active + 1)} of ${String(sections.length)}` : ''} · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
-                : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
+            {!status && <span className="cad-stage-label" aria-hidden="true">{picking !== null ? `Click a face to set ${sections.length > 1 ? `plane ${String(picking + 1)}` : 'the section'} through it`
+              : sections.length === 1 ? `${planeNames[sections[0].reference.plane]} section · depth ${depthText(sectionDepth(sections[0]))}${sections[0].tilt.some(Boolean) ? ` · tilted ${sections[0].tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
+                : sections.length ? `${String(sections.length)} section planes · ${sections.map(item => `${planeNames[item.reference.plane]} ${depthText(sectionDepth(item))}${item.tilt.some(Boolean) ? ' tilted' : ''}`).join(' · ')}`
+                  : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face from the Section menu; with a face selected, its Selected face and Add plane cut through that face. Each plane has its own arrow: drag it to move the plane and its arcs to tilt it, or click the arrow to flip it. Add plane (Alt+X) cuts by up to three planes, removing what lies beyond any of them; 1–3 make a plane active and Delete removes the active one. Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and back on with all its planes (the first time, through a selected face).{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Tick Section to cut the model, and set each plane to a default plane or a face from its menu; with a face selected, the menu’s Selected face and Add plane cut through that face. Each plane has its own arrow: drag it to move the plane and its arcs to tilt it, or click the arrow to flip it. Add plane (Alt+X) cuts by up to three planes, removing what lies beyond any of them, each with its own row of controls; Delete removes the last. Leave selection uncut keeps selected parts whole. N views normal to each plane in turn, and Shift+X turns the section off and back on with all its planes (the first time, through a selected face).{hasLegend
             ? ' Click faces, edges or corners, or parts in the legend, to add them to the selection or remove them; click empty space to clear it. A selected face stands for its part: Y hides; Shift+Y shows every part and clears fades, as Show all parts does; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click faces, edges or corners to add them to the selection or remove them, measuring edges and corners; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -639,60 +624,59 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
               </select>
             </label>
             <label className="cad-checkbox"><input type="checkbox" checked={perspective} onChange={(event) => { setPerspective(event.target.checked); savePerspective(event.target.checked); }} />Perspective</label>
-            <label>Section
-              <select value={picking ? 'face' : section?.reference.plane ?? 'off'} aria-keyshortcuts="Shift+X" onChange={(event) => { chooseSection(event.target.value); }}>
-                <option value="off">Off</option>
-                <option value="front">Front plane</option>
-                <option value="top">Top plane</option>
-                <option value="right">Right plane</option>
-                <option value="face">{section?.reference.plane === 'face' ? 'Face' : selectedFace ? 'Selected face' : 'Face…'}</option>
-              </select>
-            </label>
-            {sections.length > 0 && <div className="cad-section-planes" role="group" aria-label="Section planes">
-              {sections.map((item, index) => <span key={index} className="cad-section-plane">
-                <button type="button" aria-pressed={index === active} title={`Make plane ${String(index + 1)} active (${String(index + 1)})`} aria-keyshortcuts={String(index + 1)} onClick={() => { setActive(index); setPicking(false); }}>
-                  {String(index + 1)} · {planeNames[item.reference.plane]}</button>
-                {sections.length > 1 && <button type="button" className="cad-section-remove" aria-label={`Remove plane ${String(index + 1)}`}
-                  title={index === active ? 'Remove the active plane (Delete)' : undefined} aria-keyshortcuts={index === active ? 'Delete Backspace' : undefined} onClick={() => { removeSection(index); }}>×</button>}
-              </span>)}
-              {sections.length < maxSections && <button type="button" title="Add plane (Alt+X)" aria-keyshortcuts="Alt+X" onClick={addSection}>Add plane</button>}
-            </div>}
+            <label className="cad-checkbox"><input type="checkbox" checked={sections.length > 0} aria-keyshortcuts="Shift+X" onChange={toggleSection} />Section</label>
             <button type="button" onClick={reset}>Reset view</button>
-            {picking && <p className="cad-section-pick" role="status">Click a face of the model to section through it.{' '}
-              <button type="button" onClick={() => { setPicking(false); }} aria-keyshortcuts="Escape">Cancel</button></p>}
-            {section && viewer && (() => {
-              const [low, high] = depthRange(section.reference, tuple(viewer.sourceMin), tuple(viewer.size));
-              const depth = sectionDepth(section), inch = units === 'inches';
-              const axes = planeAxes(section.reference);
-              return <div className="cad-section-controls">
-                <label className="cad-slider">Depth <output>{depthText(depth)}</output>
-                  <input type="range" min={low} max={high} step={(high - low) / 1000 || 0.001} value={Math.min(high, Math.max(low, depth))}
-                    aria-valuetext={`${depthText(depth)} from the ${planeNames[section.reference.plane].toLowerCase()}`}
-                    onChange={(event) => { setSection(withDepth(section, Number(event.target.value))); }} />
-                </label>
-                <DraftNumber label="Exact depth" step={inch ? 1 / 64 : 0.1} unit={inch ? 'in' : 'mm'}
-                  value={inch ? Number((depth / 25.4).toFixed(4)) : Number(depth.toFixed(2))}
-                  onValue={(value) => { setSection(withDepth(section, inch ? value * 25.4 : value)); }} />
-                {axes.map((axis, index) => <DraftNumber key={index} label={`Tilt about ${axisName(axis) ?? (index ? 'the second axis' : 'the first axis')}`} step={1} unit="°"
-                  value={section.tilt[index]} onValue={(value) => {
-                    const tilt: [number, number] = [...section.tilt];
-                    tilt[index] = value;
-                    setSection({ ...section, tilt });
-                  }} />)}
-                <button type="button" disabled={!section.tilt.some(Boolean)} onClick={() => { setSection({ ...section, tilt: [0, 0] }); }}>Square up</button>
-                <label className="cad-checkbox"><input type="checkbox" checked={section.flipped} onChange={(event) => { setSection({ ...section, flipped: event.target.checked }); }} />Flip cut</label>
-                <button type="button" onClick={viewNormal} title="View normal to the section (N)" aria-keyshortcuts="N">View normal</button>
-                <button type="button" onClick={() => { setPicking(true); }}>Pick a face</button>
-                {hasLegend && <div className="cad-section-excluded">
-                  <button type="button" disabled={!acting.length} onClick={excludeSelection}>Leave selection uncut</button>
-                  {excluded.length > 0 && <>
-                    <span>Uncut:</span>
-                    {excluded.map(key => <button key={key} type="button" className="cad-section-uncut" title="Cut it again" onClick={() => { setExcluded(current => current.filter(item => item !== key)); }}>
-                      {resolve(key)?.label ?? 'Part not shown'} <span aria-hidden="true">×</span></button>)}
-                  </>}
-                </div>}
-              </div>;
-            })()}
+            {picking !== null && <p className="cad-section-pick" role="status">Click a face of the model to set {sections.length > 1 ? `plane ${String(picking + 1)}` : 'the section'} through it.{' '}
+              <button type="button" onClick={() => { setPicking(null); }} aria-keyshortcuts="Escape">Cancel</button></p>}
+            {viewer && sections.length > 0 && <div className="cad-section-planes" role="group" aria-label="Section planes">
+              {sections.map((item, index) => {
+                const [low, high] = depthRange(item.reference, tuple(viewer.sourceMin), tuple(viewer.size));
+                const depth = sectionDepth(item), inch = units === 'inches', axes = planeAxes(item.reference), n = String(index + 1);
+                return <div key={index} className="cad-section-plane" role="group" aria-label={`Plane ${n}`}>
+                  <span className="cad-section-reference">
+                    <label>Plane {n}
+                      <select value={picking === index ? 'face' : item.reference.plane} onChange={(event) => { choosePlane(index, event.target.value); }}>
+                        <option value="front">Front plane</option>
+                        <option value="top">Top plane</option>
+                        <option value="right">Right plane</option>
+                        <option value="face">{item.reference.plane === 'face' ? 'Face' : selectedFace ? 'Selected face' : 'Face…'}</option>
+                      </select>
+                    </label>
+                    {sections.length > 1 && <button type="button" className="cad-section-remove" aria-label={`Remove plane ${n}`}
+                      title={index === sections.length - 1 ? `Remove plane ${n} (Delete)` : `Remove plane ${n}`} aria-keyshortcuts={index === sections.length - 1 ? 'Delete Backspace' : undefined}
+                      onClick={() => { removeSection(index); }}>×</button>}
+                  </span>
+                  <label className="cad-slider">Depth <output>{depthText(depth)}</output>
+                    <input type="range" min={low} max={high} step={(high - low) / 1000 || 0.001} value={Math.min(high, Math.max(low, depth))}
+                      aria-valuetext={`${depthText(depth)} from the ${planeNames[item.reference.plane].toLowerCase()}`}
+                      onChange={(event) => { setPlane(index, withDepth(item, Number(event.target.value))); }} />
+                  </label>
+                  <DraftNumber label="Exact depth" step={inch ? 1 / 64 : 0.1} unit={inch ? 'in' : 'mm'}
+                    value={inch ? Number((depth / 25.4).toFixed(4)) : Number(depth.toFixed(2))}
+                    onValue={(value) => { setPlane(index, withDepth(item, inch ? value * 25.4 : value)); }} />
+                  {axes.map((axis, which) => <DraftNumber key={which} label={`Tilt about ${axisName(axis) ?? (which ? 'the second axis' : 'the first axis')}`} step={1} unit="°"
+                    value={item.tilt[which]} onValue={(value) => {
+                      const tilt: [number, number] = [...item.tilt];
+                      tilt[which] = value;
+                      setPlane(index, { ...item, tilt });
+                    }} />)}
+                  <button type="button" disabled={!item.tilt.some(Boolean)} onClick={() => { setPlane(index, { ...item, tilt: [0, 0] }); }}>Square up</button>
+                  <label className="cad-checkbox"><input type="checkbox" checked={item.flipped} onChange={(event) => { setPlane(index, { ...item, flipped: event.target.checked }); }} />Flip cut</label>
+                  <button type="button" onClick={() => { viewNormal(index); }} aria-keyshortcuts="N"
+                    title={sections.length > 1 ? `View normal to plane ${n} (N views each plane in turn)` : 'View normal to the section (N)'}>View normal</button>
+                  <button type="button" onClick={() => { setPicking(index); }}>Pick a face</button>
+                </div>;
+              })}
+              {(sections.length < maxSections || hasLegend) && <div className="cad-section-actions">
+                {sections.length < maxSections && <button type="button" title="Add plane (Alt+X)" aria-keyshortcuts="Alt+X" onClick={addSection}>Add plane</button>}
+                {hasLegend && <button type="button" disabled={!acting.length} onClick={excludeSelection}>Leave selection uncut</button>}
+                {hasLegend && excluded.length > 0 && <span className="cad-section-excluded">
+                  <span>Uncut:</span>
+                  {excluded.map(key => <button key={key} type="button" className="cad-section-uncut" title="Cut it again" onClick={() => { setExcluded(current => current.filter(item => item !== key)); }}>
+                    {resolve(key)?.label ?? 'Part not shown'} <span aria-hidden="true">×</span></button>)}
+                </span>}
+              </div>}
+            </div>}
           </fieldset>
           {viewer && <p className="cad-dimensions">Bounds: {units === 'inches'
             ? `${[viewer.size.x, viewer.size.y, viewer.size.z].map(inchText).join(' × ')} (X × Y × Z) · ${viewer.size.x.toFixed(1)} × ${viewer.size.y.toFixed(1)} × ${viewer.size.z.toFixed(1)} mm`
