@@ -1201,6 +1201,8 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     size, sourceMin, setSettings, setAppearance, setHover, setMeasurement, reset, replaceGeometry,
     // The piece or part under the pointer, if it is over the canvas.
     hovered: () => pointer ? pickAt(pointer.x, pointer.y) : null,
+    // The face under the pointer, as a click would pick it, for Shift+X to section through.
+    hoveredFace: () => pointer ? faceAt(pointer.x, pointer.y) : null,
     pointerInside: () => !!pointer,
     // Focus the 3D view after pointer use of the viewer's own controls, without the focus ring.
     focus: focusCanvas,

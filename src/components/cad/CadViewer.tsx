@@ -105,7 +105,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const [mode, setMode] = useState<RenderMode>('edges');
   // Orthographic, as Onshape shows models, unless Perspective is ticked; Reset view keeps it.
   const [perspective, setPerspective] = useState(savedPerspective);
-  // The section view (section.ts), or null when off; Shift+X brings back the last one.
+  // The section view (section.ts), or null when off; Shift+X brings back the last one, unless
+  // it cuts through a face.
   // `picking` waits for a click on a face to section through.
   // Up to `maxSections` planes cut at once; the controls and manipulator edit the active one.
   // `excluded` parts and pieces are left whole.
@@ -408,12 +409,13 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     setLooks(targets, () => ({ hidden: false, opacity: fade ? 0.3 : 1 }));
   };
   // A default plane from the Section menu opens through the middle of the model; "Face" waits
-  // for a click on one. Shift+X brings back the last section, or else the front plane.
+  // for a click on one. Shift+X cuts through the selected face or the face under the pointer,
+  // or else brings back the last section, or else the front plane.
   const start = (plane: DefaultPlane) => viewer && startSection(defaultPlanes[plane], tuple(viewer.sourceMin), tuple(viewer.size));
   // The selected face, the last one clicked, if any: turning the section on, from the menu's
   // Face, Shift+X or Add plane, cuts through it, where it was clicked.
   const selectedFace = [...selected].reverse().map(key => faceClicks.current.get(key)).find(face => !!face);
-  const throughFace = () => selectedFace && viewer && startSection(facePlane(selectedFace.point, selectedFace.normal), tuple(viewer.sourceMin), tuple(viewer.size));
+  const throughFace = (face: PickedFace | null | undefined = selectedFace) => face && viewer && startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size));
   const chooseSection = (value: string) => {
     const face = value === 'face' ? throughFace() : null;
     if (face) { setPicking(false); setSection(face); return; }
@@ -426,7 +428,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   const toggleSection = () => {
     setPicking(false);
     if (sections.length) { setSections([]); setActive(0); return; }
-    const face = throughFace();
+    const face = throughFace(selectedFace ?? viewer?.hoveredFace());
     const restored = face ? { sections: [face], active: 0 } : lastSections.current ?? { sections: [start('front')].filter(item => !!item), active: 0 };
     setSections(restored.sections);
     setActive(restored.active);
@@ -473,12 +475,12 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   // Onshape-style keys: Y hides, Shift+I ghosts everything else, Shift+T toggles transparency,
   // and Space (from the 3D view) clears the selection. Shift+Y shows every part and clears
   // fades, transparency and isolation, as Show all parts does, where Onshape's shows hidden
-  // parts only. Shift+X turns the section
-  // off and on, N views normal to it, and Escape stops picking a face. Actions apply to
-  // the selection or, with nothing selected, to the part under the cursor. Returns whether the
-  // key was used. From the 3D view Space is always used, so it never scrolls the page. Models
-  // without a legend have no parts, but their edges and corners can be selected, so Space
-  // works for every model.
+  // parts only. Shift+X turns the section off and on, through the selected face or the face
+  // under the cursor if there is one, N views normal to it, and Escape stops picking a face.
+  // Actions apply to the selection or, with nothing selected, to the part under the cursor.
+  // Returns whether the key was used. From the 3D view Space is always used, so it never
+  // scrolls the page. Models without a legend have no parts, but their edges and corners can
+  // be selected, so Space works for every model.
   const runShortcut = (event: { key: string; code: string; shiftKey: boolean; altKey: boolean }, fromCanvas: boolean) => {
     const { code, shiftKey: shift, altKey: alt } = event;
     const hovered = () => resolve(viewer?.hovered() ?? null);
@@ -615,7 +617,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
               : section ? `${planeNames[section.reference.plane]} section${sections.length > 1 ? ` ${String(active + 1)} of ${String(sections.length)}` : ''} · depth ${depthText(sectionDepth(section))}${section.tilt.some(Boolean) ? ` · tilted ${section.tilt.map(angle => `${String(angle)}°`).join(', ')}` : ''}`
                 : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face from the Section menu; with a face selected, its Selected face, Shift+X and Add plane cut through that face. Drag the section’s arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on.{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Section the model by a default plane or a face from the Section menu; with a face selected, its Selected face, Shift+X and Add plane cut through that face, and otherwise Shift+X cuts through the face under the cursor. Drag the section’s arrow to move it and its arcs to tilt it, or click the arrow to flip it. Add plane cuts by up to three planes, removing only what lies beyond them all, and Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and on, bringing back the last planes when the cursor is off the model.{hasLegend
             ? ' Click faces, edges or corners, or parts in the legend, to add them to the selection or remove them; click empty space to clear it. A selected face stands for its part: Y hides; Shift+Y shows every part and clears fades, as Show all parts does; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click faces, edges or corners to add them to the selection or remove them, measuring edges and corners; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
