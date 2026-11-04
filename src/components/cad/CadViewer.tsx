@@ -329,7 +329,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   };
   // Where each face was clicked, so a section can be set through it.
   const faceClicks = useRef(new Map<string, PickedFace>());
-  // A click selects, or while picking, sets the plane through the face clicked.
+  // A click selects, or while picking, sets the plane through the face clicked, or with the
+  // section off, turns it on through that face.
   const pick = useRef<(key: string | null, face: PickedFace | null) => void>(toggleSelect);
   pick.current = (key, face) => {
     if (picking === null) {
@@ -338,7 +339,9 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
       return;
     }
     if (!face || !viewer) return;
-    setPlane(picking, startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size)));
+    const plane = startSection(facePlane(face.point, face.normal), tuple(viewer.sourceMin), tuple(viewer.size));
+    if (picking < sections.length) setPlane(picking, plane);
+    else { setSections([...sections, plane]); setActive(sections.length); }
     setPicking(null);
   };
   // Hovering an edge or vertex marks the part it belongs to in the legend.
@@ -415,6 +418,14 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     setPicking(next ? null : index);
     if (next) setPlane(index, next);
   };
+  // Alt+Shift+X: the active plane through the selected face, as its menu's Selected face does,
+  // or with none selected, through the next face clicked.
+  const toFace = () => {
+    const face = throughFace();
+    setPicking(face ? null : sections.length ? active : 0);
+    if (face && sections.length) setPlane(active, face);
+    else if (face) { setSections([face]); setActive(0); }
+  };
   const toggleSection = () => {
     setPicking(null);
     if (sections.length) { setSections([]); setActive(0); return; }
@@ -468,9 +479,9 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
   // and Space (from the 3D view) clears the selection. Shift+Y shows every part and clears
   // fades, transparency and isolation, as Show all parts does, where Onshape's shows hidden
   // parts only. Shift+X turns the section off and on, Alt+X adds a plane as Add plane does (or
-  // with the section off, turns it on), 1–3 make that plane active, Delete or Backspace removes
-  // the active plane while another is left, N views normal to the active plane, and Escape stops
-  // picking a face. Actions apply to the selection or, with nothing selected, to the part under
+  // with the section off, turns it on), Alt+Shift+X moves the active plane to the selected face,
+  // 1–3 make that plane active, Delete or Backspace removes the active plane while another is
+  // left, N views normal to the active plane, and Escape stops picking a face. Actions apply to the selection or, with nothing selected, to the part under
   // the cursor. Returns whether the key was used. From the 3D view Space is always used, so it
   // never scrolls the page. Models without a legend have no parts, but their edges and corners
   // can be selected, so Space works for every model.
@@ -483,6 +494,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
     const targets = ['KeyY', 'KeyI', 'KeyT'].includes(code) && !alt
       ? owners.length ? owners : [hovered()].filter((target): target is Target => !!target) : [];
     if (code === 'KeyX' && shift && !alt) toggleSection();
+    else if (code === 'KeyX' && alt && shift) toFace();
     else if (code === 'KeyX' && alt && !shift) {
       setPicking(null);
       if (sections.length) addSection();
@@ -619,7 +631,7 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                 : sections.length ? `${String(sections.length)} section planes, ${String(active + 1)} active · ${sections.map(item => `${planeNames[item.reference.plane]} ${depthText(sectionDepth(item))}${item.tilt.some(Boolean) ? ' tilted' : ''}`).join(' · ')}`
                   : `Z up · ${units === 'inches' ? 'inches' : 'mm'}`}</span>}
           </div>
-          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Tick Section to cut the model, and set each plane to a default plane or a face from its menu; with a face selected, the menu’s Selected face and Add plane cut through that face. Each plane has its own arrow: drag it to move the plane and its arcs to tilt it, or click the arrow to flip it. Add plane (Alt+X) cuts by up to three planes, removing what lies beyond any of them, each with its own row of controls; 1–3 make a plane active and Delete removes the active one. Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and back on with all its planes (the first time, through a selected face).{hasLegend
+          <p id="cad-help" className="cad-help">Right-drag to rotate, Ctrl+right-drag or middle-drag to pan, and scroll or pinch to zoom, each about the point under the cursor · on touch, one finger rotates and two fingers pan and zoom. Click a face, edge or corner of the cube at the top right to look from that side; its arrows turn the view 90° about the screen’s axes, its curved arrows roll it, and its Views menu or Shift+1–7 give the front, back, left, right, top, bottom and isometric views. The view is orthographic, as in Onshape; tick Perspective for a perspective one. Focus the model and use arrow keys to rotate, +/− to zoom. Tick Section to cut the model, and set each plane to a default plane or a face from its menu; with a face selected, the menu’s Selected face and Add plane cut through that face. Each plane has its own arrow: drag it to move the plane and its arcs to tilt it, or click the arrow to flip it. Add plane (Alt+X) cuts by up to three planes, removing what lies beyond any of them, each with its own row of controls; 1–3 make a plane active, Delete removes the active one, and Alt+Shift+X moves it to the selected face, or with none selected, the next face clicked. Leave selection uncut keeps selected parts whole. N views normal to the active plane, and Shift+X turns the section off and back on with all its planes (the first time, through a selected face).{hasLegend
             ? ' Click faces, edges or corners, or parts in the legend, to add them to the selection or remove them; click empty space to clear it. A selected face stands for its part: Y hides; Shift+Y shows every part and clears fades, as Show all parts does; Shift+I fades everything else and restores it when pressed again; Shift+T toggles transparency; Space clears the selection. With nothing selected, keys act on the part under the cursor.'
             : ' Click faces, edges or corners to add them to the selection or remove them, measuring edges and corners; click empty space to clear it. Space clears the selection.'}</p>
           <fieldset className="cad-controls" disabled={!viewer || !!status}>
@@ -676,7 +688,8 @@ export default function CadViewer({ entry, local, step, fileUnits, genericParts 
                   <label className="cad-checkbox"><input type="checkbox" checked={item.flipped} onChange={(event) => { setPlane(index, { ...item, flipped: event.target.checked }); }} />Flip cut</label>
                   <button type="button" onClick={() => { viewNormal(index); }} aria-keyshortcuts={index === active ? 'N' : undefined}
                     title={index === active ? 'View normal to the plane (N)' : 'View normal to the plane'}>View normal</button>
-                  <button type="button" onClick={() => { setPicking(index); }}>Pick a face</button>
+                  <button type="button" onClick={() => { setPicking(index); }} aria-keyshortcuts={index === active ? 'Alt+Shift+X' : undefined}
+                    title={index === active ? 'Set the plane through a face you click (Alt+Shift+X, or with a face selected, through it)' : undefined}>Pick a face</button>
                 </div>;
               })}
               {(sections.length < maxSections || hasLegend) && <div className="cad-section-actions">
