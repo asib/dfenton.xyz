@@ -11,24 +11,25 @@ export type RenderMode = 'solid' | 'edges' | 'wireframe';
 // `sections` are the planes cutting the model (section.ts), up to `maxSections`. With several,
 // material on the removed side of any one is removed, as in Onshape, so what shows is what
 // every plane keeps.
-// `handle` places one plane's manipulator, or null hides it. `excluded` parts and pieces (by
-// legend part ID or piece key) are left whole.
+// `handles` places each plane's manipulator, in the order of `sections`; with none, they hide.
+// `excluded` parts and pieces (by legend part ID or piece key) are left whole.
 export const maxSections = 3;
 // `perspective` shows the model in perspective; it's orthographic otherwise, as Onshape shows it.
 export interface ViewSettings {
   mode: RenderMode;
   perspective?: boolean;
   sections: SectionPlane[];
-  handle?: SectionHandle | null;
+  handles?: SectionHandle[];
   excluded?: string[];
 }
 type Vec3 = [number, number, number];
 // The section manipulator, in model coordinates: its point, its arrow (toward the removed
 // side) and the axes its two arcs tilt the plane about.
 export interface SectionHandle { point: Vec3; arrow: Vec3; axes: [Vec3, Vec3] }
-// A drag of the manipulator, measured from where it started: millimetres along the arrow, or
-// degrees about an arc's axis (right-handed). Clicking the arrow without dragging flips it.
-export type HandleDrag = { kind: 'depth'; distance: number; done: boolean } | { kind: 'tilt'; axis: 0 | 1; degrees: number; done: boolean } | { kind: 'flip' };
+// A drag of a plane's manipulator (its index in `sections`), measured from where it started:
+// millimetres along the arrow, or degrees about an arc's axis (right-handed). Clicking the
+// arrow without dragging flips the plane.
+export type HandleDrag = { plane: number } & ({ kind: 'depth'; distance: number; done: boolean } | { kind: 'tilt'; axis: 0 | 1; degrees: number; done: boolean } | { kind: 'flip' });
 // A unit arc about the X axis, beside an arrow along Z, for the manipulator's tilt handles.
 class ArcCurve extends THREE.Curve<THREE.Vector3> {
   // How far the arc runs on past each end, in radians, as its outline does.
@@ -326,13 +327,14 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   mountCuts();
   scene.add(...cutGroups);
 
-  // The section manipulator, as in Onshape: an arrow toward the removed side, dragged to move
-  // the plane along it and clicked to flip it, and two arcs dragged to tilt the plane about its
-  // axes. Built at unit size about its point, kept a constant size on screen as it renders, and
-  // drawn over the model. Each handle has a wider invisible copy that is easier to grab.
-  // Its own colors and a dark outline under each part keep it clear against the cut faces,
-  // the model and the page alike: the outline is the part grown by about a pixel and a half.
-  const handleMaterials = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true }));
+  // Each section plane's manipulator, as in Onshape, all shown at once: an arrow toward the
+  // removed side, dragged to move the plane along it and clicked to flip it, and two arcs
+  // dragged to tilt the plane about its axes. Built at unit size about its point, kept a
+  // constant size on screen as it renders, and drawn over the model. Each handle has a wider
+  // invisible copy that is easier to grab. Its own colors and a dark outline under each part
+  // keep it clear against the cut faces, the model and the page alike: the outline is the part
+  // grown by about a pixel and a half. The manipulators share their shapes but not their
+  // colors, so only the handle hovered or dragged lightens.
   const outlineMaterial = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true, side: THREE.DoubleSide });
   const hitMaterial = new THREE.MeshBasicMaterial({ visible: false });
   const handleGeometries = [
@@ -350,29 +352,41 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     new THREE.SphereGeometry(0.071, 16, 12),
     new THREE.TubeGeometry(new ArcCurve(0.026), 24, 0.038, 8),
   ];
-  const handle = new THREE.Group(), arrow = new THREE.Group();
-  const outlines = outlineGeometries.map(part => new THREE.Mesh(part, outlineMaterial));
-  const arrowHit = new THREE.Mesh(handleGeometries[3], hitMaterial);
-  arrow.add(...outlines.slice(0, 3), ...[0, 1, 2].map(index => new THREE.Mesh(handleGeometries[index], handleMaterials[0])), arrowHit);
-  const arcs = [1, 2].map(material => new THREE.Mesh(handleGeometries[4], handleMaterials[material]));
-  const arcHits = arcs.map(arc => { const hit = new THREE.Mesh(handleGeometries[5], hitMaterial); arc.add(hit); return hit; });
-  arcs.forEach((arc, index) => { arc.add(index ? outlines[3].clone() : outlines[3]); });
-  const handleHits = [arrowHit, ...arcHits];
-  handle.add(arrow, ...arcs);
-  // Outlines draw first, so no part's outline crosses another part.
-  handle.traverse((part) => { part.renderOrder = part instanceof THREE.Mesh && part.material === outlineMaterial ? 9 : 10; });
-  handle.visible = false;
-  scene.add(handle);
+  const handles = Array.from({ length: maxSections }, () => {
+    // The arrow's material, then each arc's.
+    const materials = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true }));
+    const group = new THREE.Group(), arrow = new THREE.Group();
+    const outlines = outlineGeometries.map(part => new THREE.Mesh(part, outlineMaterial));
+    const arrowHit = new THREE.Mesh(handleGeometries[3], hitMaterial);
+    arrow.add(...outlines.slice(0, 3), ...[0, 1, 2].map(index => new THREE.Mesh(handleGeometries[index], materials[0])), arrowHit);
+    const arcs = [1, 2].map(material => new THREE.Mesh(handleGeometries[4], materials[material]));
+    const arcHits = arcs.map(arc => { const hit = new THREE.Mesh(handleGeometries[5], hitMaterial); arc.add(hit); return hit; });
+    arcs.forEach((arc, index) => { arc.add(index ? outlines[3].clone() : outlines[3]); });
+    group.add(arrow, ...arcs);
+    // Outlines draw first, so no part's outline crosses another part.
+    group.traverse((part) => { part.renderOrder = part instanceof THREE.Mesh && part.material === outlineMaterial ? 9 : 10; });
+    group.visible = false;
+    scene.add(group);
+    return { group, arrow, arcs, materials, hits: [arrowHit, ...arcHits] };
+  });
   const handleColors = { idle: '', active: '' };
-  let handleHover: number | null = null, handleActive: number | null = null;
+  // A handle as its plane and part: 0 for the arrow, 1 and 2 for the arcs.
+  interface Grab { plane: number; part: number }
+  const sameGrab = (a: Grab | null, b: Grab | null) => a === b || (!!a && !!b && a.plane === b.plane && a.part === b.part);
+  let handleHover: Grab | null = null, handleActive: Grab | null = null;
   const paintHandle = () => {
-    handleMaterials.forEach((material, index) => { material.color.set(index === (handleActive ?? handleHover) ? handleColors.active : handleColors.idle); });
+    const lit = handleActive ?? handleHover;
+    handles.forEach(({ materials }, plane) => {
+      materials.forEach((material, part) => { material.color.set(lit?.plane === plane && lit.part === part ? handleColors.active : handleColors.idle); });
+    });
   };
   placeHandle = () => {
-    if (!handle.visible) return;
-    // A pixel's size where the handle is; orthographically, the same at every depth.
-    const pixels = 2 * camera.position.distanceTo(perspective ? handle.position : controls.target) * Math.tan(camera.fov * Math.PI / 360) / (renderer.domElement.clientHeight || 1);
-    handle.scale.setScalar(pixels * 84);
+    for (const { group } of handles) {
+      if (!group.visible) continue;
+      // A pixel's size where the handle is; orthographically, the same at every depth.
+      const pixels = 2 * camera.position.distanceTo(perspective ? group.position : controls.target) * Math.tan(camera.fov * Math.PI / 360) / (renderer.domElement.clientHeight || 1);
+      group.scale.setScalar(pixels * 84);
+    }
   };
 
   // Selected and hovered edges draw as wide lines, vertices as round markers.
@@ -652,21 +666,23 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       placeCaps(index);
     });
     clipCaps();
-    handle.visible = next.sections.length > 0 && !!next.handle;
-    if (next.handle) {
-      const direction = new THREE.Vector3(...next.handle.arrow).normalize();
-      handle.position.set(...next.handle.point).sub(origin);
+    handles.forEach(({ group, arrow, arcs }, index) => {
+      const placed = index < next.sections.length ? next.handles?.[index] : undefined;
+      group.visible = !!placed;
+      if (!placed) return;
+      const direction = new THREE.Vector3(...placed.arrow).normalize();
+      group.position.set(...placed.point).sub(origin);
       arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
       // Each arc turns about its axis, swinging beside the arrow.
-      next.handle.axes.forEach((axis, index) => {
+      placed.axes.forEach((axis, part) => {
         const x = new THREE.Vector3(...axis).normalize();
         const z = direction.clone().addScaledVector(x, -direction.dot(x));
-        arcs[index].visible = z.lengthSq() > 1e-12;
-        if (!arcs[index].visible) return;
+        arcs[part].visible = z.lengthSq() > 1e-12;
+        if (!arcs[part].visible) return;
         z.normalize();
-        arcs[index].quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, z.clone().cross(x), z));
+        arcs[part].quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, z.clone().cross(x), z));
       });
-    }
+    });
     apply();
   };
 
@@ -849,21 +865,23 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const found = hitAt(x, y);
     return found ? found.layer.piece ?? found.layer.part : null;
   };
-  // The manipulator's handle under a client position: 0 for the arrow, 1 and 2 for the arcs.
+  // The manipulator handle under a client position, the nearest where they overlap.
   const rayAt = (x: number, y: number) => {
     const rect = renderer.domElement.getBoundingClientRect();
     raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, -(y - rect.top) / rect.height * 2 + 1), lens());
     return raycaster.ray;
   };
-  const handleAt = (x: number, y: number) => {
-    if (!handle.visible) return null;
+  const handleAt = (x: number, y: number): Grab | null => {
+    const shown = handles.filter(({ group }) => group.visible);
+    if (!shown.length) return null;
     rayAt(x, y);
-    const hit = raycaster.intersectObjects(handleHits.filter(part => part.parent?.visible), false)[0] as THREE.Intersection | undefined;
-    return hit ? handleHits.findIndex(part => part === hit.object) : null;
+    const hit = raycaster.intersectObjects(shown.flatMap(({ hits }) => hits.filter(part => part.parent?.visible)), false)[0] as THREE.Intersection | undefined;
+    const plane = hit ? handles.findIndex(({ hits }) => hits.some(part => part === hit.object)) : -1;
+    return plane < 0 || !hit ? null : { plane, part: handles[plane].hits.findIndex(part => part === hit.object) };
   };
   // A drag follows the pointer: along the arrow, the point on its line nearest the pointer's
   // ray; about an arc's axis, the pointer's ray meeting the plane square to that axis.
-  let handleDrag: { pointerId: number; part: number; x: number; y: number; moved: boolean; center: THREE.Vector3; direction: THREE.Vector3; start: THREE.Vector3 | number } | null = null;
+  let handleDrag: { pointerId: number; grab: Grab; x: number; y: number; moved: boolean; center: THREE.Vector3; direction: THREE.Vector3; start: THREE.Vector3 | number } | null = null;
   const alongArrow = (ray: THREE.Ray, center: THREE.Vector3, direction: THREE.Vector3) => {
     const between = center.clone().sub(ray.origin), b = direction.dot(ray.direction), denominator = 1 - b * b;
     if (denominator < 1e-6) return null;
@@ -874,14 +892,15 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const hit = ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(axis, center), new THREE.Vector3());
     return hit?.sub(center) ?? null;
   };
-  const startHandleDrag = (part: number, event: PointerEvent) => {
-    const center = handle.position.clone();
+  const startHandleDrag = (grab: Grab, event: PointerEvent) => {
+    const { group, arrow, arcs } = handles[grab.plane], { part } = grab;
+    const center = group.position.clone();
     const direction = part === 0 ? new THREE.Vector3(0, 0, 1).applyQuaternion(arrow.quaternion) : new THREE.Vector3(1, 0, 0).applyQuaternion(arcs[part - 1].quaternion);
     const ray = rayAt(event.clientX, event.clientY);
     const start = part === 0 ? alongArrow(ray, center, direction) : aroundAxis(ray, center, direction);
     if (start === null) return false;
-    handleDrag = { pointerId: event.pointerId, part, x: event.clientX, y: event.clientY, moved: false, center, direction, start };
-    handleActive = part;
+    handleDrag = { pointerId: event.pointerId, grab, x: event.clientX, y: event.clientY, moved: false, center, direction, start };
+    handleActive = grab;
     paintHandle();
     renderer.domElement.setPointerCapture(event.pointerId);
     renderer.domElement.style.cursor = 'grabbing';
@@ -890,22 +909,22 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   };
   const dragHandle = (event: PointerEvent, done: boolean) => {
     if (!handleDrag) return;
-    const { part, center, direction, start } = handleDrag;
+    const { grab: { plane, part }, center, direction, start } = handleDrag;
     handleDrag.moved ||= Math.hypot(event.clientX - handleDrag.x, event.clientY - handleDrag.y) > 3;
     if (!handleDrag.moved) return;
     const ray = rayAt(event.clientX, event.clientY);
     if (typeof start === 'number') {
       const along = alongArrow(ray, center, direction);
-      if (along !== null) onHandle?.({ kind: 'depth', distance: along - start, done });
+      if (along !== null) onHandle?.({ plane, kind: 'depth', distance: along - start, done });
     } else {
       const now = aroundAxis(ray, center, direction);
-      if (now) onHandle?.({ kind: 'tilt', axis: part === 1 ? 0 : 1, degrees: Math.atan2(direction.dot(start.clone().cross(now)), start.dot(now)) * 180 / Math.PI, done });
+      if (now) onHandle?.({ plane, kind: 'tilt', axis: part === 1 ? 0 : 1, degrees: Math.atan2(direction.dot(start.clone().cross(now)), start.dot(now)) * 180 / Math.PI, done });
     }
   };
   const endHandleDrag = (event: PointerEvent, cancelled: boolean) => {
     if (!handleDrag) return;
     if (!cancelled) dragHandle(event, true);
-    if (!cancelled && !handleDrag.moved && handleDrag.part === 0) onHandle?.({ kind: 'flip' });
+    if (!cancelled && !handleDrag.moved && handleDrag.grab.part === 0) onHandle?.({ plane: handleDrag.grab.plane, kind: 'flip' });
     if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
     handleDrag = null;
     handleActive = null;
@@ -998,7 +1017,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     frame = 0;
     // The manipulator is drawn over the model, so it comes first.
     const grab = pointer && !dragging && !touch ? handleAt(pointer.x, pointer.y) : null;
-    if (grab !== handleHover) { handleHover = grab; paintHandle(); render(); }
+    if (!sameGrab(grab, handleHover)) { handleHover = grab; paintHandle(); render(); }
     const next = pointer && !dragging && !touch && grab === null ? pickEntityAt(pointer.x, pointer.y) : null;
     if (!handleDrag) renderer.domElement.style.cursor = grab !== null ? 'grab' : next ? 'pointer' : '';
     if (next === pointerHover) return;
@@ -1248,7 +1267,7 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       capGeometry.dispose();
       cutLines.forEach((lines) => { lines.geometry.dispose(); lines.material.dispose(); });
       [...handleGeometries, ...outlineGeometries].forEach((part) => { part.dispose(); });
-      [...handleMaterials, outlineMaterial, hitMaterial].forEach((material) => { material.dispose(); });
+      [...handles.flatMap(({ materials }) => materials), outlineMaterial, hitMaterial].forEach((material) => { material.dispose(); });
       edgeOverlays.forEach((lines) => { lines.geometry.dispose(); });
       faceOverlays.forEach((overlay) => { overlay.geometry.dispose(); });
       faceMaterials.forEach((material) => { material.dispose(); });
