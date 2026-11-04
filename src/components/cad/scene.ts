@@ -9,7 +9,8 @@ import { createViewCube, namedViews, type NamedView } from './viewCube';
 
 export type RenderMode = 'solid' | 'edges' | 'wireframe';
 // `sections` are the planes cutting the model (section.ts), up to `maxSections`. With several,
-// only material on the removed side of every one is removed, as in Onshape's corner cutaways.
+// material on the removed side of any one is removed, as in Onshape, so what shows is what
+// every plane keeps.
 // `handle` places one plane's manipulator, or null hides it. `excluded` parts and pieces (by
 // legend part ID or piece key) are left whole.
 export const maxSections = 3;
@@ -162,10 +163,9 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
   fill.position.set(-3, -2, 1);
   scene.add(key, fill);
 
-  // Three keeps the side each plane faces. A cap is kept only where every other plane removes
-  // material, so it uses those planes turned around.
+  // Three keeps the side each plane faces, and with several, clips what any one clips. A cap
+  // is clipped by the other planes too, so it fills only where they keep material.
   const planes = Array.from({ length: maxSections }, () => new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0));
-  const capClips = planes.map(() => new THREE.Plane());
   // Count back/front intersections in stencil so the cut is filled only inside
   // the solid. Cavities remain empty. Based on Three.js's clipping-stencil example;
   // for each plane, each piece counts with only that plane clipping, then fills its own
@@ -504,7 +504,6 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     // Cut as the model is, unless every face shown is on a part left whole.
     const cut = found.every(item => item?.kind === 'face' ? whole(item.layer) : true) ? [] : planes.slice(0, settings.sections.length);
     faceMaterials[overlay].clippingPlanes = cut;
-    faceMaterials[overlay].clipIntersection = cut.length > 1;
     faceMaterials[overlay].needsUpdate = true;
     const segments = found.flatMap((item) => item?.kind === 'edge' ? edgeSegments(item.edge.points) : []);
     const dots = found.flatMap((item) => item?.kind === 'vertex' ? item.vertex : []);
@@ -567,10 +566,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     const look = (layer.piece ? appearances[layer.piece] : undefined) ?? (layer.part ? appearances[layer.part] : undefined);
     return { hidden: !!look?.hidden || look?.opacity === 0, opacity: look?.opacity ?? 1 };
   };
-  // Excluded parts and pieces are left whole; material is clipped where every plane removes it.
+  // Excluded parts and pieces are left whole; material is clipped where any plane removes it.
   const whole = (layer: Layer) => !!settings.excluded?.some(key => key === layer.piece || key === layer.part);
-  const clipped = (layer: Layer, point: THREE.Vector3) => settings.sections.length > 0 && !whole(layer) &&
-    planes.slice(0, settings.sections.length).every(plane => plane.distanceToPoint(point) < 0);
+  const clipped = (layer: Layer, point: THREE.Vector3) => !whole(layer) &&
+    planes.slice(0, settings.sections.length).some(plane => plane.distanceToPoint(point) < 0);
   // Apply display mode, section, theme colors and per-part appearance to every layer.
   const apply = () => {
     const { mode } = settings;
@@ -590,12 +589,10 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       layer.solid.wireframe = mode === 'wireframe';
       const cut = whole(layer) ? [] : active;
       layer.solid.clippingPlanes = cut;
-      layer.solid.clipIntersection = cut.length > 1;
       layer.solid.needsUpdate = true;
       layer.edges.material.transparent = translucent;
       layer.edges.material.opacity = opacity;
       layer.edges.material.clippingPlanes = cut;
-      layer.edges.material.clipIntersection = cut.length > 1;
       layer.edges.material.needsUpdate = true;
       // Section caps fill only fully opaque, visible, cut parts.
       layer.stencil.forEach((pair, index) => {
@@ -629,16 +626,16 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
     apply();
   };
 
-  // A plane's caps are kept only where the other planes remove material.
+  // A plane's caps and cut outlines are kept only where the other planes keep material.
   const clipCaps = () => {
     for (const layer of layers) {
       layer.caps.forEach((cap, index) => {
-        cap.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < settings.sections.length);
+        cap.material.clippingPlanes = planes.filter((_, other) => other !== index && other < settings.sections.length);
         cap.material.needsUpdate = true;
       });
     }
     cutLines.forEach((lines, index) => {
-      lines.material.clippingPlanes = capClips.filter((_, other) => other !== index && other < settings.sections.length);
+      lines.material.clippingPlanes = planes.filter((_, other) => other !== index && other < settings.sections.length);
       lines.material.needsUpdate = true;
     });
   };
@@ -653,7 +650,6 @@ export function createScene(host: HTMLElement, geometry: THREE.BufferGeometry, c
       // against the cut of the piece behind it.
       planes[index].set(normal.clone().negate(), section.constant - normal.dot(origin) - radius * 1e-4);
       placeCaps(index);
-      capClips[index].copy(planes[index]).negate();
     });
     clipCaps();
     handle.visible = next.sections.length > 0 && !!next.handle;
