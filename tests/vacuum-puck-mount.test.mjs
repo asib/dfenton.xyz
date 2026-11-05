@@ -36,7 +36,7 @@ test('saved STL and colored display match a fresh default compilation', () => {
   } finally { result.free(); }
 });
 
-test.each(['assembly', 'mount', 'template_fit', 'template'])('every source color in the %s view belongs to a legend part', View => {
+test.each(['assembly', 'mount', 'template'])('every source color in the %s view belongs to a legend part', View => {
   const legend = metadata.customizer.parts.map(part => part.color.match(/\w\w/g).map(h => parseInt(h, 16)));
   compile({ View }, result => {
     expect(result.ok).toBe(true);
@@ -57,27 +57,29 @@ test('the printable mount sits on the table with its wings on the dog holes', ()
   });
 });
 
-test('the drill template prints upside down beside its sleeves and seats on the vacuum face', () => {
-  // Skirt 6 + pad (5 mm foam + 0.5) + plate 5; open at the fitting end, flush with the puck there.
-  compile({ View: 'template' }, result => {
+test('the drill template is a flat plate with its holes at the screw spacing', () => {
+  for (const Screw_spacing of [34, 30]) compile({ View: 'template', Screw_spacing }, result => {
+    expect(result.ok).toBe(true);
+    // 12 mm of plate beyond each hole centre, 6 mm thick.
     const [min, max] = bounds(result.positions);
-    expect([min[2], max[2]].map(v => +v.toFixed(3) + 0)).toEqual([0, 16.5]);
-    expect([min[0], max[0]].map(v => +v.toFixed(3))).toEqual([-62.075, 62.075]);
-    // Upside down, the pad's bearing face is 10.5 mm up, inside the foam opening.
-    const padFace = [];
-    for (let i = 0; i < result.positions.length; i += 3)
-      if (Math.abs(result.positions[i + 2] - 10.5) < 1e-3) padFace.push(result.positions[i + 1]);
-    expect(padFace.length).toBeGreaterThan(0);
-    expect(Math.max(...padFace.map(Math.abs))).toBeCloseTo(76.2 / 2 - 14.5 - 1, 3);
+    expect(min.map(v => +v.toFixed(3) + 0)).toEqual([-Screw_spacing / 2 - 12, -12, 0]);
+    expect(max.map(v => +v.toFixed(3))).toEqual([Screw_spacing / 2 + 12, 12, 6]);
+    // Each hole's rim on the bed face is the 4.5 mm screw hole plus 0.2 mm clearance, centred at ±spacing/2.
+    for (const side of [-1, 1]) {
+      const rim = [];
+      for (let i = 0; i < result.positions.length; i += 3) {
+        const [x, y, z] = [result.positions[i], result.positions[i + 1], result.positions[i + 2]];
+        if (Math.abs(z) < 1e-3 && Math.abs(x - side * Screw_spacing / 2) < 5) rim.push(Math.hypot(x - side * Screw_spacing / 2, y));
+      }
+      expect(Math.max(...rim)).toBeCloseTo(2.35, 3);
+    }
   });
-  // Puck top 30.225 + template top 10.5 + sleeve collar 2.5.
-  compile({ View: 'template_fit' }, result => expect(+bounds(result.positions)[1][2].toFixed(3)).toBe(43.225));
 });
 
 test('the build notes give the counterbore depth for the chosen screw', () => {
   compile({}, result => {
     expect(result.echo).toContain('8 mm diameter x 9.225 mm deep');
-    expect(result.echo).toContain("cutting 19.7 mm below the template's top (9.2 mm into the puck)");
+    expect(result.echo).toContain('drill both 4.5 mm holes through, 34 mm apart, then counterbore each hole 8 mm across and 9.2 mm deep');
   });
   compile({ Puck_thickness: 38, Screw_length: 35 }, result => expect(result.echo).toContain('8 mm diameter x 10 mm deep'));
 });
@@ -90,8 +92,6 @@ test.each([
   [{ Screw_axis: 'along', Screw_shift: 20 }, 'would cut into the air channel or port'],
   [{ Screw_spacing: 40 }, "Screw 1's counterbore must stay 1 mm inside the foam gasket."],
   [{ Puck_thickness: 15 }, 'The dog knobs must sit below'],
-  [{ Template_skirt: 22 }, "The template's skirt must stop 1 mm short of the bench."],
-  [{ Guide_clearance: 1 }, "The drill sleeves' walls would be thinner than 1 mm."],
 ])('rejects %j', (changes, message) => {
   compile(changes, result => {
     expect(result.ok).toBe(false);

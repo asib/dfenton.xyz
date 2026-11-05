@@ -14,18 +14,15 @@
 // modelled, underside (nut traps) on the bed; the optional bridging layers
 // let the nut-trap roofs print without support.
 //
-// A companion drill template sits on the vacuum face to locate the two
-// counterbores, using the same screw positions as the mount. Its skirt runs
-// down both long sides and the end away from the fitting, and a pad drops
-// into the foam gasket's opening to bear on the HDPE. Drill each 4.5 mm hole
-// through a drop-in sleeve, then lift the sleeves out and counterbore through
-// the template's 8 mm guides. View = Drill template lays it out to print,
-// upside down, with its two sleeves.
+// A companion drill template is a flat plate with two holes at the screws'
+// spacing, which is all that has to match the mount. Hold it on the vacuum
+// face, drill both 4.5 mm holes through it, then counterbore each hole.
+// View = Drill template is the part to print.
 
 /* [View] */
-// Assembly shows the puck, screws, dogs and a patch of table for reference. Mount only is the printable part. The drill template views show it on the puck, or laid out to print with its sleeves.
-View = "assembly"; // [assembly:Assembly with puck and dogs, mount:Mount only (print this), template_fit:Drill template on the puck, template:Drill template and sleeves (print these)]
-// Separation of the assembly's or template's parts, in percent. Zero is assembled.
+// Assembly shows the puck, screws, dogs and a patch of table for reference. Mount only and Drill template are the parts to print.
+View = "assembly"; // [assembly:Assembly with puck and dogs, mount:Mount only (print this), template:Drill template (print this)]
+// Separation of the assembly's parts, in percent. Zero is assembled.
 Explode = 0; // [0:1:100]
 
 /* [Puck] */
@@ -103,15 +100,9 @@ Nut_recess = 1; // [0.4:0.1:4]
 Bridge_layer = 0.2; // [0:0.04:0.4]
 
 /* [Drill template] */
-// Template top thickness. The drill guides run through it and the pad below.
-Template_plate = 5; // [3:0.5:12]
-// Wall thickness of the template's skirt.
-Template_wall = 3; // [1.5:0.5:8]
-// How far the skirt reaches down the puck's sides below the vacuum face.
-Template_skirt = 6; // [2:0.5:20]
-// Total clearance between the skirt and the puck, across its width and at the end.
-Template_fit = 1; // [0:0.1:3]
-// Added to each drill guide's diameter, since printed holes come out small. The sleeves are this much smaller than the guides.
+// Thickness of the flat template. The drill runs through its holes.
+Template_thickness = 6; // [3:0.5:15]
+// Added to the template's hole diameter, since printed holes come out small.
 Guide_clearance = 0.2; // [0:0.05:1]
 
 /* [Hidden] */
@@ -148,7 +139,7 @@ table_hole_d = 20.3;
 pad_margin = 3;
 
 assembly = View == "assembly";
-explode = assembly || View == "template_fit" ? Explode / 100 * 50 : 0;
+explode = assembly ? Explode / 100 * 50 : 0;
 
 knob_r = Knob_diameter / 2;
 pad_r = knob_r + pad_margin;
@@ -182,19 +173,11 @@ fit_z = puck_z + Fitting_height;
 fitting_low = fit_z - Fitting_diameter / 2;
 port_x = Puck_length / 2 - Port_inset;
 
-// Drill template. Its pad clears the foam by 0.5 mm and bears on the
-// vacuum face, so its top is a fixed height above the face: the depth
-// reference for the counterbores.
-template_pad_h = Gasket_thickness > 0 ? Gasket_thickness + 0.5 : 0;
-template_top = template_pad_h + Template_plate;
-guide_d = counterbore_d + Guide_clearance;
-sleeve_od = counterbore_d - Guide_clearance;
-sleeve_bore = Screw_hole + Guide_clearance;
-sleeve_collar_d = guide_d + 6;
-sleeve_collar_h = 2.5;
-counterbore_stop = template_top + counterbore_depth;
-foam_open_x = Puck_length / 2 - Gasket_width;
-foam_open_y = Puck_width / 2 - Gasket_width;
+// Drill template: a flat plate with the through-holes at the screws' spacing.
+guide_d = Screw_hole + Guide_clearance;
+template_margin = 12;
+template_l = Screw_spacing + 2 * template_margin;
+template_w = 2 * template_margin;
 
 // Plan distance from a point to an axis-aligned box, zero inside it.
 function box_gap(p, x0, x1, y0, y1) = norm([max(x0 - p[0], 0, p[0] - x1), max(y0 - p[1], 0, p[1] - y1)]);
@@ -221,8 +204,6 @@ assert(hdpe_under_head >= min_hdpe_under_head,
     "The screw is too short to leave 5 mm of HDPE under its head. Choose a longer screw.");
 assert(Screw_spacing >= 2 * nut_corner_r + 2, "The two nut traps would run together. Space the screws further apart.");
 assert(nut_roof + 2 * Bridge_layer + 2 <= Plate_thickness, "The plate is too thin for the nut traps. Thicken the plate or use a thinner nut.");
-assert(Template_skirt + 1 <= Puck_thickness, "The template's skirt must stop 1 mm short of the bench. Shorten the skirt.");
-assert(sleeve_od - sleeve_bore >= 2, "The drill sleeves' walls would be thinner than 1 mm. Reduce the guide clearance.");
 for (i = [0:1]) {
     assert(knob_gap(dogs[i]) >= Knob_clearance,
         str("Dog ", i + 1, "'s knob would hit the puck or plate. Increase the hole pitches between the dogs."));
@@ -252,7 +233,6 @@ bottom_knob_rgb = [123, 82, 171];
 rod_rgb = [178, 68, 58];
 table_rgb = [201, 195, 182];
 template_rgb = [63, 143, 63];
-sleeve_rgb = [31, 155, 196];
 function shade(base, k) = base + [0, 0, k];
 function hex2(n) = str("0123456789abcdef"[floor(n / 16)], "0123456789abcdef"[n % 16]);
 function hex_color(c) = str("#", hex2(c[0]), hex2(c[1]), hex2(c[2]));
@@ -430,62 +410,15 @@ module assembly() {
 
 // --- Drill template ---
 
-// In place on the puck: the pad's underside on the vacuum face.
+// Flat on the bed, the holes along X; the chamfered side is the drill's entry.
 module drill_template() {
-    plate_z = puck_top + template_pad_h;
-    skirt_z = puck_top - Template_skirt;
-    inner_x = Puck_length / 2 + Template_fit / 2;
-    inner_y = Puck_width / 2 + Template_fit / 2;
-    x0 = -inner_x - Template_wall;
-    x1 = Puck_length / 2;
-    yo = inner_y + Template_wall;
     difference() {
-        union() {
-            // Plate and skirt; the skirt is open at the fitting end.
-            difference() {
-                translate([x0, -yo, skirt_z]) cube([x1 - x0, 2 * yo, plate_z + Template_plate - skirt_z]);
-                translate([-inner_x, -inner_y, skirt_z - eps]) cube([2 * inner_x + Template_wall, 2 * inner_y, plate_z - skirt_z + eps]);
-            }
-            if (template_pad_h > 0) translate([0, 0, puck_top])
-                linear_extrude(height = template_pad_h + eps) rounded_rect(2 * foam_open_x - 2, 2 * foam_open_y - 2, 2);
-        }
-        for (s = screws) translate([s[0], s[1], puck_top - eps]) {
-            cylinder(d = guide_d, h = template_top + 2 * eps);
-            translate([0, 0, template_top - 0.6]) cylinder(d1 = guide_d, d2 = guide_d + 1.2, h = 0.6 + 2 * eps);
+        linear_extrude(height = Template_thickness) rounded_rect(template_l, template_w, 4);
+        for (x = [-1, 1] * Screw_spacing / 2) translate([x, 0, -eps]) {
+            cylinder(d = guide_d, h = Template_thickness + 2 * eps);
+            translate([0, 0, Template_thickness - 0.6]) cylinder(d1 = guide_d, d2 = guide_d + 1.2, h = 0.6 + 2 * eps);
         }
     }
-}
-
-// Drop-in sleeve narrowing a guide to the through-hole drill. Its collar's
-// underside is at Z=0, resting on the template's top; the tube reaches the
-// vacuum face.
-module drill_sleeve() {
-    difference() {
-        union() {
-            cylinder(d = sleeve_collar_d, h = sleeve_collar_h);
-            translate([0, 0, -template_top]) cylinder(d = sleeve_od, h = template_top + eps);
-        }
-        translate([0, 0, -template_top - eps]) cylinder(d = sleeve_bore, h = template_top + sleeve_collar_h + 2 * eps);
-    }
-}
-
-module template_fit() {
-    paint(puck_rgb) puck();
-    paint(fitting_rgb) fitting();
-    paint(gasket_rgb) gasket();
-    translate([0, 0, 0.6 * explode]) paint(template_rgb) drill_template();
-    for (i = [0:1]) translate([screws[i][0], screws[i][1], puck_top + template_top + 1.2 * explode])
-        paint(shade(sleeve_rgb, i)) drill_sleeve();
-}
-
-// Laid out to print: the template upside down on its top face, the sleeves
-// on their collars in front of it.
-module template_print() {
-    top = puck_top + template_top;
-    x_mid = -Template_wall / 2 - Template_fit / 4;
-    paint(template_rgb) translate([-x_mid, 0, top]) rotate([180, 0, 0]) drill_template();
-    for (i = [0:1]) translate([(i - 0.5) * (sleeve_collar_d + 6), -(Puck_width / 2 + Template_wall + sleeve_collar_d), sleeve_collar_h])
-        rotate([180, 0, 0]) paint(shade(sleeve_rgb, i)) drill_sleeve();
 }
 
 echo(str("Counterbores: two ", counterbore_d, " mm diameter x ", counterbore_depth,
@@ -496,21 +429,18 @@ echo(str("Dogs: ", Pitches_along, " pitch(es) along and ", Pitches_across, " acr
     round(norm([2 * dog_dx, 2 * dog_dy]) * 10) / 10, " mm apart. Each clamps ",
     Table_thickness + Wing_thickness, " mm (table + wing) between its knobs."));
 echo(str("Knob tops: ", knob_top, " mm above the table, ", puck_top - knob_top, " mm below the vacuum face."));
-echo(str("Drill template: drill each ", Screw_hole, " mm hole through a sleeve, then lift the sleeves out and counterbore through the template with an ",
-    counterbore_d, " mm flat-bottom bit, cutting ", round(counterbore_stop * 10) / 10, " mm below the template's top (",
-    round(counterbore_depth * 10) / 10, " mm into the puck)."));
+echo(str("Drill template: hold it on the vacuum face and drill both ", Screw_hole, " mm holes through, ", Screw_spacing,
+    " mm apart, then counterbore each hole ", counterbore_d, " mm across and ", round(counterbore_depth * 10) / 10, " mm deep."));
 echo("PIECES_V1", [
     for (i = [0:1]) each [
         [hex_color(shade(screw_rgb, i)), str("M4 screw ", i + 1)],
         [hex_color(shade(nut_rgb, i)), str("M4 nut ", i + 1)],
         [hex_color(shade(top_knob_rgb, i)), str("Top knob ", i + 1)],
         [hex_color(shade(bottom_knob_rgb, i)), str("Bottom knob ", i + 1)],
-        [hex_color(shade(rod_rgb, i)), str("M6 rod ", i + 1)],
-        [hex_color(shade(sleeve_rgb, i)), str("Drill sleeve ", i + 1)]
+        [hex_color(shade(rod_rgb, i)), str("M6 rod ", i + 1)]
     ]
 ]);
 
 if (assembly) assembly();
-else if (View == "template_fit") template_fit();
-else if (View == "template") template_print();
+else if (View == "template") paint(template_rgb) drill_template();
 else paint(mount_rgb) mount();
