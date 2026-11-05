@@ -36,9 +36,10 @@ test('saved STL and colored display match a fresh default compilation', () => {
   } finally { result.free(); }
 });
 
-test('every source color belongs to a legend part', () => {
+test.each(['assembly', 'mount', 'template_fit', 'template'])('every source color in the %s view belongs to a legend part', View => {
   const legend = metadata.customizer.parts.map(part => part.color.match(/\w\w/g).map(h => parseInt(h, 16)));
-  compile({}, result => {
+  compile({ View }, result => {
+    expect(result.ok).toBe(true);
     for (const group of JSON.parse(result.groups)) {
       const rgb = group.color.slice(0, 3).map(c => Math.round(c * 255));
       expect(legend.some(part => part.every((c, i) => Math.abs(c - rgb[i]) <= 3))).toBe(true);
@@ -56,8 +57,28 @@ test('the printable mount sits on the table with its wings on the dog holes', ()
   });
 });
 
+test('the drill template prints upside down beside its sleeves and seats on the vacuum face', () => {
+  // Skirt 6 + pad (5 mm foam + 0.5) + plate 5; open at the fitting end, flush with the puck there.
+  compile({ View: 'template' }, result => {
+    const [min, max] = bounds(result.positions);
+    expect([min[2], max[2]].map(v => +v.toFixed(3) + 0)).toEqual([0, 16.5]);
+    expect([min[0], max[0]].map(v => +v.toFixed(3))).toEqual([-62.075, 62.075]);
+    // Upside down, the pad's bearing face is 10.5 mm up, inside the foam opening.
+    const padFace = [];
+    for (let i = 0; i < result.positions.length; i += 3)
+      if (Math.abs(result.positions[i + 2] - 10.5) < 1e-3) padFace.push(result.positions[i + 1]);
+    expect(padFace.length).toBeGreaterThan(0);
+    expect(Math.max(...padFace.map(Math.abs))).toBeCloseTo(76.2 / 2 - 14.5 - 1, 3);
+  });
+  // Puck top 30.225 + template top 10.5 + sleeve collar 2.5.
+  compile({ View: 'template_fit' }, result => expect(+bounds(result.positions)[1][2].toFixed(3)).toBe(43.225));
+});
+
 test('the build notes give the counterbore depth for the chosen screw', () => {
-  compile({}, result => expect(result.echo).toContain('8 mm diameter x 9.225 mm deep'));
+  compile({}, result => {
+    expect(result.echo).toContain('8 mm diameter x 9.225 mm deep');
+    expect(result.echo).toContain("cutting 19.7 mm below the template's top (9.2 mm into the puck)");
+  });
   compile({ Puck_thickness: 38, Screw_length: 35 }, result => expect(result.echo).toContain('8 mm diameter x 10 mm deep'));
 });
 
@@ -69,6 +90,8 @@ test.each([
   [{ Screw_axis: 'along', Screw_shift: 20 }, 'would cut into the air channel or port'],
   [{ Screw_spacing: 40 }, "Screw 1's counterbore must stay 1 mm inside the foam gasket."],
   [{ Puck_thickness: 15 }, 'The dog knobs must sit below'],
+  [{ Template_skirt: 22 }, "The template's skirt must stop 1 mm short of the bench."],
+  [{ Guide_clearance: 1 }, "The drill sleeves' walls would be thinner than 1 mm."],
 ])('rejects %j', (changes, message) => {
   compile(changes, result => {
     expect(result.ok).toBe(false);
