@@ -62,10 +62,10 @@ test('the printable mount sits on the table with its wing slots on the dog holes
 test('the drill template is a flat plate with its holes at the screw spacing', () => {
   for (const Screw_spacing of [48, 30]) compile({ View: 'template', Screw_spacing }, result => {
     expect(result.ok).toBe(true);
-    // 12 mm of plate beyond each hole centre, 6 mm thick.
+    // 6 mm of plate beyond each hole centre, 24 mm wide and 6 mm thick.
     const [min, max] = bounds(result.positions);
-    expect(min.map(v => +v.toFixed(3) + 0)).toEqual([-Screw_spacing / 2 - 12, -12, 0]);
-    expect(max.map(v => +v.toFixed(3))).toEqual([Screw_spacing / 2 + 12, 12, 6]);
+    expect(min.map(v => +v.toFixed(3) + 0)).toEqual([-Screw_spacing / 2 - 6, -12, 0]);
+    expect(max.map(v => +v.toFixed(3))).toEqual([Screw_spacing / 2 + 6, 12, 6]);
     // Each hole's rim on the bed face is the 4.5 mm screw hole plus 0.2 mm clearance, centred at ±spacing/2.
     for (const side of [-1, 1]) {
       const rim = [];
@@ -82,7 +82,7 @@ test('the drill template is a flat plate with its holes at the screw spacing', (
     const p = result.positions;
     for (let t = 0; t < p.length; t += 9) if ([2, 5, 8].every(o => Math.abs(p[t + o] - 6) < 1e-4))
       top += ((p[t + 3] - p[t]) * (p[t + 7] - p[t + 1]) - (p[t + 6] - p[t]) * (p[t + 4] - p[t + 1])) / 2;
-    const expected = (Screw_spacing + 24) * 24 - (4 - Math.PI) * 16 - 2 * Math.PI * 2.93 ** 2;
+    const expected = (Screw_spacing + 12) * 24 - (4 - Math.PI) * 9 - 2 * Math.PI * 2.93 ** 2;
     expect(Math.abs(top - expected) / expected).toBeLessThan(0.01);
   });
 });

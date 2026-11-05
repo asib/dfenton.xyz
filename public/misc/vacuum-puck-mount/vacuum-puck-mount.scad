@@ -104,6 +104,8 @@ Bridge_layer = 0.2; // [0:0.04:0.4]
 /* [Drill template] */
 // Thickness of the flat template. The drill runs through its holes.
 Template_thickness = 6; // [3:0.5:15]
+// Plate beyond each hole centre at the template's ends.
+Template_end = 6; // [4:0.5:20]
 // Added to the template's hole diameter, since printed holes come out small.
 Guide_clearance = 0.2; // [0:0.05:1]
 
@@ -182,9 +184,8 @@ port_x = Puck_length / 2 - Port_inset;
 
 // Drill template: a flat plate with the through-holes at the screws' spacing.
 guide_d = Screw_hole + Guide_clearance;
-template_margin = 12;
-template_l = Screw_spacing + 2 * template_margin;
-template_w = 2 * template_margin;
+template_l = Screw_spacing + 2 * Template_end;
+template_w = 24;
 
 // Plan distance from a point to an axis-aligned box, zero inside it.
 function box_gap(p, x0, x1, y0, y1) = norm([max(x0 - p[0], 0, p[0] - x1), max(y0 - p[1], 0, p[1] - y1)]);
@@ -428,7 +429,7 @@ module assembly() {
 // Flat on the bed, the holes along X; the chamfered side is the drill's entry.
 module drill_template() {
     difference() {
-        linear_extrude(height = Template_thickness) rounded_rect(template_l, template_w, 4);
+        linear_extrude(height = Template_thickness) rounded_rect(template_l, template_w, 3);
         for (x = [-1, 1] * Screw_spacing / 2) translate([x, 0, -eps]) {
             cylinder(d = guide_d, h = Template_thickness + 2 * eps);
             translate([0, 0, Template_thickness - 0.6]) cylinder(d1 = guide_d, d2 = guide_d + 1.2, h = 0.6 + 2 * eps);
