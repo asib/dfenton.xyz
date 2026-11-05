@@ -1,0 +1,36 @@
+{
+  "type": "cad",
+  "title": "Vacuum puck MFT mount",
+  "description": "A 3D-printed base that bolts under an HDPE vacuum puck and clamps it to an MFT-style table with two tightening dogs, with a matching drill template for the puck's counterbores. Size it to your puck, check the clearances, then download the parts to print.",
+  "date": "2026-11-05",
+  "preview": "preview.webp",
+  "previewDark": "preview-dark.webp",
+  "model": "vacuum-puck-mount.stl",
+  "displayModel": "vacuum-puck-mount-display.json",
+  "source": "vacuum-puck-mount.scad",
+  "camera": [1.35, -1.8, 1.1],
+  "notes": "Two M4 socket head cap screws pass down through counterbores in the puck's vacuum face into captive nuts in the mount's underside; the build notes give the counterbore depth for the chosen screw length. Each wing takes a tightening dog: the M6 rod passes through the wing and a table hole, the bottom knob sits under the table with its boss in the hole, and the flangeless top knob clamps the wing. The dogs are a whole number of hole pitches apart, so the puck stays square to the grid; by default they sit at diagonally opposite corners, clear of the push-fit fitting. Each wing's hole is a slot along the line between the dogs, so table holes a little off their nominal spacing still fit. The defaults are for 3 × 4 3/4 × 7/8 inch pucks with a 14.5 mm foam strip and the port 3/4 inch from the fitting end; the fitting's height and size are estimates. A companion drill template is a flat plate with two holes at the screws' spacing: hold it on the vacuum face, drill both through-holes, then counterbore each one to the depth in the build notes. Choose Mount only, or Drill template, before downloading an STL to print. The mount prints as shown, underside down, with two sacrificial bridging layers over each nut trap. A screw hole through the puck can leak air past the screw into the vacuum, so seal under each screw head with an O-ring or bonded washer. The puck, screws, nuts, dogs and table are reference geometry.",
+  "attribution": {
+    "text": "Dog knob dimensions are from the shared Onshape tightening-dog document (bottom knob and flangeless top knob).",
+    "url": "https://cad.onshape.com/documents/e98aca560585c6c2aecfad66/w/663a361251d2ed28f8948995/e/762b27136158454ae0aec465"
+  },
+  "customizer": {
+    "outputLabel": "Build notes",
+    "conditions": {
+      "Explode": { "parameter": "View", "value": "assembly" }
+    },
+    "parts": [
+      { "id": "mount", "label": "Mount (printed)", "color": "#d06a1f", "darkColor": "#f59a52" },
+      { "id": "puck", "label": "HDPE puck", "color": "#9aaab8", "darkColor": "#c3d0db" },
+      { "id": "gasket", "label": "Foam gasket", "color": "#474c55", "darkColor": "#8c94a1" },
+      { "id": "fitting", "label": "Push-fit fitting", "color": "#a8862c", "darkColor": "#e2bf5d" },
+      { "id": "screws", "label": "M4 cap screws", "color": "#2e3238", "darkColor": "#a3abb8" },
+      { "id": "nuts", "label": "M4 nuts", "color": "#2f8a84", "darkColor": "#66cfc6" },
+      { "id": "top-knobs", "label": "Dog top knobs", "color": "#2f6db3", "darkColor": "#78aef0" },
+      { "id": "bottom-knobs", "label": "Dog bottom knobs", "color": "#7b52ab", "darkColor": "#b894e6" },
+      { "id": "rods", "label": "M6 rods", "color": "#b2443a", "darkColor": "#f08a7e" },
+      { "id": "table", "label": "Table top", "color": "#c9c3b6", "darkColor": "#77726a" },
+      { "id": "template", "label": "Drill template (printed)", "color": "#3f8f3f", "darkColor": "#86d186" }
+    ]
+  }
+}
