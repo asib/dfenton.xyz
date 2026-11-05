@@ -71,10 +71,19 @@ test('the drill template is a flat plate with its holes at the screw spacing', (
       const rim = [];
       for (let i = 0; i < result.positions.length; i += 3) {
         const [x, y, z] = [result.positions[i], result.positions[i + 1], result.positions[i + 2]];
-        if (Math.abs(z) < 1e-3 && Math.abs(x - side * Screw_spacing / 2) < 5) rim.push(Math.hypot(x - side * Screw_spacing / 2, y));
+        const r = Math.hypot(x - side * Screw_spacing / 2, y);
+        if (Math.abs(z) < 1e-3 && r < 3) rim.push(r);
       }
       expect(Math.max(...rim)).toBeCloseTo(2.35, 3);
     }
+    // The top face covers the whole plate less its rounded corners and chamfered holes. An
+    // offset()-rounded plate lost half this face in openrscad-engine 0.14 while staying closed.
+    let top = 0;
+    const p = result.positions;
+    for (let t = 0; t < p.length; t += 9) if ([2, 5, 8].every(o => Math.abs(p[t + o] - 6) < 1e-4))
+      top += ((p[t + 3] - p[t]) * (p[t + 7] - p[t + 1]) - (p[t + 6] - p[t]) * (p[t + 4] - p[t + 1])) / 2;
+    const expected = (Screw_spacing + 24) * 24 - (4 - Math.PI) * 16 - 2 * Math.PI * 2.93 ** 2;
+    expect(Math.abs(top - expected) / expected).toBeLessThan(0.01);
   });
 });
 

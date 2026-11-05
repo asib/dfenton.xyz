@@ -252,13 +252,17 @@ module paint(rgb) color(rgb / 255) children();
 
 module rounded_rect(l, w, r) {
     rr = max(0, min(r, l / 2 - eps, w / 2 - eps));
-    if (rr > 0) offset(r = rr) square([l - 2 * rr, w - 2 * rr], center = true);
+    // A hull of corner circles rather than offset(): in openrscad-engine 0.14,
+    // offset()'s output can come out wrong when something is later subtracted
+    // from it (a rounded plate minus two holes lost half its face).
+    if (rr > 0) hull() for (x = [-1, 1] * (l / 2 - rr), y = [-1, 1] * (w / 2 - rr)) translate([x, y]) circle(r = rr);
     else square([l, w], center = true);
 }
 
 // Each wing is a pad around its rod slot, hulled to the nearest pad-sized
-// circle inside the plate, so the knob bears fully anywhere along the slot. (No fillet: openrscad-engine 0.14's negative
-// offset() distorts shapes, so the usual offset closing can't be used.)
+// circle inside the plate, so the knob bears fully anywhere along the slot.
+// (No fillet: openrscad-engine 0.14's negative offset() distorts shapes, so
+// the usual offset closing can't be used.)
 module wing_outline() {
     hx = max(0, plate_l / 2 - pad_r);
     hy = max(0, plate_w / 2 - pad_r);
