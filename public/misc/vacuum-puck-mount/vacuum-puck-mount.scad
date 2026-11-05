@@ -257,11 +257,15 @@ module nut_trap() {
     translate([0, 0, nut_roof + 2 * Bridge_layer - eps]) cylinder(d = Screw_hole, h = Plate_thickness);
 }
 
+// One stepped solid: the whole outline at plate thickness, cut down to wing
+// thickness outside the plate. (Two overlapping extrusions would leave
+// internal faces in the engine's display mesh.)
 module mount() {
     difference() {
-        union() {
-            linear_extrude(height = Wing_thickness) wing_outline();
-            linear_extrude(height = Plate_thickness) rounded_rect(plate_l, plate_w, Corner_radius);
+        linear_extrude(height = Plate_thickness) wing_outline();
+        translate([0, 0, Wing_thickness]) linear_extrude(height = Plate_thickness) difference() {
+            square(4 * [dog_dx + pad_r + plate_l, dog_dy + pad_r + plate_w], center = true);
+            rounded_rect(plate_l, plate_w, Corner_radius);
         }
         for (p = dogs) translate([p[0], p[1], -eps]) cylinder(d = Rod_hole, h = Plate_thickness + 2 * eps);
         for (s = screws) translate([s[0], s[1], 0]) nut_trap();
