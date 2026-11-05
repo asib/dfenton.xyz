@@ -9,7 +9,7 @@
         "clsx": "^2.1.1",
         "jspdf": "4.2.1",
         "occt-import-js": "0.0.23",
-        "openrscad-engine": "0.14.0",
+        "openrscad-engine": "0.14.2",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
         "svg2pdf.js": "2.8.1",
@@ -309,7 +309,7 @@
 
     "occt-import-js": ["occt-import-js@0.0.23", "", {}, "sha512-RFfYQXYFX5C1mB1Aywm0ShcUKzXOr/VzTnlzhBSDJOR6YCAPt1HYCzeXWg1vwwjn/cUxwqRNhhtf1dlewoZYCQ=="],
 
-    "openrscad-engine": ["openrscad-engine@0.14.0", "", {}, "sha512-obUtPCM7zbAP5942GTdRwVG9cJLHrh5scUre3sLgNSFJVlPQqNj+vjoA+wYKWu1gxEAZdNVtdu7cORUuxR42jw=="],
+    "openrscad-engine": ["openrscad-engine@0.14.2", "", {}, "sha512-uAJ6sn02fCQGHQ01l4J8cY5DinwD7HvX/G6VyIbixS5I3VbDaQTtEHv2rzHfOFO/TOjgB+cq3Hl11f/09qYc7A=="],
 
     "oxlint": ["oxlint@1.91.0", "", { "optionalDependencies": { "@oxlint/binding-android-arm-eabi": "1.91.0", "@oxlint/binding-android-arm64": "1.91.0", "@oxlint/binding-darwin-arm64": "1.91.0", "@oxlint/binding-darwin-x64": "1.91.0", "@oxlint/binding-freebsd-x64": "1.91.0", "@oxlint/binding-linux-arm-gnueabihf": "1.91.0", "@oxlint/binding-linux-arm-musleabihf": "1.91.0", "@oxlint/binding-linux-arm64-gnu": "1.91.0", "@oxlint/binding-linux-arm64-musl": "1.91.0", "@oxlint/binding-linux-ppc64-gnu": "1.91.0", "@oxlint/binding-linux-riscv64-gnu": "1.91.0", "@oxlint/binding-linux-riscv64-musl": "1.91.0", "@oxlint/binding-linux-s390x-gnu": "1.91.0", "@oxlint/binding-linux-x64-gnu": "1.91.0", "@oxlint/binding-linux-x64-musl": "1.91.0", "@oxlint/binding-openharmony-arm64": "1.91.0", "@oxlint/binding-win32-arm64-msvc": "1.91.0", "@oxlint/binding-win32-ia32-msvc": "1.91.0", "@oxlint/binding-win32-x64-msvc": "1.91.0" }, "peerDependencies": { "oxlint-tsgolint": ">=7.0.2005", "vite-plus": "*" }, "optionalPeers": ["oxlint-tsgolint", "vite-plus"], "bin": { "oxlint": "bin/oxlint" } }, "sha512-vjy/cBZcEFcYh3dbxUoQK+bjc+QaY3ZWo86aJkZ5YAwp/HyiqP7dTdNgbvcIVJafhAH5sZbTqBp4sZcicEZngA=="],
 
