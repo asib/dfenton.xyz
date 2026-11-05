@@ -58,7 +58,7 @@ test('the printable mount sits on the table with its wings on the dog holes', ()
 });
 
 test('the drill template is a flat plate with its holes at the screw spacing', () => {
-  for (const Screw_spacing of [34, 30]) compile({ View: 'template', Screw_spacing }, result => {
+  for (const Screw_spacing of [48, 30]) compile({ View: 'template', Screw_spacing }, result => {
     expect(result.ok).toBe(true);
     // 12 mm of plate beyond each hole centre, 6 mm thick.
     const [min, max] = bounds(result.positions);
@@ -79,7 +79,7 @@ test('the drill template is a flat plate with its holes at the screw spacing', (
 test('the build notes give the counterbore depth for the chosen screw', () => {
   compile({}, result => {
     expect(result.echo).toContain('8 mm diameter x 9.225 mm deep');
-    expect(result.echo).toContain('drill both 4.5 mm holes through, 34 mm apart, then counterbore each hole 8 mm across and 9.2 mm deep');
+    expect(result.echo).toContain('holes along the length, its middle 4 mm from centre away from the fitting end, and drill both 4.5 mm holes through, 48 mm apart. Then counterbore each hole 8 mm across and 9.2 mm deep.');
   });
   compile({ Puck_thickness: 38, Screw_length: 35 }, result => expect(result.echo).toContain('8 mm diameter x 10 mm deep'));
 });
@@ -90,7 +90,9 @@ test.each([
   [{ Screw_length: 25 }, 'The screw is too long'],
   [{ Screw_length: 12, Plate_thickness: 10 }, 'The screw is too short'],
   [{ Screw_axis: 'along', Screw_shift: 20 }, 'would cut into the air channel or port'],
-  [{ Screw_spacing: 40 }, "Screw 1's counterbore must stay 1 mm inside the foam gasket."],
+  [{ Screw_shift: 10 }, 'Screw 1 would cut into the air channel or port'],
+  [{ Screw_axis: 'across', Screw_spacing: 40 }, "Screw 1's counterbore must stay 1 mm inside the foam gasket."],
+  [{ Screw_shift: -20 }, "Screw 2's counterbore must stay 1 mm inside the foam gasket."],
   [{ Puck_thickness: 15 }, 'The dog knobs must sit below'],
 ])('rejects %j', (changes, message) => {
   compile(changes, result => {

@@ -51,11 +51,11 @@ Port_inset = 19.05; // [5:150]
 
 /* [Puck screws] */
 // Direction of the line through the two screws.
-Screw_axis = "across"; // [across:Across the width, along:Along the length]
+Screw_axis = "along"; // [along:Along the length, across:Across the width]
 // Centre-to-centre spacing of the two M4 screws.
-Screw_spacing = 34; // [10:0.5:250]
+Screw_spacing = 48; // [10:0.5:250]
 // Moves the screw pair along the puck's length; negative moves it away from the fitting.
-Screw_shift = 0; // [-150:0.5:150]
+Screw_shift = -4; // [-150:0.5:150]
 // M4 socket head cap screw length under the head. The counterbore depth to drill follows from it.
 Screw_length = 20; // [12, 16, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 
@@ -429,8 +429,10 @@ echo(str("Dogs: ", Pitches_along, " pitch(es) along and ", Pitches_across, " acr
     round(norm([2 * dog_dx, 2 * dog_dy]) * 10) / 10, " mm apart. Each clamps ",
     Table_thickness + Wing_thickness, " mm (table + wing) between its knobs."));
 echo(str("Knob tops: ", knob_top, " mm above the table, ", puck_top - knob_top, " mm below the vacuum face."));
-echo(str("Drill template: hold it on the vacuum face and drill both ", Screw_hole, " mm holes through, ", Screw_spacing,
-    " mm apart, then counterbore each hole ", counterbore_d, " mm across and ", round(counterbore_depth * 10) / 10, " mm deep."));
+echo(str("Drill template: hold it on the vacuum face with its holes ", Screw_axis == "along" ? "along the length" : "across the width",
+    Screw_shift == 0 ? ", centred" : str(", its middle ", abs(Screw_shift), " mm from centre ", Screw_shift > 0 ? "toward" : "away from", " the fitting end"),
+    ", and drill both ", Screw_hole, " mm holes through, ", Screw_spacing,
+    " mm apart. Then counterbore each hole ", counterbore_d, " mm across and ", round(counterbore_depth * 10) / 10, " mm deep."));
 echo("PIECES_V1", [
     for (i = [0:1]) each [
         [hex_color(shade(screw_rgb, i)), str("M4 screw ", i + 1)],
