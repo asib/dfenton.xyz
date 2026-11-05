@@ -76,8 +76,10 @@ Hole_pitch = 96; // [20:0.5:200]
 Pitches_along = 2; // [0:1:6]
 // Hole pitches between the two dogs across the puck's width. Zero puts both wings on the ends.
 Pitches_across = 1; // [0:1:6]
-// Wing hole for the dog's M6 rod.
+// Wing hole width for the dog's M6 rod.
 Rod_hole = 7; // [6.2:0.1:12]
+// Slot length along the line between the dogs, for table holes off their nominal spacing. Each dog can move half this either way; zero leaves round holes.
+Slot_length = 8; // [0:0.5:30]
 // Top knob diameter. Each wing pad is 3 mm larger in radius.
 Knob_diameter = 30; // [16:0.5:50]
 // Top knob height above the wing.
@@ -154,6 +156,11 @@ knob_top = Wing_thickness + Knob_height;
 dog_dx = Pitches_along * Hole_pitch / 2;
 dog_dy = Pitches_across * Hole_pitch / 2;
 dogs = [[dog_dx, dog_dy], [-dog_dx, -dog_dy]];
+dog_spacing = norm([2 * dog_dx, 2 * dog_dy]);
+// Each wing hole is slotted along the line through both dogs, which passes
+// through the puck's centre, so a knob is nearest the puck at its slot's
+// inner end.
+function slot_end(p, t) = p + t * Slot_length / 2 * p / norm(p);
 
 screws = Screw_axis == "across"
     ? [[Screw_shift, Screw_spacing / 2], [Screw_shift, -Screw_spacing / 2]]
@@ -190,6 +197,9 @@ function knob_gap(p) = box_gap(p, -footprint_x, footprint_x, -footprint_y, footp
 function fitting_gap(p) = box_gap(p, Puck_length / 2, Puck_length / 2 + Fitting_projection,
     Fitting_offset - Fitting_diameter / 2, Fitting_offset + Fitting_diameter / 2) - knob_r;
 function channel_gap(s) = segment_gap(s, [port_x, Fitting_offset], [Puck_length / 2, Fitting_offset]);
+// Closest a knob comes to the fitting anywhere along its slot, sampled at
+// both ends, the middle and the quarter points.
+function slot_fitting_gap(p) = min([for (t = [-1:0.5:1]) fitting_gap(slot_end(p, t))]);
 
 assert(Pitches_along + Pitches_across >= 1, "The dogs need at least one hole pitch between them.");
 assert(Wing_thickness <= Plate_thickness, "The wings must be no thicker than the plate, or they would lift the puck.");
@@ -205,9 +215,9 @@ assert(hdpe_under_head >= min_hdpe_under_head,
 assert(Screw_spacing >= 2 * nut_corner_r + 2, "The two nut traps would run together. Space the screws further apart.");
 assert(nut_roof + 2 * Bridge_layer + 2 <= Plate_thickness, "The plate is too thin for the nut traps. Thicken the plate or use a thinner nut.");
 for (i = [0:1]) {
-    assert(knob_gap(dogs[i]) >= Knob_clearance,
-        str("Dog ", i + 1, "'s knob would hit the puck or plate. Increase the hole pitches between the dogs."));
-    assert(knob_top + Knob_clearance <= fitting_low || fitting_gap(dogs[i]) >= Knob_clearance,
+    assert(knob_gap(slot_end(dogs[i], -1)) >= Knob_clearance,
+        str("Dog ", i + 1, "'s knob would hit the puck or plate at the inner end of its slot. Increase the hole pitches between the dogs or shorten the slots."));
+    assert(knob_top + Knob_clearance <= fitting_low || slot_fitting_gap(dogs[i]) >= Knob_clearance,
         str("Dog ", i + 1, "'s knob would hit the fitting. Move the dogs across the width or the fitting off centre."));
     assert(plate_l / 2 - abs(screws[i][0]) >= nut_corner_r + 2 && plate_w / 2 - abs(screws[i][1]) >= nut_corner_r + 2,
         str("Screw ", i + 1, "'s nut trap must stay 2 mm inside the plate's edge."));
@@ -246,15 +256,15 @@ module rounded_rect(l, w, r) {
     else square([l, w], center = true);
 }
 
-// Each wing is a pad around its rod hole, hulled to the nearest pad-sized
-// circle inside the plate. (No fillet: openrscad-engine 0.14's negative
+// Each wing is a pad around its rod slot, hulled to the nearest pad-sized
+// circle inside the plate, so the knob bears fully anywhere along the slot. (No fillet: openrscad-engine 0.14's negative
 // offset() distorts shapes, so the usual offset closing can't be used.)
 module wing_outline() {
     hx = max(0, plate_l / 2 - pad_r);
     hy = max(0, plate_w / 2 - pad_r);
     rounded_rect(plate_l, plate_w, Corner_radius);
     for (p = dogs) hull() {
-        translate(p) circle(r = pad_r);
+        for (t = [-1, 1]) translate(slot_end(p, t)) circle(r = pad_r);
         translate([max(-hx, min(hx, p[0])), max(-hy, min(hy, p[1]))]) circle(r = pad_r);
     }
 }
@@ -285,7 +295,8 @@ module mount() {
             square(4 * [dog_dx + pad_r + plate_l, dog_dy + pad_r + plate_w], center = true);
             rounded_rect(plate_l, plate_w, Corner_radius);
         }
-        for (p = dogs) translate([p[0], p[1], -eps]) cylinder(d = Rod_hole, h = Plate_thickness + 2 * eps);
+        for (p = dogs) hull() for (t = [-1, 1])
+            translate(concat(slot_end(p, t), -eps)) cylinder(d = Rod_hole, h = Plate_thickness + 2 * eps);
         for (s = screws) translate([s[0], s[1], 0]) nut_trap();
     }
 }
@@ -426,7 +437,8 @@ echo(str("Counterbores: two ", counterbore_d, " mm diameter x ", counterbore_dep
 echo(str("Screws: two M4 x ", Screw_length, " socket head cap screws into M4 nuts. Each tip stops flush with its nut, ",
     Nut_recess, " mm above the table."));
 echo(str("Dogs: ", Pitches_along, " pitch(es) along and ", Pitches_across, " across, ",
-    round(norm([2 * dog_dx, 2 * dog_dy]) * 10) / 10, " mm apart. Each clamps ",
+    round(dog_spacing * 10) / 10, " mm apart", Slot_length > 0 ? str("; the slots take ", round((dog_spacing - Slot_length) * 10) / 10,
+    " to ", round((dog_spacing + Slot_length) * 10) / 10, " mm") : "", ". Each clamps ",
     Table_thickness + Wing_thickness, " mm (table + wing) between its knobs."));
 echo(str("Knob tops: ", knob_top, " mm above the table, ", puck_top - knob_top, " mm below the vacuum face."));
 echo(str("Drill template: hold it on the vacuum face with its holes ", Screw_axis == "along" ? "along the length" : "across the width",

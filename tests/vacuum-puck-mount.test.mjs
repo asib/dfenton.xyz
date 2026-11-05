@@ -47,13 +47,15 @@ test.each(['assembly', 'mount', 'template'])('every source color in the %s view 
   });
 });
 
-test('the printable mount sits on the table with its wings on the dog holes', () => {
-  compile({ View: 'mount' }, result => {
+test('the printable mount sits on the table with its wing slots on the dog holes', () => {
+  // Dogs two pitches along and one across, at (±96, ±48); each pad is 18 mm in radius,
+  // and the default 8 mm slots reach 4 mm further out along the line through both dogs.
+  const out = 4 / Math.sqrt(5);
+  for (const [Slot_length, x, y] of [[8, 114 + 2 * out, 66 + out], [0, 114, 66]]) compile({ View: 'mount', Slot_length }, result => {
     expect(result.ok).toBe(true);
-    // Dogs two pitches along and one across, at (±96, ±48); each pad is 18 mm in radius.
     const [min, max] = bounds(result.positions);
-    expect(min.map(v => +v.toFixed(3))).toEqual([-114, -66, 0]);
-    expect(max.map(v => +v.toFixed(3))).toEqual([114, 66, 8]);
+    expect(min.map(v => +v.toFixed(3))).toEqual([-x, -y, 0].map(v => +v.toFixed(3)));
+    expect(max.map(v => +v.toFixed(3))).toEqual([x, y, 8].map(v => +v.toFixed(3)));
   });
 });
 
@@ -80,13 +82,14 @@ test('the build notes give the counterbore depth for the chosen screw', () => {
   compile({}, result => {
     expect(result.echo).toContain('8 mm diameter x 9.225 mm deep');
     expect(result.echo).toContain('holes along the length, its middle 4 mm from centre away from the fitting end, and drill both 4.5 mm holes through, 48 mm apart. Then counterbore each hole 8 mm across and 9.2 mm deep.');
+    expect(result.echo).toContain('214.7 mm apart; the slots take 206.7 to 222.7 mm.');
   });
   compile({ Puck_thickness: 38, Screw_length: 35 }, result => expect(result.echo).toContain('8 mm diameter x 10 mm deep'));
 });
 
 test.each([
   [{ Pitches_across: 0 }, "Dog 1's knob would hit the fitting."],
-  [{ Pitches_along: 1, Pitches_across: 0 }, "Dog 1's knob would hit the puck or plate."],
+  [{ Pitches_along: 1, Pitches_across: 0 }, "Dog 1's knob would hit the puck or plate at the inner end of its slot."],
   [{ Screw_length: 25 }, 'The screw is too long'],
   [{ Screw_length: 12, Plate_thickness: 10 }, 'The screw is too short'],
   [{ Screw_axis: 'along', Screw_shift: 20 }, 'would cut into the air channel or port'],
@@ -106,5 +109,5 @@ test('a fitting clash names the dog layout fixes', async () => {
   const [conflict, ...rest] = await analyzeConflicts(configured({ Pitches_across: 0 }), conflictInputs(schema, values), render, { precision: 0.1 });
   expect(rest).toEqual([]);
   expect(conflict.fixes).toContainEqual({ input: 'Pitches_across', value: 1, change: 'raise' });
-  expect(conflict.fixes).toContainEqual({ input: 'Fitting_offset', value: 21.3, change: 'raise' });
+  expect(conflict.fixes).toContainEqual({ input: 'Fitting_offset', value: 23.7, change: 'raise' });
 });
