@@ -57,16 +57,17 @@ test('the printable mount sits on the table with its wings on the dog holes', ()
 });
 
 test('the build notes give the counterbore depth for the chosen screw', () => {
-  compile({}, result => expect(result.echo).toContain('8 mm diameter x 7 mm deep'));
+  compile({}, result => expect(result.echo).toContain('8 mm diameter x 9.225 mm deep'));
   compile({ Puck_thickness: 38, Screw_length: 35 }, result => expect(result.echo).toContain('8 mm diameter x 10 mm deep'));
 });
 
 test.each([
   [{ Pitches_across: 0 }, "Dog 1's knob would hit the fitting."],
   [{ Pitches_along: 1, Pitches_across: 0 }, "Dog 1's knob would hit the puck or plate."],
-  [{ Screw_length: 30 }, 'The screw is too long'],
+  [{ Screw_length: 25 }, 'The screw is too long'],
   [{ Screw_length: 12, Plate_thickness: 10 }, 'The screw is too short'],
-  [{ Screw_axis: 'along', Screw_shift: 30 }, 'would cut into the air channel or port'],
+  [{ Screw_axis: 'along', Screw_shift: 20 }, 'would cut into the air channel or port'],
+  [{ Screw_spacing: 40 }, "Screw 1's counterbore must stay 1 mm inside the foam gasket."],
   [{ Puck_thickness: 15 }, 'The dog knobs must sit below'],
 ])('rejects %j', (changes, message) => {
   compile(changes, result => {
@@ -80,5 +81,5 @@ test('a fitting clash names the dog layout fixes', async () => {
   const [conflict, ...rest] = await analyzeConflicts(configured({ Pitches_across: 0 }), conflictInputs(schema, values), render, { precision: 0.1 });
   expect(rest).toEqual([]);
   expect(conflict.fixes).toContainEqual({ input: 'Pitches_across', value: 1, change: 'raise' });
-  expect(conflict.fixes).toContainEqual({ input: 'Fitting_offset', value: 25, change: 'raise' });
+  expect(conflict.fixes).toContainEqual({ input: 'Fitting_offset', value: 21.3, change: 'raise' });
 });

@@ -21,36 +21,38 @@ View = "assembly"; // [assembly:Assembly with puck and dogs, mount:Mount only (p
 Explode = 0; // [0:1:100]
 
 /* [Puck] */
-// HDPE block length, along the fitting's axis.
-Puck_length = 150; // [60:0.5:300]
-// HDPE block width.
-Puck_width = 100; // [40:0.5:300]
-// HDPE thickness, not counting the foam gasket.
-Puck_thickness = 25; // [10:0.5:80]
+// HDPE block length, along the fitting's axis. 120.65 mm is 4 3/4 inches.
+Puck_length = 120.65; // [60:300]
+// HDPE block width. 76.2 mm is 3 inches.
+Puck_width = 76.2; // [40:300]
+// HDPE thickness, not counting the foam gasket. 22.225 mm is 7/8 inch.
+Puck_thickness = 22.225; // [10:80]
+// Width of the foam gasket strip round the vacuum face. The counterbores must stay inside it.
+Gasket_width = 14.5; // [0:40]
 // Foam gasket thickness on the vacuum face. Shown for reference only.
-Gasket_thickness = 5; // [0:0.5:20]
+Gasket_thickness = 5; // [0:20]
 
 /* [Fitting and port] */
-// Fitting centre from the puck's centre line, across its width (+ toward the back).
-Fitting_offset = 0; // [-150:0.5:150]
+// Fitting and port centre from the puck's centre line, across its width (+ toward the back).
+Fitting_offset = 0; // [-150:150]
 // Fitting centre above the puck's underside.
-Fitting_height = 12.5; // [3:0.5:80]
+Fitting_height = 11; // [3:80]
 // Largest fitting diameter, including its sealing washer.
-Fitting_diameter = 16; // [6:0.5:40]
+Fitting_diameter = 16; // [6:40]
 // How far the fitting and its tube stand out from the end face.
-Fitting_projection = 25; // [5:0.5:80]
-// Vacuum port centre from the fitting end. The drilled air channel runs from the fitting to the port.
-Port_inset = 25; // [5:0.5:150]
+Fitting_projection = 25; // [5:80]
+// Vacuum port centre from the fitting end; 19.05 mm is 3/4 inch. The drilled air channel runs from the fitting to the port.
+Port_inset = 19.05; // [5:150]
 
 /* [Puck screws] */
 // Direction of the line through the two screws.
 Screw_axis = "across"; // [across:Across the width, along:Along the length]
 // Centre-to-centre spacing of the two M4 screws.
-Screw_spacing = 50; // [10:0.5:250]
+Screw_spacing = 34; // [10:0.5:250]
 // Moves the screw pair along the puck's length; negative moves it away from the fitting.
 Screw_shift = 0; // [-150:0.5:150]
 // M4 socket head cap screw length under the head. The counterbore depth to drill follows from it.
-Screw_length = 25; // [12, 16, 20, 25, 30, 35, 40, 45, 50, 55, 60]
+Screw_length = 20; // [12, 16, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 
 /* [Mount] */
 // Plate under the puck. Its thickness holds the nut traps.
@@ -103,12 +105,11 @@ head_h = 4;
 counterbore_d = 8;
 nut_flats = 7;
 min_hdpe_under_head = 5;
-// Puck details for the reference model: 6 mm air channel and port, the
-// fitting's tapped hole, and the foam strip's width.
+// Puck details for the reference model: 6 mm air channel and port, and the
+// fitting's tapped hole.
 channel_d = 6;
 fitting_tap_d = 8.7;
 fitting_tap_depth = 10;
-gasket_width = 12;
 // Dog parts, from the Onshape document: both knobs take an M6 rod in a
 // 6.15 mm bore with a captive 9.93 mm (across flats) nut. The bottom knob's
 // 20 mm boss locates in the table hole, centring the rod.
@@ -197,6 +198,9 @@ for (i = [0:1]) {
         str("Screw ", i + 1, "'s counterbore must stay 3 mm inside the puck's edge."));
     assert(channel_gap(screws[i]) >= counterbore_d / 2 + channel_d / 2 + 2,
         str("Screw ", i + 1, " would cut into the air channel or port. Move the screws away from the fitting end."));
+    assert(Puck_length / 2 - Gasket_width - abs(screws[i][0]) >= counterbore_d / 2 + 1 &&
+           Puck_width / 2 - Gasket_width - abs(screws[i][1]) >= counterbore_d / 2 + 1,
+        str("Screw ", i + 1, "'s counterbore must stay 1 mm inside the foam gasket. Move the screws inward."));
 }
 
 // Legend colours as 0-255 RGB. Repeated pieces get their own colour within
@@ -285,7 +289,7 @@ module puck() {
 module gasket() {
     if (Gasket_thickness > 0) translate([0, 0, puck_top]) linear_extrude(height = Gasket_thickness) difference() {
         square([Puck_length, Puck_width], center = true);
-        square([Puck_length - 2 * gasket_width, Puck_width - 2 * gasket_width], center = true);
+        square([Puck_length - 2 * Gasket_width, Puck_width - 2 * Gasket_width], center = true);
     }
 }
 
