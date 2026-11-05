@@ -1,7 +1,7 @@
 {
   "type": "cad",
   "title": "Vacuum puck MFT mount",
-  "description": "A 3D-printed base that bolts under an HDPE vacuum puck and clamps it to an MFT-style table with two tightening dogs. Size it to your puck, check the clearances, then download the mount to print.",
+  "description": "A 3D-printed base that bolts under an HDPE vacuum puck and clamps it to an MFT-style table with two tightening dogs, with a matching drill template for the puck's counterbores. Size it to your puck, check the clearances, then download the parts to print.",
   "date": "2026-11-05",
   "preview": "preview.webp",
   "previewDark": "preview-dark.webp",
@@ -9,7 +9,7 @@
   "displayModel": "vacuum-puck-mount-display.json",
   "source": "vacuum-puck-mount.scad",
   "camera": [1.35, -1.8, 1.1],
-  "notes": "Two M4 socket head cap screws pass down through counterbores in the puck's vacuum face into captive nuts in the mount's underside; the build notes give the counterbore depth for the chosen screw length. Each wing takes a tightening dog: the M6 rod passes through the wing and a table hole, the bottom knob sits under the table with its boss in the hole, and the flangeless top knob clamps the wing. The dogs are a whole number of hole pitches apart, so the puck stays square to the grid; by default they sit at diagonally opposite corners, clear of the push-fit fitting. The defaults are for 3 × 4 3/4 × 7/8 inch pucks with a 14.5 mm foam strip and the port 3/4 inch from the fitting end; the fitting's height and size are estimates. Choose Mount only before downloading the STL to print. It prints as shown, underside down, with two sacrificial bridging layers over each nut trap. A screw hole through the puck can leak air past the screw into the vacuum, so seal under each screw head with an O-ring or bonded washer. The puck, screws, nuts, dogs and table are reference geometry.",
+  "notes": "Two M4 socket head cap screws pass down through counterbores in the puck's vacuum face into captive nuts in the mount's underside; the build notes give the counterbore depth for the chosen screw length. Each wing takes a tightening dog: the M6 rod passes through the wing and a table hole, the bottom knob sits under the table with its boss in the hole, and the flangeless top knob clamps the wing. The dogs are a whole number of hole pitches apart, so the puck stays square to the grid; by default they sit at diagonally opposite corners, clear of the push-fit fitting. The defaults are for 3 × 4 3/4 × 7/8 inch pucks with a 14.5 mm foam strip and the port 3/4 inch from the fitting end; the fitting's height and size are estimates. A companion drill template locates the counterbores from the same settings: it sits on the vacuum face with its skirt down both long sides and the end away from the fitting, and a pad in the foam opening. Drill each through-hole through a drop-in sleeve, then lift the sleeves out and counterbore through the template's guides; the build notes give the depth below the template's top. Choose Mount only, or Drill template and sleeves, before downloading an STL to print. The mount prints as shown, underside down, with two sacrificial bridging layers over each nut trap; the template prints upside down on its top face, and the sleeves on their collars. A screw hole through the puck can leak air past the screw into the vacuum, so seal under each screw head with an O-ring or bonded washer. The puck, screws, nuts, dogs and table are reference geometry.",
   "attribution": {
     "text": "Dog knob dimensions are from the shared Onshape tightening-dog document (bottom knob and flangeless top knob).",
     "url": "https://cad.onshape.com/documents/e98aca560585c6c2aecfad66/w/663a361251d2ed28f8948995/e/762b27136158454ae0aec465"
@@ -17,7 +17,7 @@
   "customizer": {
     "outputLabel": "Build notes",
     "conditions": {
-      "Explode": { "parameter": "View", "value": "assembly" }
+      "Explode": { "parameter": "View", "values": ["assembly", "template_fit"] }
     },
     "parts": [
       { "id": "mount", "label": "Mount (printed)", "color": "#d06a1f", "darkColor": "#f59a52" },
@@ -29,7 +29,9 @@
       { "id": "top-knobs", "label": "Dog top knobs", "color": "#2f6db3", "darkColor": "#78aef0" },
       { "id": "bottom-knobs", "label": "Dog bottom knobs", "color": "#7b52ab", "darkColor": "#b894e6" },
       { "id": "rods", "label": "M6 rods", "color": "#b2443a", "darkColor": "#f08a7e" },
-      { "id": "table", "label": "Table top", "color": "#c9c3b6", "darkColor": "#77726a" }
+      { "id": "table", "label": "Table top", "color": "#c9c3b6", "darkColor": "#77726a" },
+      { "id": "template", "label": "Drill template (printed)", "color": "#3f8f3f", "darkColor": "#86d186" },
+      { "id": "sleeves", "label": "Drill sleeves (printed)", "color": "#1f9bc4", "darkColor": "#6fd0f0" }
     ]
   }
 }
