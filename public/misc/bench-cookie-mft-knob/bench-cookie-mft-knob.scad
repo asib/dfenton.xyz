@@ -29,8 +29,10 @@ Explode = 0; // [0:1:100]
 Bolt_length = 1.5; // [1:1 in, 1.25:1 1/4 in, 1.5:1 1/2 in, 1.75:1 3/4 in, 2:2 in, 2.25:2 1/4 in, 2.5:2 1/2 in]
 // Bolt head width across flats. A 5/16 inch hex head is 1/2 inch (12.7 mm); measure yours.
 Head_flats = 12.7; // [11:0.01:15]
-// Added to the head width for the pocket. The dog knobs' test print used 0.05 mm, a firm push fit.
-Pocket_clearance = 0.05; // [0:0.01:0.5]
+// Added to the head width for the pocket's flats, so they clear the head and the crush ribs grip it.
+Pocket_clearance = 0.15; // [0:0.01:0.5]
+// How far three crush ribs, on alternate flats, stand into the pocket. They grip the head so the bolt stays in the knob when the cookie is unscrewed. Zero leaves plain flats.
+Rib_height = 0.45; // [0:0.05:0.8]
 // Bolt head height. Hex bolts are about 7/32 inch (5.6 mm), hex cap screws 13/64 inch (5.2 mm).
 Head_height = 5.6; // [3:0.1:10]
 // How far the head sits up inside its pocket, so it never touches the bench when the knob is put down.
@@ -92,6 +94,10 @@ bottom_clearance = 0.5;
 // Material between the head pocket and the knurl's roots, and over the head.
 min_wall = 2;
 min_roof = 3;
+// Crush ribs: half-round, ramping in from flush over the pocket's first 1.5 mm
+// so the head starts square.
+rib_r = 0.8;
+rib_ramp = 1.5;
 // Reference cookie's threaded insert.
 insert_od = 12.7;
 // Standard lengths offered in the build notes, in inches.
@@ -111,6 +117,8 @@ knurl_twist = knurl_h / knob_r * 180 / PI;
 
 pocket_flats = Head_flats + Pocket_clearance;
 pocket_corner_r = pocket_flats / sqrt(3);
+// Across the pocket from each rib to the opposite flat.
+rib_grip = pocket_flats - Rib_height;
 // The bolt's head seats on the pocket's roof, this high above the knob's base.
 head_seat = Head_height + Head_recess;
 bolt_hole_z = head_seat + 2 * Bridge_layer;
@@ -140,6 +148,8 @@ assert(Bolt_hole < Head_flats, "The bolt hole must be narrower than the head, or
 assert(Boss_diameter - Bolt_hole >= 2 * min_wall, "The boss is too thin round the bolt hole.");
 assert(knurl_root_r - pocket_corner_r >= min_wall,
     "The knob is too narrow round the head pocket. Widen the knob or use fewer, finer knurl teeth.");
+assert(Rib_height == 0 || Rib_height > Pocket_clearance,
+    "The crush ribs must stand further into the pocket than its clearance, or they won't touch the head.");
 assert(roof >= min_roof, "The knob is too short over the head pocket. Make the knob taller or the head recess smaller.");
 
 // --- Colors ---
@@ -197,8 +207,20 @@ module ring_and_boss() {
         [Boss_diameter / 2, z_boss], [Boss_diameter / 2, z_top - c], [Boss_diameter / 2 - c, z_top], [0, z_top]]);
 }
 
+// Half-round ribs on alternate flats (30, 150 and 270 degrees), each flush at
+// the pocket's mouth and full height from rib_ramp up.
+module crush_ribs() {
+    for (i = [0:2]) rotate([0, 0, 30 + 120 * i]) hull() {
+        translate([pocket_flats / 2 + rib_r, 0, -2 * eps]) cylinder(r = rib_r, h = eps, $fn = 16);
+        translate([pocket_flats / 2 + rib_r - Rib_height, 0, rib_ramp]) cylinder(r = rib_r, h = head_seat - rib_ramp + 1, $fn = 16);
+    }
+}
+
 module head_pocket() {
-    translate([0, 0, -eps]) cylinder(r = pocket_corner_r, h = head_seat + eps, $fn = 6);
+    difference() {
+        translate([0, 0, -eps]) cylinder(r = pocket_corner_r, h = head_seat + eps, $fn = 6);
+        if (Rib_height > 0) crush_ribs();
+    }
     if (Bridge_layer > 0) {
         // First layer: a strip the bolt's width from flat to flat, so the
         // material either side bridges across the pocket. Second layer: a
@@ -289,8 +311,10 @@ echo(str("Bolt: 5/16-18 hex bolt, ", fraction(Bolt_length), " in (", bolt_mm, " 
 echo(str("Lengths that fit: ", round(shortest_mm * 10) / 10, " to ", round(longest_mm * 10) / 10,
     " mm under the head, which is ", length_list(fitting_lengths), "."));
 echo(str("Clamps a ", Table_thickness, " mm table top between the cookie and the knob's ring."));
-echo(str("Head pocket: ", pocket_flats, " mm across flats and ", head_seat,
-    " mm deep. Press the bolt head in from the knob's underside."));
+echo(str("Head pocket: ", pocket_flats, " mm across flats and ", head_seat, " mm deep",
+    Rib_height > 0 ? str(", with three crush ribs that narrow it to ", rib_grip,
+        " mm. Press the bolt head in from the knob's underside, with a vise or clamp if it's tight; the ribs hold it there.")
+    : ". Press the bolt head in from the knob's underside."));
 
 if (assembly) assembly();
 else paint(knob_rgb) knob();

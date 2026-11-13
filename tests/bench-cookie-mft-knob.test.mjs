@@ -68,7 +68,7 @@ test('the printable knob stands on its head pocket, 30 mm across and 20.5 mm tal
 });
 
 test('the head pocket is 1/2 inch plus clearance across flats, with its roof 7.6 mm up', () => {
-  const corner = 12.75 / Math.sqrt(3);
+  const corner = 12.85 / Math.sqrt(3);
   compile({ View: 'knob' }, result => {
     const points = vertices(result.positions);
     const rim = points.filter(p => Math.abs(p[2]) < 1e-4 && radius(p) < 10).map(radius);
@@ -77,6 +77,30 @@ test('the head pocket is 1/2 inch plus clearance across flats, with its roof 7.6
     // The 8.5 mm bolt hole leaves the boss through a 0.5 mm lead-in, about 9.5 mm across at the top.
     const top = points.filter(p => Math.abs(p[2] - 20.5) < 1e-4 && radius(p) < 8).map(radius);
     expect(Math.max(...top)).toBeCloseTo(4.75, 1);
+  });
+});
+
+test('three crush ribs narrow the pocket to grip the head, flush at its mouth', () => {
+  // Pocket-wall vertices between the ribs' ramp (1.5 mm) and the roof, inside the hex's corners.
+  const ribs = points => points.filter(p => p[2] >= 1.5 - 1e-4 && p[2] < 7.55 && radius(p) < 7);
+  const flat = 12.85 / 2;
+  compile({ View: 'knob' }, result => {
+    const points = vertices(result.positions);
+    const inner = ribs(points);
+    // Each rib's crest stands 0.45 mm off its flat, at 30, 150 and 270 degrees.
+    expect(Math.min(...inner.map(radius))).toBeCloseTo(flat - 0.45, 3);
+    for (const angle of [30, 150, 270]) {
+      const crest = inner.filter(p => radius(p) < flat - 0.44);
+      expect(crest.some(p => Math.abs(((Math.atan2(p[1], p[0]) * 180 / Math.PI - angle) % 360 + 540) % 360 - 180) < 0.01)).toBe(true);
+    }
+    // At the mouth the pocket is its full width, so the head starts in square.
+    const mouth = points.filter(p => Math.abs(p[2]) < 1e-4 && radius(p) < 7.5).map(radius);
+    expect(Math.min(...mouth)).toBeGreaterThan(flat - 0.01);
+  });
+  compile({ View: 'knob', Rib_height: 0 }, result => {
+    expect(result.ok).toBe(true);
+    expect(ribs(vertices(result.positions))).toEqual([]);
+    expect(result.echo).toContain('Head pocket: 12.85 mm across flats and 7.6 mm deep. Press the bolt head in');
   });
 });
 
@@ -126,7 +150,7 @@ test('the build notes give the bolt reach and the lengths that fit', () => {
   compile({}, result => {
     expect(result.echo).toContain("Bolt: 5/16-18 hex bolt, 1 1/2 in (38.1 mm) under the head. It reaches 11.2 mm into the cookie's insert, which takes 15 mm.");
     expect(result.echo).toContain('Lengths that fit: 34.9 to 41.4 mm under the head, which is 1 1/2 in.');
-    expect(result.echo).toContain('Head pocket: 12.75 mm across flats and 7.6 mm deep.');
+    expect(result.echo).toContain('Head pocket: 12.85 mm across flats and 7.6 mm deep, with three crush ribs that narrow it to 12.4 mm.');
   });
   compile({ Insert_depth: 20 }, result => expect(result.echo).toContain('which is 1 1/2 in or 1 3/4 in.'));
   compile({ Insert_depth: 25 }, result => expect(result.echo).toContain('which is 1 1/2 in, 1 3/4 in or 2 in.'));
@@ -144,6 +168,7 @@ test.each([
   [{ Ring_diameter: 20 }, 'The ring must be wider than the table hole'],
   [{ Boss_height: 18.5 }, 'The boss must stay inside the table hole.'],
   [{ Bolt_hole: 7.9 }, 'The bolt hole must be wider than the 5/16 inch bolt.'],
+  [{ Rib_height: 0.1 }, 'The crush ribs must stand further into the pocket than its clearance'],
   [{ Knob_diameter: 24, Knurl_teeth: 12 }, 'The knob is too narrow round the head pocket.'],
   [{ Knob_height: 8, Head_recess: 3, Bolt_length: 1.25 }, 'The knob is too short over the head pocket.'],
 ])('rejects %j', (changes, message) => {
