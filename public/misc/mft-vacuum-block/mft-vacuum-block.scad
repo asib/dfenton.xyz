@@ -5,18 +5,23 @@
 // channels between them to spread the vacuum. Holes in the channels drop to a
 // duct inside the block, which runs to a 1/4" NPT push-to-connect fitting
 // threaded into the front face. The underside is flat and solid: the block is
-// held to the table by two tightening dogs through slotted wings at its base,
-// not by vacuum. Each dog is an M6 rod with a 30 mm knurled knob under the
-// table and a flangeless 30 mm knob on the wing, as in the shared Onshape
-// document's "bottom knob" and "top knob no flange".
+// held to the table by two tightening dogs, not by vacuum. Two wings run
+// straight back from the block's rear face along the table, and each dog
+// clamps one through a long slot, so both dogs stand in one row of table holes
+// behind the block. The slots let the block slide toward or away from that
+// row: with a slot a hole pitch long, it can sit anywhere front to back,
+// moving the dogs to the next row when a slot runs out. Each dog is an M6 rod
+// with a 30 mm knurled knob under the table and a flangeless 30 mm knob on the
+// wing, as in the shared Onshape document's "bottom knob" and "top knob no
+// flange".
 //
-// The block is tall, so the workpiece rests well above the dogs' knobs:
-// Work_clearance is the clear height between the knob tops and the vacuum face.
+// The front and both ends are clear of the knobs. The block is tall, so work
+// overhanging the back also clears them: Work_clearance is the clear height
+// between the knob tops and the vacuum face.
 //
 // All dimensions are millimetres. Z is up and the table top is Z=0. The block
-// is centred on the origin with its length along X and its fitting on the
-// front face (-Y). By default both dogs sit in one row of table holes, on the
-// block's centre line, two hole pitches apart.
+// is centred on the origin with its length along X, its fitting on the front
+// face (-Y) and its wings to the back (+Y).
 //
 // Choose View = Block only before downloading an STL to print. It prints as
 // modelled, underside on the bed, with no supports: the duct is a teardrop
@@ -30,11 +35,11 @@ View = "assembly"; // [assembly:Assembly with cord, fitting and dogs, block:Bloc
 Explode = 0; // [0:1:100]
 
 /* [Block] */
-// Block length, along the line between in-line dogs. 120.65 mm is 4 3/4 inches.
+// Block length, along the row of dogs. 120.65 mm is 4 3/4 inches.
 Block_length = 120.65; // [60:300]
-// Block width. 76.2 mm is 3 inches.
+// Block width, front to back. 76.2 mm is 3 inches.
 Block_width = 76.2; // [40:300]
-// Clear height from the dog knobs' tops up to the vacuum face, where the workpiece rests.
+// Clear height from the dog knobs' tops up to the vacuum face, where the workpiece rests, so work overhanging the back clears the knobs.
 Work_clearance = 24; // [1:0.5:150]
 
 /* [Seal] */
@@ -78,21 +83,21 @@ Fitting_projection = 22; // [5:0.5:60]
 /* [Table and dogs] */
 // Centre-to-centre spacing of the table's holes. MFT-style tops use 96 mm.
 Hole_pitch = 96; // [20:0.5:200]
-// Hole pitches between the two dogs along the block's length.
-Pitches_along = 2; // [0:1:6]
-// Hole pitches between the two dogs across the block's width. Zero puts both dogs in one row, on the block's centre line.
-Pitches_across = 0; // [0:1:6]
+// Hole pitches between the two dogs, along the block's length. Each wing runs back in line with its dog.
+Pitches_along = 1; // [1:1:4]
+// Slot length along each wing. The block slides this far toward or away from the dogs' row; a hole pitch or more lets it sit anywhere front to back. Zero leaves round holes.
+Slot_length = 96; // [0:1:250]
+// Distance from the block's centre back to the dogs' row, for the assembly view. It must fall within the slots.
+Dog_distance = 96; // [20:0.5:400]
 // Wing thickness under the dog knobs. The wings sit flat on the table.
 Wing_thickness = 6; // [3:0.5:20]
-// Wing hole width for the dog's M6 rod.
+// Slot width for the dog's M6 rod.
 Rod_hole = 7; // [6.2:0.1:12]
-// Slot length along the line between the dogs, for table holes off their nominal spacing. Each dog can move half this either way; zero leaves round holes.
-Slot_length = 8; // [0:0.5:30]
 // Top knob diameter. Each wing pad is 3 mm larger in radius.
 Knob_diameter = 30; // [16:0.5:50]
 // Top knob height above the wing.
 Knob_height = 20; // [5:0.5:50]
-// Smallest gap allowed between a knob and the block or fitting.
+// Smallest gap between a knob and the block, at the near end of its slot, and between the two knobs.
 Knob_clearance = 2; // [0:0.5:10]
 // Table top thickness, for the reference table and the dogs' clamping stack.
 Table_thickness = 19; // [10:0.5:40]
@@ -167,27 +172,14 @@ duct_end_y = len(hole_ys) > 0 ? max(hole_ys) + Duct_diameter / 2 : port_end_y;
 hex_corner_r = Fitting_hex / sqrt(3);
 fitting_low = port_z - hex_corner_r;
 
-// The dogs sit in table holes a whole number of pitches apart, symmetric
-// about the block's centre.
+// The dogs stand in one row of table holes behind the block, a whole number
+// of pitches apart and symmetric about its centre. Each wing's slot runs back
+// in line with its dog, from where the knob just clears the block's rear face.
 dog_dx = Pitches_along * Hole_pitch / 2;
-dog_dy = Pitches_across * Hole_pitch / 2;
-dogs = [[dog_dx, dog_dy], [-dog_dx, -dog_dy]];
-dog_spacing = norm([2 * dog_dx, 2 * dog_dy]);
-// Each wing hole is slotted along the line through both dogs, which passes
-// through the block's centre, so a knob is nearest the block at its slot's
-// inner end.
-function slot_end(p, t) = p + t * Slot_length / 2 * p / norm(p);
-
-// Plan distance from a point to an axis-aligned box, zero inside it.
-function box_gap(p, x0, x1, y0, y1) = norm([max(x0 - p[0], 0, p[0] - x1), max(y0 - p[1], 0, p[1] - y1)]);
-function knob_gap(p) = box_gap(p, -Block_length / 2, Block_length / 2, -Block_width / 2, Block_width / 2) - knob_r;
-function fitting_gap(p) = box_gap(p, Port_offset - hex_corner_r, Port_offset + hex_corner_r,
-    -Block_width / 2 - Fitting_projection - tube_stub, -Block_width / 2) - knob_r;
-// Closest a knob comes to the fitting anywhere along its slot, sampled at
-// both ends, the middle and the quarter points.
-function slot_fitting_gap(p) = min([for (t = [-1:0.5:1]) fitting_gap(slot_end(p, t))]);
-
-assert(Pitches_along + Pitches_across >= 1, "The dogs need at least one hole pitch between them.");
+wing_xs = [dog_dx, -dog_dx];
+slot_near = Block_width / 2 + knob_r + Knob_clearance;
+slot_far = slot_near + Slot_length;
+dogs = [for (x = wing_xs) [x, Dog_distance]];
 assert(Groove_width <= Cord_diameter, "The groove must be no wider than the cord, or the cord won't grip it.");
 assert(Groove_depth >= Cord_diameter / 2, "The groove must be at least half the cord's diameter deep to hold it.");
 assert(cord_proud >= 0.5, "The cord must stand at least 0.5 mm proud of the face to seal. Make the groove shallower.");
@@ -207,12 +199,9 @@ assert(Duct_diameter / 2 * sqrt(2) + Duct_diameter / 2 <= Port_drop - Channel_de
 assert(Duct_diameter <= Port_hole - 1, "The duct must be narrower than the port.");
 assert(Hole_diameter <= Duct_diameter, "The vacuum holes must be no wider than the duct.");
 assert(duct_end_y + 3 <= inner_w / 2 + Channel_width + Groove_width, "The duct must end 3 mm inside the back wall.");
-for (i = [0:1]) {
-    assert(knob_gap(slot_end(dogs[i], -1)) >= Knob_clearance,
-        str("Dog ", i + 1, "'s knob would hit the block at the inner end of its slot. Increase the hole pitches between the dogs or shorten the slots."));
-    assert(knob_top + Knob_clearance <= fitting_low || slot_fitting_gap(dogs[i]) >= Knob_clearance,
-        str("Dog ", i + 1, "'s knob would hit the fitting or its tube. Move the port along the face or the dogs further out."));
-}
+assert(2 * (dog_dx - knob_r) >= Knob_clearance, "The two knobs would hit each other. Put more hole pitches between the dogs.");
+assert(Dog_distance >= slot_near - eps && Dog_distance <= slot_far + eps,
+    str("The assembly's dogs must stand within the slots, ", slot_near, " to ", slot_far, " mm behind the block's centre. Change the dog distance."));
 
 // Legend colours as 0-255 RGB. Repeated pieces get their own colour within
 // 3/255 of the legend colour, so the viewer can select each one.
@@ -239,16 +228,24 @@ module rounded_rect(l, w, r) {
     else square([l, w], center = true);
 }
 
-// The block's outline plus a wing for each dog: a pad round its rod slot,
-// hulled to the nearest pad-sized circle inside the block, so the knob bears
-// fully anywhere along the slot.
+// The block's outline plus a wing for each dog: a pad-width strip along its
+// slot, so the knob bears fully anywhere along it. A wing in line with the
+// block runs straight into its rear face, square across the corner; one
+// beyond the block's end angles in to it.
 module wing_outline() {
     hx = max(0, Block_length / 2 - pad_r);
     hy = max(0, Block_width / 2 - pad_r);
+    root_y = Block_width / 2 - corner_r;
     rounded_rect(Block_length, Block_width, corner_r);
-    for (p = dogs) hull() {
-        for (t = [-1, 1]) translate(slot_end(p, t)) circle(r = pad_r);
-        translate([max(-hx, min(hx, p[0])), max(-hy, min(hy, p[1]))]) circle(r = pad_r);
+    for (x = wing_xs) {
+        hull() for (y = [slot_near, slot_far]) translate([x, y]) circle(r = pad_r);
+        if (abs(x) <= Block_length / 2)
+            translate([x - pad_r, root_y]) square([2 * pad_r, slot_near - root_y]);
+        else
+            hull() {
+                translate([x, slot_near]) circle(r = pad_r);
+                translate([sign(x) * hx, hy]) circle(r = pad_r);
+            }
     }
 }
 
@@ -301,11 +298,11 @@ module block() {
     difference() {
         linear_extrude(height = face_z) wing_outline();
         translate([0, 0, Wing_thickness]) linear_extrude(height = face_z) difference() {
-            square(4 * [dog_dx + pad_r + Block_length, dog_dy + pad_r + Block_width], center = true);
+            square(2 * [dog_dx + pad_r + Block_length, slot_far + pad_r + Block_width], center = true);
             rounded_rect(Block_length, Block_width, corner_r);
         }
-        for (p = dogs) hull() for (t = [-1, 1])
-            translate(concat(slot_end(p, t), -eps)) cylinder(d = Rod_hole, h = Wing_thickness + 2 * eps);
+        for (x = wing_xs) hull() for (y = [slot_near, slot_far])
+            translate([x, y, -eps]) cylinder(d = Rod_hole, h = Wing_thickness + 2 * eps);
         translate([0, 0, groove_floor]) linear_extrude(height = Groove_depth + eps) groove();
         translate([0, 0, channel_floor]) linear_extrude(height = Channel_depth + eps) channels();
         air_path();
@@ -374,15 +371,18 @@ bottom_knob_z = -Table_thickness - bottom_knob_h - bottom_ring_h;
 rod_bottom = bottom_knob_z + 1;
 rod_top = knob_top - 1;
 
+// A patch of table from in front of the fitting's tube to behind the wings,
+// its holes on the dogs' grid.
 module table() {
-    span_x = max(Block_length / 2, dog_dx + pad_r) + Hole_pitch;
-    span_y = max(Block_width / 2 + Fitting_projection, dog_dy + pad_r) + Hole_pitch;
-    n = ceil(max(span_x, span_y) / Hole_pitch) + 1;
+    span_x = max(Block_length / 2, dog_dx + pad_r) + Hole_pitch / 2;
+    y0 = -(Block_width / 2 + Fitting_projection + tube_stub + 10);
+    y1 = max(slot_far, Dog_distance) + pad_r + 10;
+    n = ceil(max(span_x, -y0, y1) / Hole_pitch) + 1;
     difference() {
-        translate([-span_x, -span_y, -Table_thickness]) cube([2 * span_x, 2 * span_y, Table_thickness]);
+        translate([-span_x, y0, -Table_thickness]) cube([2 * span_x, y1 - y0, Table_thickness]);
         for (i = [-2 * n:2 * n], j = [-2 * n:2 * n]) {
-            g = [dog_dx + i * Hole_pitch, dog_dy + j * Hole_pitch];
-            if (abs(g[0]) + table_hole_d / 2 + 5 <= span_x && abs(g[1]) + table_hole_d / 2 + 5 <= span_y)
+            g = [dog_dx + i * Hole_pitch, Dog_distance + j * Hole_pitch];
+            if (abs(g[0]) + table_hole_d / 2 + 5 <= span_x && g[1] - table_hole_d / 2 - 5 >= y0 && g[1] + table_hole_d / 2 + 5 <= y1)
                 translate([g[0], g[1], -Table_thickness - eps]) cylinder(d = table_hole_d, h = Table_thickness + 2 * eps, $fn = 32);
         }
     }
@@ -409,10 +409,10 @@ echo(str("Seal: cut ", round(cord_length), " mm of ", Cord_diameter, " mm foam c
 echo(str("Port: ", Port_hole, " mm at the face, tapering to ", Port_hole - Port_depth * npt_taper, " mm, ", Port_depth,
     " mm deep, its centre ", port_z, " mm above the table. Tap it 1/4\" NPT, or thread the fitting straight in."));
 echo(str("Vacuum: ", len(hole_ys), " holes of ", Hole_diameter, " mm from a ", Duct_diameter, " mm duct to the channels."));
-echo(str("Dogs: ", Pitches_along, " pitch(es) along and ", Pitches_across, " across, ",
-    round(dog_spacing * 10) / 10, " mm apart", Slot_length > 0 ? str("; the slots take ", round((dog_spacing - Slot_length) * 10) / 10,
-    " to ", round((dog_spacing + Slot_length) * 10) / 10, " mm") : "", ". Each clamps ",
-    Table_thickness + Wing_thickness, " mm (table + wing) between its knobs."));
+echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_along > 1 ? "es" : "",
+    "), in a row ", round(slot_near * 10) / 10, Slot_length > 0 ? str(" to ", round(slot_far * 10) / 10) : "",
+    " mm behind the block's centre", Slot_length >= Hole_pitch ? ": with the next row of holes, the block can sit anywhere front to back" : "",
+    ". Each clamps ", Table_thickness + Wing_thickness, " mm (table + wing) between its knobs."));
 echo("PIECES_V1", [
     for (i = [0:1]) each [
         [hex_color(shade(top_knob_rgb, i)), str("Top knob ", i + 1)],
