@@ -188,6 +188,11 @@ wing_xs = [dog_dx, -dog_dx];
 slot_near = Block_width / 2 + knob_r + max(Knob_clearance, Wing_fillet);
 slot_far = slot_near + Slot_length;
 dogs = [for (x = wing_xs) [x, Dog_distance]];
+// A wing in line with the block stops flush with its end, where the knob
+// overhangs the wing's outer edge by no more than this.
+max_knob_overhang = knob_r / 3;
+function wing_out(x) = min(x + pad_r, max(Block_length / 2, x + knob_r - max_knob_overhang));
+knob_overhang = dog_dx <= Block_length / 2 ? max(0, dog_dx + knob_r - wing_out(dog_dx)) : 0;
 assert(Groove_width <= Cord_diameter, "The groove must be no wider than the cord, or the cord won't grip it.");
 assert(Groove_depth >= Cord_diameter / 2, "The groove must be at least half the cord's diameter deep to hold it.");
 assert(cord_proud >= 0.5, "The cord must stand at least 0.5 mm proud of the face to seal. Make the groove shallower.");
@@ -244,9 +249,12 @@ module rounded_rect(l, w, r) {
 }
 
 // The wing at +X distance x: a pad-width strip along its slot, so the knob
-// bears fully anywhere along it. A wing in line with the block runs straight
+// bears on it anywhere along it. A wing in line with the block runs straight
 // into its rear face, square across the corner, with its inside corners
-// rounded by the fillet radius; one beyond the block's end angles in to it.
+// rounded by the fillet radius. Its outer side stops flush with the block's
+// end, so long as the knob overhangs it by no more than max_knob_overhang;
+// otherwise it reaches as far as that needs. A wing beyond the block's end
+// angles in to it.
 module wing_2d(x) {
     f = Wing_fillet;
     hx = max(0, Block_length / 2 - pad_r);
@@ -254,31 +262,24 @@ module wing_2d(x) {
     sx = Block_length / 2 - corner_r;
     root_y = Block_width / 2 - corner_r;
     x_in = x - pad_r;
-    x_out = x + pad_r;
-    hull() for (y = [slot_near, slot_far]) translate([x, y]) circle(r = pad_r);
+    x_out = x <= Block_length / 2 ? wing_out(x) : x + pad_r;
+    // Rounded ends on the wing's own centre line, which a trimmed outer side
+    // moves inboard of the slot's.
+    half = (x_out - x_in) / 2;
+    hull() for (y = [slot_near, slot_far]) translate([x_in + half, y]) circle(r = half);
     if (x <= Block_length / 2) {
-        translate([x_in, root_y]) square([2 * pad_r, slot_near - root_y]);
+        translate([x_in, root_y]) square([x_out - x_in, slot_near - root_y]);
         if (f > 0) {
             // The wing's inner side into the straight part of the rear face.
             if (x_in <= sx && x_in - f >= -sx)
-                translate([x_in - f, Block_width / 2 - eps]) difference() {
-                    square([f + eps, f + eps]);
-                    translate([0, f + eps]) circle(r = f);
-                }
-            // Its outer side the same way, or, past the block's end, the foot
-            // of the square across the corner into the end face.
+                translate([x_in, Block_width / 2]) mirror([1, 0, 0]) fillet_2d(f);
+            // Its outer side the same way; or, if it reaches past the block's
+            // end, the foot of the square across the corner into the end face.
+            // Flush with the end, it needs none.
             if (x_out + f <= sx)
-                translate([x_out - eps, Block_width / 2 - eps]) difference() {
-                    square([f + eps, f + eps]);
-                    translate([f + eps, f + eps]) circle(r = f);
-                }
-            else if (x_out > Block_length / 2) {
-                fo = min(f, x_out - Block_length / 2);
-                translate([Block_length / 2 - eps, root_y - fo]) difference() {
-                    square([fo + eps, fo + eps]);
-                    translate([fo + eps, 0]) circle(r = fo);
-                }
-            }
+                translate([x_out, Block_width / 2]) fillet_2d(f);
+            else if (x_out > Block_length / 2 + eps)
+                translate([Block_length / 2, root_y]) mirror([0, 1, 0]) fillet_2d(min(f, x_out - Block_length / 2));
         }
     } else
         hull() {
@@ -297,25 +298,37 @@ module wing_outline() {
     wings_2d();
 }
 
-// Cove cross-section: d out from the block's wall, h up from the wing's top,
-// overlapping both by eps so it joins cleanly.
-module cove_profile(f) {
+// A fillet of radius f in the corner at the origin between material along -X
+// and material along -Y. It overlaps both, and its arc is a hair larger than
+// f, so it crosses into them rather than touching them: a polygon's arc that
+// only touches can leave a sliver that the engine meshes with a non-manifold
+// edge.
+module fillet_2d(f) {
     difference() {
-        translate([-eps, -eps]) square(f + eps);
-        translate([f, f]) circle(r = f);
+        translate([-0.05, -0.05]) square(f + 0.05);
+        translate([f, f]) circle(r = f + 0.02);
     }
+}
+
+// Cove cross-section: d out from the block's wall, h up from the wing's top.
+module cove_profile(f) {
+    fillet_2d(f);
 }
 
 // A cove of radius f all round the foot of the block's wall, standing at wing
 // height: a straight run along each side and a quarter turn at each corner.
+// The runs reach 0.1 mm into the turns, so they overlap rather than meet face
+// to face.
 module cove_ring(f) {
     sx = Block_length / 2 - corner_r;
     sy = Block_width / 2 - corner_r;
+    rx = sx + 0.1;
+    ry = sy + 0.1;
     translate([0, 0, Wing_thickness]) union() {
-        translate([-sx, Block_width / 2, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * sx) cove_profile(f);
-        mirror([0, 1, 0]) translate([-sx, Block_width / 2, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * sx) cove_profile(f);
-        translate([Block_length / 2, sy, 0]) rotate([90, 0, 0]) linear_extrude(height = 2 * sy) cove_profile(f);
-        mirror([1, 0, 0]) translate([Block_length / 2, sy, 0]) rotate([90, 0, 0]) linear_extrude(height = 2 * sy) cove_profile(f);
+        translate([-rx, Block_width / 2, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * rx) cove_profile(f);
+        mirror([0, 1, 0]) translate([-rx, Block_width / 2, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * rx) cove_profile(f);
+        translate([Block_length / 2, ry, 0]) rotate([90, 0, 0]) linear_extrude(height = 2 * ry) cove_profile(f);
+        mirror([1, 0, 0]) translate([Block_length / 2, ry, 0]) rotate([90, 0, 0]) linear_extrude(height = 2 * ry) cove_profile(f);
         for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * sy, 0]) intersection() {
             rotate_extrude() translate([corner_r, 0]) cove_profile(f);
             translate([cx > 0 ? 0 : -(corner_r + f + 1), cy > 0 ? 0 : -(corner_r + f + 1), -1])
@@ -325,11 +338,12 @@ module cove_ring(f) {
 }
 
 // The fillet along the top of each wing where it meets the block's wall.
+// The cove needs no clipping to the wings: block() keeps it only where the
+// full-height outline has material, which outside the block is the wings. (A
+// clip along the wings' outline would duplicate their side faces, and the
+// engine meshes those with non-manifold edges.)
 module wing_coves() {
-    intersection() {
-        union() cove_ring(Wing_fillet);
-        union() translate([0, 0, -1]) linear_extrude(height = Wing_thickness + Wing_fillet + 2) wings_2d();
-    }
+    cove_ring(Wing_fillet);
 }
 
 // The fitting's side: the air path and fitting are modelled at the front and
@@ -509,7 +523,10 @@ echo(str("Vacuum: ", len(hole_ys), " holes of ", Hole_diameter, " mm from a ", D
 echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_along > 1 ? "es" : "",
     "), in a row ", round(slot_near * 10) / 10, Slot_length > 0 ? str(" to ", round(slot_far * 10) / 10) : "",
     " mm behind the block's centre", Slot_length >= Hole_pitch ? ": with the next row of holes, the block can sit anywhere front to back" : "",
-    ". Each clamps ", Table_thickness + Wing_thickness, " mm (table + wing) between its knobs."));
+    ". Each clamps ", Table_thickness + Wing_thickness, " mm (table + wing) between its knobs",
+    knob_overhang > 0 ? str(", and its top knob overhangs the wing's outer edge",
+        wing_out(dog_dx) <= Block_length / 2 + eps ? ", flush with the block's end," : "", " by ", round(knob_overhang * 10) / 10, " mm") : "",
+    "."));
 echo("PIECES_V1", [
     for (i = [0:1]) each [
         [hex_color(shade(top_knob_rgb, i)), str("Top knob ", i + 1)],
