@@ -39,8 +39,8 @@ Head_recess = 2; // [0:0.5:10]
 Bolt_hole = 8.1; // [8:0.05:9]
 
 /* [Bench cookie] */
-// How far a bolt threads into the cookie's insert before it stops, measured from the cookie's underside. Thread a bolt in until it bottoms out to check.
-Insert_depth = 12; // [5:0.5:25]
+// How far a bolt threads into the cookie's insert before it stops, measured from the cookie's underside. Thread a bolt in until it bottoms out to check; it was 15 mm on the cookies measured here.
+Insert_depth = 15; // [5:0.5:25]
 // Least thread engagement accepted in the insert. About one bolt diameter (8 mm) holds well.
 Min_engagement = 8; // [4:0.5:20]
 // Cookie diameter, for the reference model. The Bench Cookie Plus is 3 inches.
@@ -50,7 +50,7 @@ Cookie_height = 25.4; // [10:0.1:60]
 
 /* [Table] */
 // Table top thickness. The knob and cookie clamp it between them.
-Table_thickness = 19; // [10:0.5:40]
+Table_thickness = 18; // [10:0.5:40]
 // Table hole diameter. MFT-style tops use 20 mm.
 Table_hole = 20; // [16:0.1:30]
 

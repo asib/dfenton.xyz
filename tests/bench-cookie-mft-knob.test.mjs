@@ -27,9 +27,9 @@ const partVertices = (result, id) => {
     .flatMap(group => vertices(result.preview_positions.slice(3 * group.start, 3 * (group.start + group.count))));
 };
 
-// Defaults: a 13.5 mm knob, 3 mm ring and 19 mm table, with the head seated
-// 5.6 + 2 mm up its pocket, leave 27.9 mm of a bolt's length below the table top.
-const seatToTable = 13.5 + 3 + 19 - 7.6;
+// A 13.5 mm knob and 3 mm ring, with the head seated 5.6 + 2 mm up its pocket,
+// take 8.9 mm of a bolt's length below the table's underside.
+const seatToUnderside = 13.5 + 3 - 7.6;
 
 test('saved STL and colored display match a fresh default compilation', () => {
   const saved = parseDisplayMesh(JSON.parse(readFileSync(new URL(metadata.displayModel, folder), 'utf8')));
@@ -96,13 +96,13 @@ test('the knurl cuts half a pitch deep, and turning it off leaves a plain body',
 });
 
 test('the bolt seats on the pocket roof and reaches into the insert by its length less the stack', () => {
-  for (const [Bolt_length, Table_thickness] of [[1.5, 19], [1.25, 14]]) {
+  for (const [Bolt_length, Table_thickness] of [[1.5, 18], [1.25, 14]]) {
     compile({ Bolt_length, Table_thickness }, result => {
       expect(result.ok).toBe(true);
       const bolt = partVertices(result, 'bolt');
       const knobBase = -Table_thickness - 13.5 - 3;
       expect(Math.min(...bolt.map(p => p[2]))).toBeCloseTo(knobBase + 2, 4);
-      expect(Math.max(...bolt.map(p => p[2]))).toBeCloseTo(Bolt_length * 25.4 - (seatToTable - 19 + Table_thickness), 4);
+      expect(Math.max(...bolt.map(p => p[2]))).toBeCloseTo(Bolt_length * 25.4 - seatToUnderside - Table_thickness, 4);
       // The knob's ring meets the table's underside, its 4 mm boss up in the hole.
       expect(Math.max(...partVertices(result, 'knob').map(p => p[2]))).toBeCloseTo(-Table_thickness + 4, 4);
     });
@@ -114,7 +114,7 @@ test('the table is clamped between the cookie and the knob, which explodes with 
     expect(result.ok).toBe(true);
     const lowest = id => Math.min(...partVertices(result, id).map(p => p[2]));
     // 40 mm apart at full explosion: the knob and bolt down, the cookie 0.8 of that up.
-    const knobBase = -19 - 13.5 - 3 - 0.4 * Explode;
+    const knobBase = -18 - 13.5 - 3 - 0.4 * Explode;
     expect(lowest('knob')).toBeCloseTo(knobBase, 4);
     expect(lowest('bolt')).toBeCloseTo(knobBase + 2, 4);
     expect(Math.max(...partVertices(result, 'bolt').map(p => p[2]))).toBeCloseTo(knobBase + 7.6 + 38.1, 4);
@@ -124,15 +124,15 @@ test('the table is clamped between the cookie and the knob, which explodes with 
 
 test('the build notes give the bolt reach and the lengths that fit', () => {
   compile({}, result => {
-    expect(result.echo).toContain("Bolt: 5/16-18 hex bolt, 1 1/2 in (38.1 mm) under the head. It reaches 10.2 mm into the cookie's insert, which takes 12 mm.");
-    expect(result.echo).toContain('Lengths that fit: 35.9 to 39.4 mm under the head, which is 1 1/2 in.');
+    expect(result.echo).toContain("Bolt: 5/16-18 hex bolt, 1 1/2 in (38.1 mm) under the head. It reaches 11.2 mm into the cookie's insert, which takes 15 mm.");
+    expect(result.echo).toContain('Lengths that fit: 34.9 to 41.4 mm under the head, which is 1 1/2 in.');
     expect(result.echo).toContain('Head pocket: 12.75 mm across flats and 7.6 mm deep.');
   });
   compile({ Insert_depth: 20 }, result => expect(result.echo).toContain('which is 1 1/2 in or 1 3/4 in.'));
   compile({ Insert_depth: 25 }, result => expect(result.echo).toContain('which is 1 1/2 in, 1 3/4 in or 2 in.'));
   compile({ Table_thickness: 12, Bolt_length: 1.25 }, result => {
     expect(result.ok).toBe(true);
-    expect(result.echo).toContain('Lengths that fit: 28.9 to 32.4 mm under the head, which is 1 1/4 in.');
+    expect(result.echo).toContain('Lengths that fit: 28.9 to 35.4 mm under the head, which is 1 1/4 in.');
   });
 });
 
@@ -158,5 +158,5 @@ test('a bolt that would bottom out names the shorter bolt and a deeper insert as
   const [conflict, ...rest] = await analyzeConflicts(configured({ Bolt_length: 1.75 }), conflictInputs(schema, values), render, { precision: 0.1 });
   expect(rest).toEqual([]);
   expect(conflict.fixes).toContainEqual({ input: 'Bolt_length', value: 1.5, change: 'set' });
-  expect(conflict.fixes).toContainEqual({ input: 'Insert_depth', value: 17.5, change: 'raise' });
+  expect(conflict.fixes).toContainEqual({ input: 'Insert_depth', value: 18.5, change: 'raise' });
 });
