@@ -310,7 +310,7 @@ echo(str("Bolt: 5/16-18 hex bolt, ", fraction(Bolt_length), " in (", bolt_mm, " 
     round(engagement * 10) / 10, " mm into the cookie's insert, which takes ", Insert_depth, " mm."));
 echo(str("Lengths that fit: ", round(shortest_mm * 10) / 10, " to ", round(longest_mm * 10) / 10,
     " mm under the head, which is ", length_list(fitting_lengths), "."));
-echo(str("Clamps a ", Table_thickness, " mm table top between the cookie and the knob's ring."));
+echo(str("Clamps the ", Table_thickness, " mm table top between the cookie and the knob's ring."));
 echo(str("Head pocket: ", pocket_flats, " mm across flats and ", head_seat, " mm deep",
     Rib_height > 0 ? str(", with three crush ribs that narrow it to ", rib_grip,
         " mm. Press the bolt head in from the knob's underside, with a vise or clamp if it's tight; the ribs hold it there.")
