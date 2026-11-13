@@ -103,10 +103,23 @@ test('the bolt seats on the pocket roof and reaches into the insert by its lengt
       const knobBase = -Table_thickness - 13.5 - 3;
       expect(Math.min(...bolt.map(p => p[2]))).toBeCloseTo(knobBase + 2, 4);
       expect(Math.max(...bolt.map(p => p[2]))).toBeCloseTo(Bolt_length * 25.4 - (seatToTable - 19 + Table_thickness), 4);
-      // The knob's ring meets the table's underside.
+      // The knob's ring meets the table's underside, its 4 mm boss up in the hole.
       expect(Math.max(...partVertices(result, 'knob').map(p => p[2]))).toBeCloseTo(-Table_thickness + 4, 4);
     });
   }
+});
+
+test('the table is clamped between the cookie and the knob, which explodes with its bolt seated', () => {
+  for (const Explode of [0, 50, 100]) compile({ Explode }, result => {
+    expect(result.ok).toBe(true);
+    const lowest = id => Math.min(...partVertices(result, id).map(p => p[2]));
+    // 40 mm apart at full explosion: the knob and bolt down, the cookie 0.8 of that up.
+    const knobBase = -19 - 13.5 - 3 - 0.4 * Explode;
+    expect(lowest('knob')).toBeCloseTo(knobBase, 4);
+    expect(lowest('bolt')).toBeCloseTo(knobBase + 2, 4);
+    expect(Math.max(...partVertices(result, 'bolt').map(p => p[2]))).toBeCloseTo(knobBase + 7.6 + 38.1, 4);
+    expect(lowest('cookie')).toBeCloseTo(0.32 * Explode, 4);
+  });
 });
 
 test('the build notes give the bolt reach and the lengths that fit', () => {

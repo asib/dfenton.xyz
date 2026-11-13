@@ -263,9 +263,13 @@ module table() {
 
 knob_z = -Table_thickness - Knob_height - Ring_height;
 
+// Exploding moves the knob and its captive bolt down together, the head still
+// seated on the pocket's roof.
 module assembly() {
-    translate([0, 0, knob_z - 1.0 * explode]) paint(knob_rgb) knob();
-    translate([0, 0, knob_z + head_seat - 0.6 * explode]) paint(bolt_rgb) hex_bolt();
+    translate([0, 0, knob_z - explode]) {
+        paint(knob_rgb) knob();
+        translate([0, 0, head_seat]) paint(bolt_rgb) hex_bolt();
+    }
     paint(table_rgb) table();
     translate([0, 0, 0.8 * explode]) {
         paint(cookie_rgb) cookie();
