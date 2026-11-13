@@ -371,12 +371,12 @@ bottom_knob_z = -Table_thickness - bottom_knob_h - bottom_ring_h;
 rod_bottom = bottom_knob_z + 1;
 rod_top = knob_top - 1;
 
-// A patch of table from in front of the fitting's tube to behind the wings,
-// its holes on the dogs' grid.
+// A patch of table round the block, the fitting's tube and the wings, with a
+// ring of holes on the dogs' grid round them.
 module table() {
-    span_x = max(Block_length / 2, dog_dx + pad_r) + Hole_pitch / 2;
-    y0 = -(Block_width / 2 + Fitting_projection + tube_stub + 10);
-    y1 = max(slot_far, Dog_distance) + pad_r + 10;
+    span_x = max(Block_length / 2, dog_dx + pad_r) + Hole_pitch;
+    y0 = -(Block_width / 2 + Fitting_projection + tube_stub) - Hole_pitch / 2;
+    y1 = max(slot_far, Dog_distance) + pad_r + Hole_pitch / 2;
     n = ceil(max(span_x, -y0, y1) / Hole_pitch) + 1;
     difference() {
         translate([-span_x, y0, -Table_thickness]) cube([2 * span_x, y1 - y0, Table_thickness]);
