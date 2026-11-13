@@ -35,8 +35,8 @@ Pocket_clearance = 0.05; // [0:0.01:0.5]
 Head_height = 5.6; // [3:0.1:10]
 // How far the head sits up inside its pocket, so it never touches the bench when the knob is put down.
 Head_recess = 2; // [0:0.5:10]
-// Bolt hole through the knob. 5/16 inch is 7.94 mm.
-Bolt_hole = 8.1; // [8:0.05:9]
+// Bolt hole through the knob. 5/16 inch is 7.94 mm; 8.5 mm leaves the shank clear even where printed holes come out small.
+Bolt_hole = 8.5; // [8:0.05:9]
 
 /* [Bench cookie] */
 // How far a bolt threads into the cookie's insert before it stops, measured from the cookie's underside. Thread a bolt in until it bottoms out to check; it was 15 mm on the cookies measured here.

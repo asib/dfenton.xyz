@@ -74,9 +74,9 @@ test('the head pocket is 1/2 inch plus clearance across flats, with its roof 7.6
     const rim = points.filter(p => Math.abs(p[2]) < 1e-4 && radius(p) < 10).map(radius);
     expect(Math.max(...rim)).toBeCloseTo(corner, 3);
     expect(points.some(p => Math.abs(p[2] - 7.6) < 1e-4 && Math.abs(radius(p) - corner) < 1e-3)).toBe(true);
-    // The 8.1 mm bolt hole leaves the boss through a 0.5 mm lead-in, about 9.1 mm across at the top.
+    // The 8.5 mm bolt hole leaves the boss through a 0.5 mm lead-in, about 9.5 mm across at the top.
     const top = points.filter(p => Math.abs(p[2] - 20.5) < 1e-4 && radius(p) < 8).map(radius);
-    expect(Math.max(...top)).toBeCloseTo(4.55, 1);
+    expect(Math.max(...top)).toBeCloseTo(4.75, 1);
   });
 });
 
