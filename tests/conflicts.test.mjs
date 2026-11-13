@@ -27,7 +27,7 @@ test('conditions split at top-level && only where that keeps their meaning', () 
 });
 
 test('no model reports conflicts at its defaults; asserts inside modules are out of reach', () => {
-  for (const slug of ['tool-tote', 'drawer-cabinet', 'half-lap-art-frame']) expect(analyze(model(slug))).toEqual([]);
+  for (const slug of ['tool-tote', 'drawer-cabinet', 'half-lap-art-frame', 'bench-cookie-mft-knob']) expect(analyze(model(slug))).toEqual([]);
   expect(analyze(model('magnetic-saw-guide'))).toBeNull();
 });
 
