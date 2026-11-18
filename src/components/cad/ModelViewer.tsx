@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CadEntry, ViewerEntry } from '../../misc';
+import type { CadEntry, ParameterCondition, ViewerEntry } from '../../misc';
 import CadViewer from './CadViewer';
 import { compileJob } from './compiler';
 import { forgetLastFile, keepLastFile, readLastFile } from './lastFile';
-import { editableParameters, type Parameter } from './parameters';
+import { featureScriptDownload, isFeatureScript } from './featurescript';
+import { editableParameters, parseParameters, type Parameter } from './parameters';
 import type { LocalModel } from './ParametricControls';
 import { readStep } from './step';
 import type { StepModel } from './stepMesh';
@@ -12,11 +13,12 @@ import './cad.css';
 // The 3D viewer for visitors' own files: drop one anywhere on the page or choose one, and it
 // opens with the usual tools (measuring, sections, the orientation cube). An STL opens as it
 // is; an OpenSCAD file compiles here, its Customizer parameters becoming controls as for the
-// site's own models; a STEP file is read here into triangles, in the units it records. A file's
+// site's own models, and a FeatureScript file builds here, its feature's parameters becoming
+// controls; a STEP file is read here into triangles, in the units it records. A file's
 // colors, or else its separate solids, become numbered parts; a STEP file's bodies are its parts.
 // Files stay in the browser as object URLs; nothing is uploaded. The last file opened is kept
 // in this browser and reopens after a reload, until it's closed.
-interface OpenFile { name: string; size: number; url: string; scad?: { sourceUrl: string; local: LocalModel; skipped: string[] }; step?: StepModel }
+interface OpenFile { name: string; size: number; url: string; design?: { language: 'scad' | 'featurescript'; sourceUrl: string; local: LocalModel; skipped: string[] }; step?: StepModel }
 
 type Units = 'mm' | 'inches';
 // Front, right and top, as the other models open.
@@ -41,7 +43,7 @@ function saveUnits(name: string, units: Units) {
 const sizeText = (bytes: number) => bytes < 1024 * 1024 ? `${String(Math.max(1, Math.round(bytes / 1024)))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const release = (file: OpenFile) => {
   URL.revokeObjectURL(file.url);
-  if (file.scad) URL.revokeObjectURL(file.scad.sourceUrl);
+  if (file.design) URL.revokeObjectURL(file.design.sourceUrl);
 };
 
 // A binary STL is an 80-byte header, a triangle count and 50 bytes per triangle; an ASCII
@@ -70,7 +72,24 @@ async function compileScad(file: File, signal: AbortSignal, onReady: () => void)
   }
   return {
     name: file.name, size: file.size, url: URL.createObjectURL(new Blob([model.stl], { type: 'model/stl' })),
-    scad: { sourceUrl: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), local: { name: file.name, text, parameters: editable.parameters, model }, skipped: editable.skipped },
+    design: { language: 'scad', sourceUrl: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), local: { name: file.name, text, parameters: editable.parameters, model }, skipped: editable.skipped },
+  };
+}
+
+// Read the first feature's parameters, then build it with their defaults. A file that
+// defines no feature, or whose feature fails, is refused with the engine's message.
+async function buildFeatureScript(file: File, signal: AbortSignal, onReady: () => void): Promise<OpenFile> {
+  const text = await file.text();
+  const schema = await compileJob({ kind: 'parameters', language: 'featurescript', source: text }, signal, onReady);
+  if (schema.kind !== 'parameters') throw new Error('The design’s parameters could not be read.');
+  const read = JSON.parse(schema.json) as { params: unknown[]; conditions: Record<string, ParameterCondition> };
+  const parameters = read.params.length ? parseParameters(JSON.stringify({ params: read.params })) : [];
+  const model = await compileJob({ kind: 'compile', language: 'featurescript', source: text }, signal);
+  if (model.kind !== 'model') throw new Error('The design could not be built.');
+  return {
+    name: file.name, size: file.size, url: URL.createObjectURL(new Blob([model.stl], { type: 'model/stl' })),
+    design: { language: 'featurescript', sourceUrl: URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
+      local: { name: file.name, text, parameters, model, conditions: read.conditions }, skipped: [] },
   };
 }
 
@@ -105,8 +124,11 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
       setError(message);
       if (kept) void forgetLastFile();
     };
-    const scad = /\.scad$/i.test(picked.name), step = isStep(picked.name);
-    if (!scad && !step && !/\.stl$/i.test(picked.name)) { setError(`${picked.name} isn’t an STL, STEP or OpenSCAD file. Choose a file ending in .stl, .step, .stp or .scad.`); return; }
+    const scad = /\.scad$/i.test(picked.name), featureScript = isFeatureScript(picked.name), step = isStep(picked.name);
+    if (!scad && !featureScript && !step && !/\.stl$/i.test(picked.name)) {
+      setError(`${picked.name} isn’t an STL, STEP, OpenSCAD or FeatureScript file. Choose a file ending in .stl, .step, .stp, .scad or .fs.`);
+      return;
+    }
     job.current?.abort();
     const controller = new AbortController();
     job.current = controller;
@@ -116,6 +138,14 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
       setBusy(`Loading the geometry engine for ${picked.name}…`);
       try {
         next = await compileScad(picked, controller.signal, () => { if (!controller.signal.aborted) setBusy(`Compiling ${picked.name}…`); });
+      } catch (failure) {
+        if (!controller.signal.aborted) fail(compileFailure(picked.name, failure));
+        return;
+      }
+    } else if (featureScript) {
+      setBusy(`Loading the FeatureScript engine for ${picked.name}…`);
+      try {
+        next = await buildFeatureScript(picked, controller.signal, () => { if (!controller.signal.aborted) setBusy(`Building ${picked.name}…`); });
       } catch (failure) {
         if (!controller.signal.aborted) fail(compileFailure(picked.name, failure));
         return;
@@ -139,7 +169,8 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
     if (controller.signal.aborted) { release(next); return; }
     if (latest.current) release(latest.current);
     setBusy('');
-    setUnits(next.step?.units ?? savedUnits(next.name));
+    // A STEP file records its units, and a FeatureScript design's lengths are millimetres.
+    setUnits(next.step?.units ?? (next.design?.language === 'featurescript' ? 'mm' : savedUnits(next.name)));
     setReopened(kept);
     setFile(next);
     if (!kept) void keepLastFile(picked);
@@ -197,56 +228,63 @@ export default function ModelViewer({ entry }: { entry: ViewerEntry & { href: st
   // One entry per file and units: a new one, or a new camera array, rebuilds the 3D scene.
   const viewed = useMemo<(CadEntry & { href: string }) | null>(() => file && {
     type: 'cad', title: file.name, date: entry.date, href: '', model: file.url,
-    ...(file.scad?.local.parameters.length ? { source: file.scad.sourceUrl, customizer: { outputLabel: 'Console output', units } } : {}),
+    ...(file.design?.local.parameters.length ? { source: file.design.sourceUrl,
+      customizer: { outputLabel: file.design.language === 'featurescript' ? 'Engine output' : 'Console output', units } } : {}),
     // STL and OpenSCAD files record no units (OpenSCAD's are conventionally millimetres), so
-    // the visitor chooses them; a STEP file's are its own. Lengths show in those first, with
-    // the other alongside.
+    // the visitor chooses them; a STEP file's are its own, and a FeatureScript design's are
+    // millimetres. Lengths show in those first, with the other alongside.
     description: file.step
       ? `Read in this browser; nothing is uploaded. The file records its units, so lengths read in ${file.step.units === 'inches' ? 'inches' : 'millimetres'}, with ${file.step.units === 'inches' ? 'millimetres' : 'inches'} alongside.`
-      : `${file.scad ? 'Compiled' : 'Opened'} in this browser; nothing is uploaded. ${file.scad ? 'OpenSCAD designs' : 'STL files'} carry no units, so lengths read in the Units chosen above, with the other alongside.`,
+      : file.design?.language === 'featurescript'
+        ? 'Built in this browser by the FeatureScript engine; nothing is uploaded. Lengths read in millimetres, the design’s units, with inches alongside.'
+        : `${file.design ? 'Compiled' : 'Opened'} in this browser; nothing is uploaded. ${file.design ? 'OpenSCAD designs' : 'STL files'} carry no units, so lengths read in the Units chosen above, with the other alongside.`,
     preview: `${entry.href}${entry.preview}`, previewDark: entry.previewDark && `${entry.href}${entry.previewDark}`,
     camera,
   }, [file, entry, units]);
   const choose = <button type="button" className="cad-file-choose" onClick={() => { picker.current?.click(); }}>{file ? 'Open another file' : 'Choose a file'}</button>;
-  const scad = file?.scad;
-  // Without a parameter panel, a SCAD file's download, console output and warnings show here.
-  const plain = scad && !scad.local.parameters.length ? scad.local.model : undefined;
+  const design = file?.design;
+  const featureScript = design?.language === 'featurescript';
+  // Without a parameter panel, a design's downloads, console output and warnings show here.
+  const plain = design && !design.local.parameters.length ? design.local.model : undefined;
+  const plainStep = useMemo(() => plain?.step && URL.createObjectURL(new Blob([plain.step], { type: 'model/step' })), [plain]);
+  useEffect(() => () => { if (plainStep) URL.revokeObjectURL(plainStep); }, [plainStep]);
   const output = plain?.output.replace(/^ECHO:\s*/gm, '').trim();
 
   return <section className="cad cad-model-viewer" aria-label="Model viewer">
     <p className="cad-description">{entry.description}</p>
-    <input ref={picker} type="file" accept=".stl,.step,.stp,.scad,model/stl,model/step" hidden onChange={event => { void open(event.target.files?.[0]); event.target.value = ''; }} />
+    <input ref={picker} type="file" accept=".stl,.step,.stp,.scad,.fs,model/stl,model/step" hidden onChange={event => { void open(event.target.files?.[0]); event.target.value = ''; }} />
     {file && <div className="cad-file-bar">
       {choose}
       <button type="button" className="cad-file-choose" onClick={close}>Close file</button>
       <span className="cad-file-name">{file.name} · {sizeText(file.size)}{reopened ? ' · reopened from your last visit' : ''}</span>
-      {file.step
-        ? <span className="cad-file-units">Units: {file.step.units === 'inches' ? 'inches' : 'millimetres'}, from the file</span>
+      {file.step || featureScript
+        ? <span className="cad-file-units">Units: {file.step?.units === 'inches' ? 'inches' : 'millimetres'}, from the {featureScript ? 'design' : 'file'}</span>
         : <label className="cad-file-units">Units
           <select value={units} onChange={event => { const next = event.target.value as Units; setUnits(next); saveUnits(file.name, next); }}>
             <option value="mm">Millimetres</option>
             <option value="inches">Inches</option>
           </select>
         </label>}
-      {(!!plain || !!file.step) && <a href={file.url} download={file.name.replace(/\.(scad|step|stp)$/i, '.stl')}>Download STL ↓</a>}
+      {(!!plain || !!file.step) && <a href={file.url} download={file.name.replace(/\.(scad|fs|step|stp)$/i, '.stl')}>Download STL ↓</a>}
+      {plainStep && <a href={plainStep} download={featureScriptDownload(file.name, 'step')}>Download STEP ↓</a>}
     </div>}
     {busy && <p className="cad-file-status" role="status">{busy}{' '}
       <button type="button" className="cad-file-cancel" onClick={() => { job.current?.abort(); setBusy(''); }}>Cancel</button></p>}
     {error && <p className="cad-error" role="alert">{error}</p>}
-    {scad && scad.skipped.length > 0 && <p className="cad-file-status">
-      Not editable here, so {scad.skipped.length === 1 ? 'it keeps its value' : 'they keep their values'} from the file: {scad.skipped.join(', ')}. The controls
+    {design && design.skipped.length > 0 && <p className="cad-file-status">
+      Not editable here, so {design.skipped.length === 1 ? 'it keeps its value' : 'they keep their values'} from the file: {design.skipped.join(', ')}. The controls
       cover numbers, text, true or false, and choices.</p>}
     {file && viewed
-      ? <CadViewer key={file.url} downloads={false} local={scad?.local} step={file.step?.mesh} fileUnits={units} genericParts entry={viewed} />
+      ? <CadViewer key={file.url} downloads={false} local={design?.local} step={file.step?.mesh} fileUnits={units} genericParts entry={viewed} />
       : <div className="cad-dropzone">
-        <p><strong>Drop an STL, STEP or OpenSCAD file anywhere on this page</strong> to view it, or choose one.</p>
-        <p>STL files open as they are. STEP files are read in this browser, in the units they record. OpenSCAD files compile in this browser, with their Customizer parameters as controls. Nothing is uploaded.</p>
+        <p><strong>Drop an STL, STEP, OpenSCAD or FeatureScript file anywhere on this page</strong> to view it, or choose one.</p>
+        <p>STL files open as they are. STEP files are read in this browser, in the units they record. OpenSCAD files compile in this browser, with their Customizer parameters as controls. FeatureScript files (a Feature Studio’s code) build their first feature in this browser, with its parameters as controls. Nothing is uploaded.</p>
         <p>A STEP file’s bodies, or another file’s colors or else its separate solids, are listed as parts you can fade, hide or isolate.</p>
         <p>The last file you open stays in this browser and reopens here next time, until you close it.</p>
         {choose}
       </div>}
-    {output && <details className="cad-model-output cad-file-output"><summary>Console output</summary><pre>{output}</pre></details>}
-    {plain?.warnings && <details className="cad-model-output cad-file-output"><summary>OpenSCAD warnings</summary><pre>{plain.warnings}</pre></details>}
+    {output && <details className="cad-model-output cad-file-output"><summary>{featureScript ? 'Engine output' : 'Console output'}</summary><pre>{output}</pre></details>}
+    {plain?.warnings && <details className="cad-model-output cad-file-output"><summary>{featureScript ? 'FeatureScript warnings' : 'OpenSCAD warnings'}</summary><pre>{plain.warnings}</pre></details>}
     {dragging && <div className="cad-drop-overlay" aria-hidden="true"><span>Drop to open</span></div>}
     {entry.notes && <p className="cad-notes">{entry.notes}</p>}
   </section>;
