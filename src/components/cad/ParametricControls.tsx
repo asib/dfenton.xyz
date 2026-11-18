@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CadEntry } from '../../misc';
+import type { CadEntry, ParameterCondition } from '../../misc';
 import { compileJob } from './compiler';
 import type { CompiledModel } from './compiler.worker';
 import type { CutListOutput } from './cutList';
@@ -10,14 +10,17 @@ import { availableOptions, conditionMatches, configuredSource, defaults, paramet
 import { emptyWorksheets, loadWorksheets, saveWorksheets, type WorksheetDrafts } from './worksheets';
 import { conflictInputs, type Conflict, type Fix } from './conflicts';
 import { checkValues, fixText, listOf, readableCheck } from './conflictText';
+import { featureScriptDownload, isFeatureScript } from './featurescript';
 
 type Entry = CadEntry & { href: string; source: string };
-// A visitor's own SCAD file in the model viewer: its text, the parameters the panel can edit
-// and its default model, compiled already. Nothing loads by URL, configurations are kept by
-// file name, and there are no share links, which couldn't carry the file.
-export interface LocalModel { name: string; text: string; parameters: Parameter[]; model: CompiledModel }
-interface Source { text: string; parameters: Parameter[] }
-interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet; warnings?: string }
+// A visitor's own SCAD or FeatureScript file in the model viewer: its text, the parameters
+// the panel can edit (and, for FeatureScript, when they apply) and its default model,
+// compiled already. Nothing loads by URL, configurations are kept by file name, and there
+// are no share links, which couldn't carry the file.
+export interface LocalModel { name: string; text: string; parameters: Parameter[]; model: CompiledModel; conditions?: Record<string, ParameterCondition> }
+// A FeatureScript design's conditions come from its precondition, not the item's metadata.
+interface Source { text: string; parameters: Parameter[]; conditions?: Record<string, ParameterCondition> }
+interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet; warnings?: string; step?: string }
 
 export default function ParametricControls({ entry, local, available, onCompiled, onOutput, onViewCutList, onDrawings, worksheets, onWorksheets }: {
   entry: Entry; local?: LocalModel; available: boolean; onCompiled: (model: CompiledModel) => void;
@@ -58,8 +61,14 @@ export default function ParametricControls({ entry, local, available, onCompiled
   const edited = useRef(false);
   const sourceUrl = `${entry.href}${entry.source}`;
   const modelUrl = `${entry.href}${entry.model}`;
+  // FeatureScript designs build with edited values rather than an edited source, and
+  // download as STL and STEP rather than a configured source.
+  const featureScript = isFeatureScript(local ? local.name : entry.source);
   // A visitor's file names downloads after itself rather than its object URLs.
-  const stlName = local ? local.name.replace(/\.scad$/i, '.stl') : entry.model;
+  const stlName = local ? local.name.replace(/\.(scad|fs)$/i, '.stl') : entry.model;
+  const stepName = featureScriptDownload(local ? local.name : entry.source, 'step');
+  // A FeatureScript item's committed default STEP, offered until an edit builds another.
+  const defaultStep = entry.step && `${entry.href}${entry.step}`;
   const configuredName = (local ? local.name : entry.source).replace(/\.scad$/i, '-configured.scad');
   const outputLabel = entry.customizer?.outputLabel;
   const hasParts = !!entry.customizer?.parts?.length;
@@ -77,21 +86,30 @@ export default function ParametricControls({ entry, local, available, onCompiled
       try {
         let text = local?.text ?? '';
         let parameters = local?.parameters ?? [];
+        let conditions = local?.conditions;
         let output = local?.model.output ?? '';
         let drawings: DrawingSheet | undefined;
         if (!local) {
           const response = await fetch(sourceUrl, { signal: controller.signal });
           if (!response.ok) throw new Error('The parameter source could not load.');
           text = await response.text();
-          const schema = await compileJob({ kind: 'parameters', source: text }, controller.signal);
+          const schema = await compileJob(featureScript ? { kind: 'parameters', language: 'featurescript', source: text }
+            : { kind: 'parameters', source: text }, controller.signal);
           if (controller.signal.aborted || schema.kind !== 'parameters') return;
-          parameters = parseParameters(schema.json, text);
-          // Verify that configured downloads can preserve these literal assignments.
-          configuredSource(text, parameters, defaults(parameters));
+          if (featureScript) {
+            const read = JSON.parse(schema.json) as { params: unknown[]; conditions: Record<string, ParameterCondition> };
+            parameters = parseParameters(JSON.stringify({ params: read.params }));
+            conditions = read.conditions;
+          } else {
+            parameters = parseParameters(schema.json, text);
+            // Verify that configured downloads can preserve these literal assignments.
+            configuredSource(text, parameters, defaults(parameters));
+          }
           // Entries with textual output also compute their default cut list in the
           // worker. The committed fallback mesh stays visible while this runs.
           if (outputLabel || hasParts || hasCutList || hasSheetLayout || hasDrawings) {
-            const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings }, controller.signal);
+            const compiled = await compileJob(featureScript ? { kind: 'compile', language: 'featurescript', source: text }
+              : { kind: 'compile', source: text, drawings: hasDrawings }, controller.signal);
             controller.signal.throwIfAborted();
             if (compiled.kind !== 'model') return;
             output = compiled.output;
@@ -100,11 +118,13 @@ export default function ParametricControls({ entry, local, available, onCompiled
           }
         }
         const values = defaults(parameters);
-        setSource({ text, parameters });
+        setSource({ text, parameters, conditions });
         draftValues.current = values;
         edited.current = false;
         setDraft(values);
-        setResult({ values, stl: modelUrl, source: sourceUrl, output, drawings, warnings: local?.model.warnings });
+        // A FeatureScript design's default STEP: the item's committed file, or the visitor's file's first build.
+        const step = local ? local.model.step && URL.createObjectURL(new Blob([local.model.step], { type: 'model/step' })) : defaultStep;
+        setResult({ values, stl: modelUrl, source: sourceUrl, output, drawings, warnings: local?.model.warnings, step });
         setPhase('');
       } catch (failure) {
         if (controller.signal.aborted) return;
@@ -114,7 +134,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
     };
     void load();
     return () => { controller.abort(); job.current?.abort(); window.clearTimeout(updateTimer.current); };
-  }, [local, sourceUrl, modelUrl, outputLabel, hasParts, hasCutList, hasSheetLayout, hasDrawings, retry]);
+  }, [local, sourceUrl, modelUrl, defaultStep, featureScript, outputLabel, hasParts, hasCutList, hasSheetLayout, hasDrawings, retry]);
 
   useEffect(() => {
     if (!available || !initialModel) return;
@@ -127,6 +147,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
   useEffect(() => () => {
     if (result?.stl.startsWith('blob:') && result.stl !== modelUrl) URL.revokeObjectURL(result.stl);
     if (result?.source.startsWith('blob:') && result.source !== sourceUrl) URL.revokeObjectURL(result.source);
+    if (result?.step?.startsWith('blob:')) URL.revokeObjectURL(result.step);
   }, [result, modelUrl, sourceUrl]);
 
   const pending = !!result && JSON.stringify(draft) !== JSON.stringify(result.values);
@@ -141,10 +162,12 @@ export default function ParametricControls({ entry, local, available, onCompiled
     window.clearTimeout(updateTimer.current);
     updateTimer.current = undefined;
   };
+  // When a parameter applies: the item's metadata, or a FeatureScript design's own precondition.
+  const conditionFor = (name: string) => entry.customizer?.conditions?.[name] ?? source?.conditions?.[name];
   // Keep choices and conditional fields consistent after any change of values.
   const settle = (next: Values) => {
     for (const parameter of source?.parameters ?? []) {
-      const condition = entry.customizer?.conditions?.[parameter.name];
+      const condition = conditionFor(parameter.name);
       const options = availableOptions(parameter, entry.customizer?.optionConditions?.[parameter.name], next);
       if (options?.length && !options.some(option => option.value === next[parameter.name])) next[parameter.name] = options[0].value;
       // An empty field must not prevent switching to a mode that ignores it.
@@ -180,15 +203,21 @@ export default function ParametricControls({ entry, local, available, onCompiled
     setPhase('Loading geometry engine…');
     let text = '';
     try {
-      text = configuredSource(source.text, source.parameters, values);
-      const compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings, lenient: !!local }, controller.signal, () => {
-        if (!controller.signal.aborted) setPhase('Updating model…');
-      });
+      const updating = () => { if (!controller.signal.aborted) setPhase('Updating model…'); };
+      let compiled;
+      if (featureScript) {
+        compiled = await compileJob({ kind: 'compile', language: 'featurescript', source: source.text,
+          values: values as Record<string, string | number | boolean> }, controller.signal, updating);
+      } else {
+        text = configuredSource(source.text, source.parameters, values);
+        compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings, lenient: !!local }, controller.signal, updating);
+      }
       if (controller.signal.aborted || compiled.kind !== 'model') return;
       onCompiled(compiled);
       setResult({ values: { ...values },
         stl: URL.createObjectURL(new Blob([compiled.stl], { type: 'model/stl' })),
-        source: URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
+        source: featureScript ? sourceUrl : URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
+        step: compiled.step && URL.createObjectURL(new Blob([compiled.step], { type: 'model/step' })),
         output: compiled.output,
         drawings: compiled.drawings,
         warnings: compiled.warnings,
@@ -226,7 +255,8 @@ export default function ParametricControls({ entry, local, available, onCompiled
     if (!form.checkValidity()) {
       const invalid = form.querySelector<HTMLInputElement | HTMLSelectElement>('input:invalid, select:invalid');
       // List cells name their row and column; other fields use their parameter name.
-      setError(invalid ? `${invalid.getAttribute('aria-label') ?? parameterLabel(invalid.name)}: ${invalid.validationMessage}` : 'Enter valid parameter values.');
+      const label = invalid ? parameterLabel(invalid.name, source?.parameters.find(parameter => parameter.name === invalid.name)?.label) : '';
+      setError(invalid ? `${invalid.getAttribute('aria-label') ?? label}: ${invalid.validationMessage}` : 'Enter valid parameter values.');
       return;
     }
     const values = draftValues.current;
@@ -412,7 +442,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
 
   return <aside className="cad-parameters" aria-label="Model parameters">
     <h2 className="sr-only">Model parameters</h2>
-    <p className="cad-parameter-intro">Dimensions in {entry.customizer?.units ?? 'mm'}. Changes update the model after a 1-second pause, or when you leave a field.</p>
+    <p className="cad-parameter-intro">{featureScript ? 'Lengths in mm, angles in degrees.' : `Dimensions in ${entry.customizer?.units ?? 'mm'}.`} Changes update the model after a 1-second pause, or when you leave a field.</p>
     {source && <section className="cad-configurations" aria-labelledby="cad-configurations-title">
       <h3 id="cad-configurations-title">Saved configurations</h3>
       {!storage ? <>
@@ -471,13 +501,14 @@ export default function ParametricControls({ entry, local, available, onCompiled
       <fieldset disabled={!available}>
         <legend className="sr-only">Model parameters</legend>
         {groups.filter(group => source.parameters.some(parameter => {
-          const condition = entry.customizer?.conditions?.[parameter.name];
+          const condition = conditionFor(parameter.name);
           return parameter.group === group && (!condition?.hide || conditionMatches(condition, draft));
         })).map((group, index) => <details key={group} open={index === 0}>
           <summary>{group}</summary>
           {source.parameters.filter((parameter) => parameter.group === group).map((parameter) => {
             const id = `parameter-${parameter.name}`;
-            const condition = entry.customizer?.conditions?.[parameter.name];
+            const label = parameterLabel(parameter.name, parameter.label);
+            const condition = conditionFor(parameter.name);
             const disabled = !!condition && !conditionMatches(condition, draft);
             if (disabled && condition.hide) return null;
             const value = draft[parameter.name];
@@ -489,7 +520,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
               const row = rowLabel.toLowerCase();
               const conflicting = involving(parameter.name);
               return <div key={parameter.name} className="cad-parameter cad-list-parameter" data-inactive={disabled || undefined} data-conflict={conflicting.length ? '' : undefined}>
-                <span id={`${id}-label`} className="cad-list-title">{parameterLabel(parameter.name)}</span>
+                <span id={`${id}-label`} className="cad-list-title">{label}</span>
                 <p id={`${id}-help`}>{parameter.description}</p>
                 <div className="cad-list-scroll">
                   <table className="cad-list-table" aria-labelledby={`${id}-label`} aria-describedby={`${id}-help${conflicting.length ? ` ${id}-conflict` : ''}`}>
@@ -526,7 +557,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
             const described = `${id}-help${conflicting.length ? ` ${id}-conflict` : ''}`;
             const invalid = conflicting.length > 0 || undefined;
             return <div key={parameter.name} className="cad-parameter" data-inactive={disabled || undefined} data-conflict={conflicting.length ? '' : undefined}>
-              <label htmlFor={id}>{parameterLabel(parameter.name)}</label>
+              <label htmlFor={id}>{label}</label>
               {options ? <select id={id} name={parameter.name} value={String(value)} disabled={disabled}
                 aria-describedby={described} aria-invalid={invalid} onChange={(event) => {
                   const option = options.find((candidate) => String(candidate.value) === event.target.value);
@@ -542,7 +573,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
                     else edit(parameter.name, event.target.value);
                   }} />}
               {parameter.type === 'number' && min !== undefined && max !== undefined && <input type="range"
-                aria-label={`${parameterLabel(parameter.name)} slider`} min={min} max={max} step={step ?? 'any'}
+                aria-label={`${label} slider`} min={min} max={max} step={step ?? 'any'}
                 value={value === '' ? parameter.value as number : Number(value)} disabled={disabled}
                 onChange={(event) => { changeNumber(event.target.value); }} />}
               <p id={`${id}-help`}>{parameter.description}</p>
@@ -594,7 +625,8 @@ export default function ParametricControls({ entry, local, available, onCompiled
     <div className="cad-downloads">
       {canDownload ? <>
         <a href={result.stl} download={stlName}>Download STL ↓</a>
-        <a href={result.source} download={configuredName}>Configured source ↓</a>
+        {featureScript ? result.step && <a href={result.step} download={stepName}>Download STEP ↓</a>
+          : <a href={result.source} download={configuredName}>Configured source ↓</a>}
       </> : source ? <span className="cad-download-pending">Update successfully to download these settings.</span> :
         <a href={modelUrl} download={stlName}>Default STL ↓</a>}
       <a href={sourceUrl} download={local ? local.name : true}>Original source ↓</a>

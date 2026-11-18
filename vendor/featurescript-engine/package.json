@@ -1,0 +1,9 @@
+{
+  "name": "featurescript-engine",
+  "version": "0.1.0",
+  "description": "The FeatureScript engine compiled to WebAssembly: a Feature Studio's feature parameters, and the feature built into STL and STEP",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "private": true
+}

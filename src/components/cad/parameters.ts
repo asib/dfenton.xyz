@@ -9,6 +9,8 @@ export const conditionMatches = (condition: ParameterCondition, values: Values) 
   condition.values ? condition.values.includes(values[condition.parameter] as string | number | boolean) : values[condition.parameter] === condition.value;
 export interface Parameter {
   name: string;
+  // A label other than the name (a FeatureScript parameter's annotation name).
+  label?: string;
   group: string;
   description: string;
   type: 'number' | 'string' | 'boolean' | 'list';
@@ -93,6 +95,7 @@ export function parseParameters(json: string, source = ''): Parameter[] {
     if (!isRecord(item) || typeof item.name !== 'string' || !/^[a-zA-Z_]\w*$/.test(item.name) ||
         names.has(item.name) || (item.group != null && typeof item.group !== 'string') ||
         (item.description != null && typeof item.description !== 'string') ||
+        (item.label != null && (typeof item.label !== 'string' || !item.label.trim())) ||
         !isValue(item.value) || (item.type === 'bool' ? 'boolean' : item.type) !== typeof item.value || !isRecord(item.control) ||
         typeof item.control.kind !== 'string') {
       throw new Error('This source contains an unsupported parameter.');
@@ -124,8 +127,8 @@ export function defaults(parameters: Parameter[]): Values {
   return Object.fromEntries(parameters.map((parameter) => [parameter.name, parameter.value]));
 }
 
-export function parameterLabel(name: string) {
-  return name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' ');
+export function parameterLabel(name: string, label?: string) {
+  return label ?? name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' ');
 }
 
 // Source literals are JSON, apart from OpenSCAD numbers such as .5 and 5.
