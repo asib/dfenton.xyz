@@ -10,7 +10,8 @@ import { analyzeConflicts, type Conflict, type ConflictInput } from './conflicts
 // compile, for visitors' own files, returns warnings with the model instead of failing,
 // except for include and use files that can't be opened, which leave the model incomplete.
 export interface CompileRequest { kind: 'parameters' | 'compile' | 'conflicts'; source: string; drawings?: boolean; inputs?: ConflictInput[]; precision?: number; lenient?: boolean }
-export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh; drawings?: DrawingSheet; warnings?: string }
+// A FeatureScript design (featurescript.worker.ts) also comes with a STEP.
+export interface CompiledModel { kind: 'model'; stl: ArrayBuffer; output: string; display?: DisplayMesh; drawings?: DrawingSheet; warnings?: string; step?: ArrayBuffer }
 export type CompileResponse = { kind: 'ready' } | { kind: 'parameters'; json: string } |
   CompiledModel | { kind: 'conflicts'; conflicts: Conflict[] | null } | { kind: 'error'; message: string };
 
