@@ -77,6 +77,8 @@ A CAD entry's `source` can be a FeatureScript file (lowercase `.fs`): a Feature 
 
 The **FeatureScript desk tidy** at `/misc/featurescript-desk-tidy/` is the engine repository's showcase part (`examples/showcase.fs`): an extruded, filleted plate, a revolved and shelled spline vase, a lofted tower, a swept handle, patterned pins and slots, counterbored holes and engraved text, with eleven parameters. Its front faces −Y, so `camera` is `[1.35, -1.8, 1.1]`. `tests/featurescript.test.mjs` reads its parameters and builds its default and edited models with the vendored engine.
 
+The **inbox zero toggle** at `/misc/inbox-zero-toggle/` is a giant toggle switch to print, in FeatureScript: a base, a knob and a retainer, shown assembled. The engine writes each solid part, named by `setProperty`, to the one STL and STEP, so a design can have several parts for a slicer to split. Its Inbox zero parameter puts the knob at ON or OFF; its parts are kept apart by half the Clearance. Its front faces −Y too, with `camera` `[0.55, -1.6, 1.25]` for its length. `tests/featurescript.test.mjs` reads its parameters and builds it at ON and OFF.
+
 ### Model viewer
 
 The **3D model viewer** at `/misc/model-viewer/` is the viewer with no model of its own: visitors open their own STL, STEP, OpenSCAD and FeatureScript files in it. Its metadata sets `"type": "viewer"`, with the usual title, description, date and previews, and optional `notes`. It needs no `model`, `source` or `diagram.html`; its list previews are small SVGs, as there is no fixed model to capture.
