@@ -1,0 +1,18 @@
+{
+  "type": "cad",
+  "title": "Inbox zero toggle",
+  "description": "A comically large toggle switch to 3D print, for flipping your inbox to zero. It’s written in FeatureScript and built in this browser: size it, set its clearance, magnets and label, then download it as STL or STEP.",
+  "date": "2026-11-19",
+  "preview": "preview.webp",
+  "previewDark": "preview-dark.webp",
+  "model": "inbox-zero-toggle.stl",
+  "source": "inbox-zero-toggle.fs",
+  "step": "inbox-zero-toggle.step",
+  "camera": [
+    0.55,
+    -1.6,
+    1.25
+  ],
+  "notes": "Three parts, shown assembled: a pill-shaped base with a track along its top, a knob that slides along the track from OFF (left) to ON (right), and a retainer under the track’s floor whose peg runs up through the slot into a socket in the knob. An M3 × 16 screw up through the retainer into the knob holds the knob down; the peg’s shape keeps both from turning. Print each part on its flat bottom, without supports, and drop the knob in the track, push the retainer’s peg up into it from underneath and screw them together. With Magnets, glue six disc magnets in their pockets, four in the track’s floor (all the same way up) and two in the knob’s underside (facing so they attract the track’s), and the knob snaps to OFF and ON. Clearance is the gap between the moving parts: raise it if the knob binds. Inbox zero puts the knob at ON, and the label is engraved in the base’s front, shrunk to fit if it’s long.",
+  "customizer": {}
+}

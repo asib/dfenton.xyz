@@ -64,3 +64,27 @@ describe('FeatureScript designs', () => {
     await expect(engine.build(source, { edgeFinish: 'WAVY' })).rejects.toThrow('edgeFinish must be one of its choices');
   }, 120_000);
 });
+
+describe('The inbox zero toggle', () => {
+  const toggle = readFileSync(new URL('../public/misc/inbox-zero-toggle/inbox-zero-toggle.fs', import.meta.url), 'utf8');
+  // Each part's volume, by name, from the engine's log.
+  const parts = (log) => Object.fromEntries([...log.matchAll(/^(\w+): ([\d.]+) mm³$/gm)].map(([, name, volume]) => [name, Number(volume)]));
+
+  test('reads its parameters, the magnets’ sizes only with magnets', async () => {
+    const { params, conditions } = siteSchema(await engine.parameters(toggle));
+    expect(parseParameters(JSON.stringify({ params })).map(parameter => parameter.label)).toEqual(['Inbox zero', 'Length', 'Height',
+      'Thickness', 'Clearance', 'Magnets', 'Magnet diameter', 'Magnet thickness', 'Label']);
+    expect(conditions).toEqual({ magnetDiameter: { parameter: 'magnets', value: true }, magnetThickness: { parameter: 'magnets', value: true } });
+  }, 120_000);
+
+  test('builds its three parts as committed, and flips to OFF', async () => {
+    const on = await engine.build(toggle);
+    expect(Object.keys(parts(on.log))).toEqual(['Retainer', 'Knob', 'Base']);
+    const committed = new Uint8Array(readFileSync(new URL('../public/misc/inbox-zero-toggle/inbox-zero-toggle.stl', import.meta.url)));
+    expect(triangles(on.stl)).toBe(triangles(committed));
+    // At OFF the knob and retainer move to the other end: the same parts, elsewhere.
+    const off = await engine.build(toggle, { on: false });
+    for (const [name, volume] of Object.entries(parts(on.log))) expect(parts(off.log)[name]).toBeCloseTo(volume, 2);
+    expect(Buffer.from(off.stl).equals(Buffer.from(on.stl))).toBe(false);
+  }, 120_000);
+});
