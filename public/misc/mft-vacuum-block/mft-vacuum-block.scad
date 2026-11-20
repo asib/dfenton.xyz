@@ -27,17 +27,28 @@
 // and both ends are clear. With 1" HDPE the vacuum face is also a little above
 // the knobs' tops, so work can overhang the back too.
 //
+// Four printed router templates cut the puck. The outline template, taped to
+// the blank's underside, guides a pattern or flush-trim bit round the puck's
+// outline, then a drill for the screws' pilot holes. The groove template and
+// the two channel templates drop over the trimmed puck, located by a skirt
+// round its sides, and guide a router's guide bushing: round a track for the
+// groove, and along slots for the lengthwise and crosswise channels. The
+// groove template's island is held to its frame by four thin bridges, which
+// the bit cuts as it passes, so it locates in one piece.
+//
 // All dimensions are millimetres. Z is up and the table top is Z=0. The block
 // is centred on the origin with its length along X, its front face toward -Y,
 // and its wings and fitting to the back (+Y).
 //
 // View = HDPE puck is the part to machine; the echoed lines list its cuts.
 // View = Base plate is the part to print: it prints as modelled, underside on
-// the bed, with no supports.
+// the bed, with no supports. The template views are the templates to print,
+// also as modelled and with no supports: the groove and channel templates
+// face down, which keeps the faces the router slides on flat.
 
 /* [View] */
-// Assembly shows the cord, fitting, dogs and a patch of table for reference. The puck is the part to machine from HDPE, and the base plate the part to print.
-View = "assembly"; // [assembly:Assembly for reference, puck:HDPE puck (machine this), base:Base plate (print this)]
+// Assembly shows the cord, fitting, dogs and a patch of table for reference. The puck is the part to machine from HDPE; the base plate and the templates are parts to print.
+View = "assembly"; // [assembly:Assembly for reference, puck:HDPE puck (machine this), base:Base plate (print this), outline_template:Outline template (print), groove_template:Groove template (print), long_template:Lengthwise channel template (print), cross_template:Crosswise channel template (print)]
 // Separation of the assembly's parts, in percent. Zero is assembled.
 Explode = 0; // [0:1:100]
 
@@ -115,6 +126,30 @@ Screw_length = 19; // [6:0.5:50]
 // Pilot hole in the HDPE for the screws. 3.2 mm is 1/8 inch.
 Screw_pilot = 3.2; // [1.5:0.1:6]
 
+/* [Router templates] */
+// Guide bushing outside diameter, for the groove and channel templates. 15.88 mm is 5/8 inch.
+Bushing_diameter = 15.88; // [8:0.01:40]
+// How far the guide bushing stands below the router's base. The templates must be thicker.
+Bushing_length = 6; // [1:0.5:20]
+// Play between the bushing and the templates' edges, in all.
+Bushing_clearance = 0.3; // [0:0.05:1]
+// Thickness of the groove and channel templates.
+Template_thickness = 10; // [4:0.5:25]
+// Plate round the puck, for the router's base to rest on.
+Template_margin = 20; // [5:1:60]
+// How far the templates' skirts reach down the puck's sides, locating them.
+Skirt_depth = 8; // [3:0.5:20]
+// Skirt wall thickness.
+Skirt_wall = 3; // [1.5:0.5:10]
+// Gap between the skirts and the puck's sides.
+Skirt_clearance = 0.25; // [0:0.05:1]
+// Height of the bridges that hold the groove template's island to its frame until the bit cuts them.
+Bridge_height = 1.2; // [0.4:0.2:4]
+// Width of those bridges along the track.
+Bridge_width = 4; // [1:0.5:10]
+// Thickness of the outline template, for a pattern or flush-trim bit's bearing to ride on.
+Outline_template_thickness = 8; // [3:0.5:20]
+
 /* [Table and dogs] */
 // Centre-to-centre spacing of the table's holes. MFT-style tops use 96 mm.
 Hole_pitch = 96; // [20:0.5:200]
@@ -168,6 +203,8 @@ pad_margin = 3;
 min_port_cover = 2;
 // Half the point angle of a twist drill, 118 degrees.
 drill_half_angle = 59;
+// Printed holes come out a little small.
+print_hole_allowance = 0.2;
 
 assembly = View == "assembly";
 explode = assembly ? Explode / 100 * 50 : 0;
@@ -255,6 +292,29 @@ screw_engagement = Screw_length - puck_z;
 pilot_depth = screw_engagement + 1.5;
 max_screw_length = min(groove_floor, channel_floor) - 2;
 
+// Router templates. A guide bushing runs in each template's openings, which
+// are track_r either side of the cut's centre line, so the bit at its centre
+// follows the groove's or a channel's centre line. The templates are modelled
+// in use: underside on the puck's face at Z=0, skirt down round its sides.
+bushing_r = Bushing_diameter / 2;
+track_r = bushing_r + Bushing_clearance / 2;
+template_l = Puck_length + 2 * Template_margin;
+template_w = Puck_width + 2 * Template_margin;
+template_r = corner_r + Template_margin;
+cavity_l = Puck_length + 2 * Skirt_clearance;
+cavity_w = Puck_width + 2 * Skirt_clearance;
+cavity_r = corner_r + Skirt_clearance;
+skirt_l = cavity_l + 2 * Skirt_wall;
+skirt_w = cavity_w + 2 * Skirt_wall;
+skirt_r = cavity_r + Skirt_wall;
+island_r = Seal_bend_radius - track_r;
+slot_web = Channel_pitch - 2 * track_r;
+// How far each bit stands below the router's base, and how deep to drill the
+// pilot holes through the outline template.
+groove_bit_set = Template_thickness + Groove_depth;
+channel_bit_set = Template_thickness + Channel_depth;
+outline_pilot_depth = Outline_template_thickness + pilot_depth;
+
 // The dogs stand in one row of table holes behind the block, a whole number
 // of pitches apart and symmetric about its centre. Each wing's slot runs back
 // in line with its dog, from where the knob just clears the puck's rear face.
@@ -311,11 +371,21 @@ assert(!port_back || fitting_low >= knob_top + Knob_clearance
     "The fitting would hit a wing or a knob. Move the port toward the middle or put more hole pitches between the dogs.");
 assert(Dog_distance >= slot_near - eps && Dog_distance <= slot_far + eps,
     str("The assembly's dogs must stand within the slots, ", slot_near, " to ", slot_far, " mm behind the block's centre. Change the dog distance."));
+assert(island_r >= 0, "The groove's corners are tighter than the guide bushing can follow round the groove template's island. Use a smaller bushing or raise the seal bend radius.");
+assert(seal_w - 2 * track_r >= 10, "The groove template's island would be less than 10 mm wide. Use a smaller bushing.");
+assert(slot_web >= 3, str("The channel templates' slots would be ", r1(slot_web), " mm apart. Increase the channel pitch to ",
+    ceil((2 * track_r + 3) * 2) / 2, " mm or more, or use a smaller bushing."));
+assert(max(Groove_width, Channel_width) <= Bushing_diameter - 3, "The bits must pass through the guide bushing. Use a larger bushing.");
+assert(Template_thickness >= Bushing_length + Bridge_height + 0.5,
+    "The guide bushing would hit the groove template's bridges. Use a thicker template or a shorter bushing.");
+assert(Template_margin >= Skirt_clearance + Skirt_wall + 2, "The templates' plates must reach at least 2 mm past their skirts.");
+assert(Skirt_depth <= Stock_thickness - 2, "The templates' skirts must be shallower than the puck.");
 
 // Legend colours as 0-255 RGB. Repeated pieces get their own colour within
 // 3/255 of the legend colour, so the viewer can select each one.
 puck_rgb = [220, 228, 233];
 base_rgb = [208, 106, 31];
+template_rgb = [46, 125, 154];
 cord_rgb = [71, 76, 85];
 fitting_rgb = [168, 134, 44];
 top_knob_rgb = [47, 109, 179];
@@ -473,6 +543,89 @@ module base() {
     }
 }
 
+// --- Router templates ---
+
+// A template's plate, Template_margin round the puck, with a skirt below it
+// round the puck's sides to locate it. The callers cut its openings.
+module template_blank() {
+    difference() {
+        translate([0, 0, -Skirt_depth]) linear_extrude(height = Skirt_depth + Template_thickness)
+            rounded_rect(template_l, template_w, template_r);
+        // Below the plate, only the skirt.
+        translate([0, 0, -Skirt_depth - eps]) linear_extrude(height = Skirt_depth + eps) difference() {
+            rounded_rect(template_l + 2, template_w + 2, template_r + 1);
+            rounded_rect(skirt_l, skirt_w, skirt_r);
+        }
+        // The puck, inside the skirt.
+        translate([0, 0, -Skirt_depth - 2 * eps]) linear_extrude(height = Skirt_depth + 2 * eps)
+            rounded_rect(cavity_l, cavity_w, cavity_r);
+    }
+}
+
+// The groove template's track: the groove's centre line, widened by
+// track_r either way. Its outer edge is the frame and its inner edge the
+// island.
+module groove_track() {
+    difference() {
+        rounded_rect(seal_l + 2 * track_r, seal_w + 2 * track_r, Seal_bend_radius + track_r);
+        rounded_rect(seal_l - 2 * track_r, seal_w - 2 * track_r, island_r);
+    }
+}
+
+// The bridges across the track, one at the middle of each side, widened by
+// extra.
+module bridges_2d(extra = 0) {
+    b = Bridge_width + extra;
+    across = 2 * track_r + 2;
+    union() for (s = [-1, 1]) {
+        translate([0, s * seal_w / 2]) square([b, across], center = true);
+        translate([s * seal_l / 2, 0]) square([across, b], center = true);
+    }
+}
+
+// The track runs right through, except at the bridges, which keep the bottom
+// Bridge_height of it. The cut above each bridge is a little wider than the
+// bridge, so it overlaps the track's cut rather than meeting it face to face.
+module groove_template() {
+    difference() {
+        template_blank();
+        translate([0, 0, -eps]) linear_extrude(height = Template_thickness + 2 * eps) difference() {
+            groove_track();
+            bridges_2d();
+        }
+        translate([0, 0, Bridge_height]) linear_extrude(height = Template_thickness) intersection() {
+            groove_track();
+            bridges_2d(0.2);
+        }
+    }
+}
+
+// A slot for each lengthwise or crosswise channel: the bushing's path from
+// one end of the channel to the other.
+module channel_template(lengthwise) {
+    difference() {
+        template_blank();
+        translate([0, 0, -eps]) linear_extrude(height = Template_thickness + 2 * eps) union() {
+            if (lengthwise) for (y = long_ys) hull() for (x = [-1, 1] * long_end) translate([x, y]) circle(r = track_r);
+            else for (x = cross_xs) hull() for (y = [-1, 1] * cross_end) translate([x, y]) circle(r = track_r);
+        }
+    }
+}
+
+// The puck's outline, with guide holes for drilling the screws' pilot holes.
+module outline_template() {
+    difference() {
+        linear_extrude(height = Outline_template_thickness) rounded_rect(Puck_length, Puck_width, corner_r);
+        for (p = screw_xys) translate([p[0], p[1], -eps])
+            cylinder(d = Screw_pilot + print_hole_allowance, h = Outline_template_thickness + 2 * eps, $fn = 16);
+    }
+}
+
+// Turns a template from use to printing: face down, skirt up.
+module face_down() {
+    translate([0, 0, Template_thickness]) rotate([180, 0, 0]) children();
+}
+
 // --- Reference parts ---
 
 // The foam cord resting on the groove floor, swept round the groove's centre
@@ -597,6 +750,17 @@ echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_a
     knob_overhang > 0 ? str(", and its top knob overhangs the wing's outer edge",
         wing_out(dog_dx) <= body_l / 2 + eps ? ", flush with the plate's end," : "", " by ", r1(knob_overhang), " mm") : "",
     "."));
+echo(str("Outline template: rough-cut the blank 2 to 3 mm oversize, tape the template to its underside and trim it with a pattern or flush-trim bit that cuts at least ",
+    Stock_thickness, " mm deep. Then drill the screws' ", Screw_pilot, " mm pilot holes through the template's guide holes, ", r1(outline_pilot_depth),
+    " mm deep from its face, before taking it off."));
+echo(str("Groove template: drop it over the puck's face, located by its skirt, and tape it down, with tape under its island too. With a ",
+    Bushing_diameter, " mm guide bushing, set the ", Groove_width, " mm bit ", r1(groove_bit_set),
+    " mm below the router's base and rout round the track. The bit cuts the four bridges that hold the island as it passes."));
+echo(str("Channel templates: drop each over the puck in turn and tape it down. Set the ", Channel_width, " mm bit ", r1(channel_bit_set),
+    " mm below the base and rout each slot from end to end."));
+echo(str("Templates: the groove and channel templates are ", r1(template_l), " x ", r1(template_w), " mm, ", Template_thickness,
+    " mm thick with a skirt ", Skirt_depth, " mm deep, and the outline template is ", Outline_template_thickness,
+    " mm thick. Print them as modelled, with no supports."));
 echo("PIECES_V1", [
     for (i = [0:1]) each [
         [hex_color(shade(top_knob_rgb, i)), str("Top knob ", i + 1)],
@@ -607,4 +771,7 @@ echo("PIECES_V1", [
 
 if (assembly) assembly();
 else if (View == "puck") paint(puck_rgb) translate([0, 0, -puck_z]) puck();
-else paint(base_rgb) base();
+else if (View == "base") paint(base_rgb) base();
+else if (View == "outline_template") paint(template_rgb) outline_template();
+else if (View == "groove_template") paint(template_rgb) face_down() groove_template();
+else paint(template_rgb) face_down() channel_template(View == "long_template");
