@@ -1,87 +1,119 @@
 // MFT vacuum block
-// A single-sided, 3D-printed vacuum block for an MFT-style table. The top is
-// the vacuum face: a groove round its edge holds a loop of round foam cord as
-// the seal, and inside it a grid of islands supports the workpiece, with
-// channels between them to spread the vacuum. Holes in the channels drop to a
-// duct inside the block, which runs to a 1/4" NPT push-to-connect fitting
-// threaded into the rear face. The underside is flat and solid: the block is
-// held to the table by two tightening dogs, not by vacuum. Two wings run
-// straight back from the block's rear face along the table, either side of the
-// fitting, and fillets join them to the block. Each dog clamps one wing through
-// a long slot, so both dogs stand in one row of table holes
-// behind the block. The slots let the block slide toward or away from that
-// row: with a slot a hole pitch long, it can sit anywhere front to back,
-// moving the dogs to the next row when a slot runs out. Each dog is an M6 rod
-// with a 30 mm knurled knob under the table and a flangeless 30 mm knob on the
-// wing, as in the shared Onshape document's "bottom knob" and "top knob no
-// flange".
+// A single-sided vacuum block for an MFT-style table, in two parts: a puck
+// machined from HDPE, which carries the seal and the vacuum, and a 3D-printed
+// base plate under it, which the dogs clamp to the table. HDPE is airtight all
+// the way through, where air can leak through a print's walls and infill.
+//
+// The puck's top is the vacuum face. A groove round its edge holds a loop of
+// round foam cord as the seal. Inside it, straight channels run lengthwise and
+// crosswise in a grid, which stops short of the groove so air can't get round
+// the seal. The groove and each channel are one pass of a straight bit, so
+// their widths are bit diameters. Holes drilled down from the channels meet a
+// duct drilled in from the back face, whose mouth is tapped 1/4" NPT for a
+// push-to-connect fitting.
+//
+// The puck sits in a shallow pocket in the base plate, held by four
+// countersunk screws up through the plate into its underside. The plate's two
+// wings run straight back along the table, either side of the fitting. Each
+// dog clamps one wing through a long slot, so both dogs stand in one row of
+// table holes behind the block. The slots let the block slide toward or away
+// from that row: with a slot a hole pitch long, it can sit anywhere front to
+// back, moving the dogs to the next row when a slot runs out. Each dog is an
+// M6 rod with a 30 mm knurled knob under the table and a flangeless 30 mm knob
+// on the wing, as in the shared Onshape document's "bottom knob" and "top knob
+// no flange".
 //
 // Everything that stands up off the table is behind the block, so the front
-// and both ends are clear. At the default height the vacuum face is also a
-// little above the knobs' tops, so work can overhang the back too.
+// and both ends are clear. With 1" HDPE the vacuum face is also a little above
+// the knobs' tops, so work can overhang the back too.
 //
 // All dimensions are millimetres. Z is up and the table top is Z=0. The block
 // is centred on the origin with its length along X, its front face toward -Y,
 // and its wings and fitting to the back (+Y).
 //
-// Choose View = Block only before downloading an STL to print. It prints as
-// modelled, underside on the bed, with no supports: the duct is a teardrop
-// and the port bridges. Use four or more walls so air can't leak through the
-// infill into the duct.
+// View = HDPE puck is the part to machine; the echoed lines list its cuts.
+// View = Base plate is the part to print: it prints as modelled, underside on
+// the bed, with no supports.
 
 /* [View] */
-// Assembly shows the cord, fitting, dogs and a patch of table for reference. Block only is the part to print.
-View = "assembly"; // [assembly:Assembly with cord, fitting and dogs, block:Block only (print this)]
+// Assembly shows the cord, fitting, dogs and a patch of table for reference. The puck is the part to machine from HDPE, and the base plate the part to print.
+View = "assembly"; // [assembly:Assembly for reference, puck:HDPE puck (machine this), base:Base plate (print this)]
 // Separation of the assembly's parts, in percent. Zero is assembled.
 Explode = 0; // [0:1:100]
 
-/* [Block] */
-// Block length, along the row of dogs. 120.65 mm is 4 3/4 inches.
-Block_length = 120.65; // [60:300]
-// Block width, front to back. 76.2 mm is 3 inches.
-Block_width = 76.2; // [40:300]
-// Height of the vacuum face above the table, where the workpiece rests. At 30 mm it's 4 mm above the dogs' knobs, so work overhanging the back clears them.
-Block_height = 30; // [15:0.5:150]
+/* [Puck] */
+// Puck length, along the row of dogs. 120.65 mm is 4 3/4 inches.
+Puck_length = 120.65; // [60:300]
+// Puck width, front to back. 76.2 mm is 3 inches.
+Puck_width = 76.2; // [40:300]
+// HDPE thickness, which is the puck's height. 25.4 mm is 1 inch.
+Stock_thickness = 25.4; // [12:0.1:60]
 
 /* [Seal] */
 // Foam cord diameter. 6.35 mm is 1/4 inch.
 Cord_diameter = 6.35; // [2:0.05:15]
-// Groove width. A little under the cord's diameter, so the cord grips its walls.
-Groove_width = 6; // [2:0.1:15]
+// Groove width: the diameter of the straight bit that cuts it in one pass. A little under the cord's diameter, so the cord grips its walls.
+Groove_width = 6; // [2:0.05:15]
 // Groove depth. The cord stands proud of the face by its diameter less this.
 Groove_depth = 4.5; // [1:0.1:15]
-// Wall between the groove and the block's outside.
+// HDPE between the groove and the puck's outside.
 Rim_width = 4; // [1.5:0.1:15]
-// Plan radius of the groove's centre line at the corners, where the cord bends. The block's corners follow it.
+// Plan radius of the groove's centre line at the corners, where the cord bends. The puck's corners follow it.
 Seal_bend_radius = 10; // [3:0.5:40]
 
-/* [Support grid] */
-// Centre-to-centre spacing of the islands that support the workpiece.
-Island_pitch = 12; // [5:0.5:40]
-// Width of the channels between the islands and round them.
-Channel_width = 3; // [1:0.1:10]
+/* [Channels] */
+// Channel width: the diameter of the straight bit that cuts them. 6.35 mm is 1/4 inch.
+Channel_width = 6.35; // [2:0.05:15]
 // Depth of the channels below the vacuum face.
-Channel_depth = 2; // [0.5:0.1:10]
-// Diameter of the holes from the channels down to the duct.
-Hole_diameter = 4; // [2:0.1:10]
-// Diameter of the duct inside the block, from the port to the holes.
-Duct_diameter = 6; // [3:0.1:15]
+Channel_depth = 3; // [0.5:0.1:10]
+// Centre-to-centre spacing of the channels, both ways. The grid is centred on the puck, with as many channels as fit inside the groove.
+Channel_pitch = 20; // [8:0.5:100]
+// Least HDPE between the channels and the groove.
+Channel_land = 4; // [1:0.5:20]
 
-/* [Fitting and port] */
+/* [Fitting, duct and holes] */
 // Face the fitting goes in. At the back it sits between the wings, out of the way of work on the front and ends.
 Fitting_side = "back"; // [back:Back between the wings, front:Front]
-// Port centre along its face, from the middle (+ toward +X). The duct, holes and grid line up with it.
+// Port centre along its face, from the middle (+ toward +X). The duct and holes line up with it.
 Port_offset = 0; // [-150:0.5:150]
-// Depth of the port's centre below the vacuum face.
-Port_drop = 14; // [5:0.5:100]
-// Port diameter at the face, for a 1/4" NPT male thread to cut its own thread into, or for a 1/4" NPT tap. It narrows by 1/16 of its depth, as the thread does.
-Port_hole = 11.6; // [8:0.05:16]
-// Port depth into the block. Longer than the fitting's thread, so it doesn't bottom out.
-Port_depth = 12; // [6:0.5:30]
+// Depth of the port's centre below the vacuum face, deep enough for the port to pass under the groove.
+Port_drop = 13.5; // [5:0.05:100]
+// Tap drill for the port. 11.1 mm is 7/16 inch, for a 1/4" NPT tap.
+Port_hole = 11.1; // [8:0.05:16]
+// Depth of the tap-drilled port. Deeper than the fitting's thread, so it doesn't bottom out.
+Port_depth = 14; // [6:0.5:30]
+// Diameter of the duct drilled on in from the port. 6.35 mm is 1/4 inch.
+Duct_diameter = 6.35; // [3:0.05:12]
+// Diameter of the holes drilled down from the channels to the duct. 4.76 mm is 3/16 inch.
+Hole_diameter = 4.76; // [2:0.01:12]
+// Number of holes down to the duct, in the lengthwise channels nearest the port.
+Vacuum_holes = 2; // [1:1:10]
 // Fitting hex across flats. An estimate: measure yours.
 Fitting_hex = 14.3; // [8:0.1:30]
-// How far the fitting stands out from the block, without its tube. An estimate: measure yours.
+// How far the fitting stands out from the puck, without its tube. An estimate: measure yours.
 Fitting_projection = 22; // [5:0.5:60]
+
+/* [Base plate] */
+// Plate thickness, under the dog knobs and the puck alike. The plate sits flat on the table.
+Wing_thickness = 6; // [3:0.5:20]
+// Depth of the pocket the puck sits in. Zero puts the puck on the flat plate.
+Pocket_depth = 1.5; // [0:0.5:5]
+// Gap round the puck in its pocket.
+Pocket_clearance = 0.3; // [0:0.05:1]
+// Plate round the pocket, or round the puck without one.
+Pocket_wall = 4; // [1:0.5:15]
+// Radius of the rounded inside corners where the wings leave the plate round the puck. Zero leaves sharp corners.
+Wing_fillet = 5; // [0:0.5:15]
+// The four countersunk screws up through the plate into the puck, one near each corner: their distance in from the puck's sides and ends.
+Screw_inset = 12; // [5:0.5:40]
+// Clearance hole for the screws. 4.5 mm suits #8 or M4.
+Screw_hole = 4.5; // [2:0.1:8]
+// Countersink diameter at the plate's underside, at 90 degrees. 8.5 mm suits #8 or M4 flat heads.
+Screw_head = 8.5; // [4:0.1:16]
+// Screw length, including its head. 19 mm is 3/4 inch.
+Screw_length = 19; // [6:0.5:50]
+// Pilot hole in the HDPE for the screws. 3.2 mm is 1/8 inch.
+Screw_pilot = 3.2; // [1.5:0.1:6]
 
 /* [Table and dogs] */
 // Centre-to-centre spacing of the table's holes. MFT-style tops use 96 mm.
@@ -92,17 +124,13 @@ Pitches_along = 1; // [1:1:4]
 Slot_length = 96; // [0:1:250]
 // Distance from the block's centre back to the dogs' row, for the assembly view. It must fall within the slots.
 Dog_distance = 96; // [20:0.5:400]
-// Wing thickness under the dog knobs. The wings sit flat on the table.
-Wing_thickness = 6; // [3:0.5:20]
-// Radius of the fillets joining the wings to the block: a cove along the top of each wing at the block's wall, and rounded inside corners where the wings leave it. Zero leaves sharp corners.
-Wing_fillet = 5; // [0:0.5:15]
 // Slot width for the dog's M6 rod.
 Rod_hole = 7; // [6.2:0.1:12]
 // Top knob diameter. Each wing pad is 3 mm larger in radius.
 Knob_diameter = 30; // [16:0.5:50]
 // Top knob height above the wing.
 Knob_height = 20; // [5:0.5:50]
-// Smallest gap between a knob and the block, at the near end of its slot, and between the two knobs.
+// Smallest gap between a knob and the puck, at the near end of its slot, and between the two knobs.
 Knob_clearance = 2; // [0:0.5:10]
 // Table top thickness, for the reference table and the dogs' clamping stack.
 Table_thickness = 19; // [10:0.5:40]
@@ -136,96 +164,158 @@ bottom_boss_h = 4;
 bottom_knob_nut_depth = 8;
 table_hole_d = 20.3;
 pad_margin = 3;
-// Least plastic between the port and the groove floor above it.
+// Least HDPE between the port's thread and the groove floor above it.
 min_port_cover = 2;
+// Half the point angle of a twist drill, 118 degrees.
+drill_half_angle = 59;
 
 assembly = View == "assembly";
 explode = assembly ? Explode / 100 * 50 : 0;
+function r1(v) = round(v * 10) / 10;
+// "a", "a and b", "a, b and c".
+function join(v, i = 0) = i >= len(v) ? "" : str(v[i], i < len(v) - 2 ? ", " : i == len(v) - 2 ? " and " : "", join(v, i + 1));
 
 knob_r = Knob_diameter / 2;
 pad_r = knob_r + pad_margin;
 knob_top = Wing_thickness + Knob_height;
-face_z = Block_height;
+// The puck's underside sits on the pocket's floor.
+puck_z = Wing_thickness - Pocket_depth;
+face_z = puck_z + Stock_thickness;
 channel_floor = face_z - Channel_depth;
 groove_floor = face_z - Groove_depth;
 
 // The groove's centre line is a rounded rectangle Rim_width + Groove_width / 2
-// in from the block's edge; the block's corners and the groove's edges are
+// in from the puck's edge; the puck's corners and the groove's edges are
 // concentric with its corners, so the rim and groove keep their widths.
 seal_inset = Rim_width + Groove_width / 2;
 corner_r = Seal_bend_radius + seal_inset;
-seal_l = Block_length - 2 * seal_inset;
-seal_w = Block_width - 2 * seal_inset;
+seal_l = Puck_length - 2 * seal_inset;
+seal_w = Puck_width - 2 * seal_inset;
 cord_length = 2 * (seal_l + seal_w) - (8 - 2 * PI) * Seal_bend_radius;
 cord_proud = Cord_diameter - Groove_depth;
-// Inside the groove: a channel round the edge, then the island grid.
-inner_l = Block_length - 2 * (Rim_width + Groove_width);
-inner_w = Block_width - 2 * (Rim_width + Groove_width);
+// Inside the groove.
+inner_l = Puck_length - 2 * (Rim_width + Groove_width);
+inner_w = Puck_width - 2 * (Rim_width + Groove_width);
 inner_r = Seal_bend_radius - Groove_width / 2;
-grid_l = inner_l - 2 * Channel_width;
-grid_w = inner_w - 2 * Channel_width;
-island = Island_pitch - Channel_width;
 
-// The port enters a long face; the duct carries on across the block under a
-// line of holes, which sit where the grid's channels cross. The air path is
-// worked out entering the front face (-Y), then mirrored to the back.
+// The channels' centre lines must keep within the inside of the groove inset
+// by the land and half a channel: a rounded rectangle, chan_a by chan_b from
+// the centre, with corner radius chan_r.
+chan_c = Channel_land + Channel_width / 2;
+chan_a = inner_l / 2 - chan_c;
+chan_b = inner_w / 2 - chan_c;
+chan_r = max(0, inner_r - chan_c);
+function centred_grid(half, pitch) = half < 0 ? [] : [for (k = [-floor(half / pitch):floor(half / pitch)]) k * pitch];
+cross_xs = centred_grid(chan_a, Channel_pitch);
+long_ys = centred_grid(chan_b, Channel_pitch);
+// With more than one channel across, the lengthwise ones end just short of
+// the outer ones' centre lines, and the same the other way, so the grid
+// closes in a rectangle; a lone channel runs as far as the land allows. Ending
+// a channel exactly on a centre line would leave its round end touching the
+// far side of the channel it runs into, a tangency the engine meshes badly.
+end_short = 0.5;
+long_end = len(cross_xs) > 1 ? max(cross_xs) - end_short : chan_a;
+cross_end = len(long_ys) > 1 ? max(long_ys) - end_short : chan_b;
+function inside_channel_limit(x, y) =
+    let(dx = x - (chan_a - chan_r), dy = y - (chan_b - chan_r))
+    x <= chan_a + eps && y <= chan_b + eps && (dx <= 0 || dy <= 0 || dx * dx + dy * dy <= chan_r * chan_r + eps);
+max_long_y = len(long_ys) > 0 ? max([for (y = long_ys) abs(y)]) : 0;
+max_cross_x = len(cross_xs) > 0 ? max([for (x = cross_xs) abs(x)]) : 0;
+
+// The port enters a long face; the duct carries on across the puck under the
+// holes, which drop from the lengthwise channels it passes under. The air
+// path is worked out entering the front face (-Y), then mirrored to the back.
 port_back = Fitting_side == "back";
 port_z = face_z - Port_drop;
-port_mouth_r = Port_hole / 2;
-port_end_y = -Block_width / 2 + Port_depth;
-hole_ys = [for (k = [-ceil(Block_width / Island_pitch):ceil(Block_width / Island_pitch)])
-    let(y = k * Island_pitch) if (abs(y) + Hole_diameter / 2 <= inner_w / 2 && y - Hole_diameter / 2 >= port_end_y) y];
+port_end_y = -Puck_width / 2 + Port_depth;
+hole_candidates = [for (y = long_ys) if (y - Hole_diameter / 2 >= port_end_y) y];
+hole_ys = len(hole_candidates) == 0 ? []
+    : [for (i = [0:min(Vacuum_holes, len(hole_candidates)) - 1]) hole_candidates[i]];
 duct_end_y = len(hole_ys) > 0 ? max(hole_ys) + Duct_diameter / 2 : port_end_y;
+function drill_point(d) = d / 2 / tan(drill_half_angle);
+duct_depth = duct_end_y + Puck_width / 2;
 hex_corner_r = Fitting_hex / sqrt(3);
 fitting_low = port_z - hex_corner_r;
 
+// The plate round the puck: its pocket, and a wall round that. Without a
+// pocket the plate keeps the same margin round the puck.
+rim = Pocket_clearance + Pocket_wall;
+body_l = Puck_length + 2 * rim;
+body_w = Puck_width + 2 * rim;
+body_r = corner_r + rim;
+
+// A notch in the plate's wall under the fitting's hex, if it's that low.
+fitting_notch = fitting_low < Wing_thickness + 0.5;
+notch_floor = max(0, fitting_low - 0.5);
+
+// Screws, one in from each corner, from under the plate into the puck.
+screw_xys = [for (sx = [-1, 1], sy = [-1, 1]) [sx * (Puck_length / 2 - Screw_inset), sy * (Puck_width / 2 - Screw_inset)]];
+countersink_depth = (Screw_head - Screw_hole) / 2;
+screw_engagement = Screw_length - puck_z;
+pilot_depth = screw_engagement + 1.5;
+max_screw_length = min(groove_floor, channel_floor) - 2;
+
 // The dogs stand in one row of table holes behind the block, a whole number
 // of pitches apart and symmetric about its centre. Each wing's slot runs back
-// in line with its dog, from where the knob just clears the block's rear face
-// and the fillet at its foot.
+// in line with its dog, from where the knob just clears the puck's rear face.
 dog_dx = Pitches_along * Hole_pitch / 2;
 wing_xs = [dog_dx, -dog_dx];
-slot_near = Block_width / 2 + knob_r + max(Knob_clearance, Wing_fillet);
+slot_near = Puck_width / 2 + knob_r + Knob_clearance;
 slot_far = slot_near + Slot_length;
 dogs = [for (x = wing_xs) [x, Dog_distance]];
-// A wing in line with the block stops flush with its end, where the knob
+// A wing in line with the plate stops flush with its end, where the knob
 // overhangs the wing's outer edge by no more than this.
 max_knob_overhang = knob_r / 3;
-function wing_out(x) = min(x + pad_r, max(Block_length / 2, x + knob_r - max_knob_overhang));
-knob_overhang = dog_dx <= Block_length / 2 ? max(0, dog_dx + knob_r - wing_out(dog_dx)) : 0;
+function wing_out(x) = min(x + pad_r, max(body_l / 2, x + knob_r - max_knob_overhang));
+knob_overhang = dog_dx <= body_l / 2 ? max(0, dog_dx + knob_r - wing_out(dog_dx)) : 0;
+
 assert(Groove_width <= Cord_diameter, "The groove must be no wider than the cord, or the cord won't grip it.");
 assert(Groove_depth >= Cord_diameter / 2, "The groove must be at least half the cord's diameter deep to hold it.");
 assert(cord_proud >= 0.5, "The cord must stand at least 0.5 mm proud of the face to seal. Make the groove shallower.");
-assert(Groove_depth + 1 <= face_z - Wing_thickness, "The groove is deeper than the block.");
+assert(Groove_depth + 3 <= Stock_thickness, "The groove is too deep for the HDPE.");
 assert(Groove_width / 2 < Seal_bend_radius, "The groove's inner edge needs a corner radius: raise the seal bend radius above half the groove width.");
-assert(grid_l >= island && grid_w >= island, "There's no room inside the groove for the island grid. Make the block bigger or the rim, groove or channels narrower.");
-assert(Channel_depth < Groove_depth + 2, "The channels must be shallower than the groove floor plus 2 mm.");
-assert(len(hole_ys) >= 1, "No vacuum hole fits between the port's end and the groove. Shorten the port or narrow the island pitch.");
-assert(abs(Port_offset) + Hole_diameter / 2 <= inner_l / 2, "The port's line of holes must sit inside the groove. Move the port toward the middle.");
-assert(abs(Port_offset) + port_mouth_r + 2 <= Block_length / 2 - corner_r, "The port must stay 2 mm clear of the block's rounded corners.");
-assert(Port_drop >= Groove_depth + port_mouth_r + min_port_cover,
-    "The port is too close to the groove above it. Increase the port drop.");
-assert(port_z - port_mouth_r >= 2, "The port must stay 2 mm above the table. Decrease the port drop.");
-assert(fitting_low >= 1, "The fitting's hex would hit the table. Decrease the port drop.");
-assert(Duct_diameter / 2 * sqrt(2) + Duct_diameter / 2 <= Port_drop - Channel_depth,
-    "The duct's teardrop top must stay below the channels. Increase the port drop or use a smaller duct.");
+assert(len(long_ys) >= 1 && len(cross_xs) >= 1,
+    "There's no room for channels inside the groove. Make the puck bigger, or the rim, groove, channels or land narrower.");
+assert(Channel_pitch >= Channel_width + 2, "The channels must be at least 2 mm apart. Increase the channel pitch.");
+assert(inside_channel_limit(long_end, max_long_y) && inside_channel_limit(max_cross_x, cross_end),
+    "The channel grid's corners come too close to the groove's rounded corners. Change the channel pitch or make the seal bend radius smaller.");
+assert(Channel_depth + 3 <= Stock_thickness, "The channels are too deep for the HDPE.");
+assert(len(hole_ys) >= 1, "No vacuum hole fits between the port's end and the groove. Shorten the port or change the channel pitch.");
+assert(abs(Port_offset) <= long_end, "The port's holes must fall in the lengthwise channels. Move the port toward the middle.");
+assert(abs(Port_offset) + npt_major / 2 + 2 <= Puck_length / 2 - corner_r, "The port must stay 2 mm clear of the puck's rounded corners.");
+assert(Port_drop >= Groove_depth + npt_major / 2 + min_port_cover,
+    "The port's thread is too close to the groove above it. Increase the port drop.");
+assert(port_z - npt_major / 2 >= puck_z + 2, str("The port must stay 2 mm above the puck's underside. Decrease the port drop, if the groove allows, or use HDPE at least ",
+    r1(Groove_depth + min_port_cover + npt_major + 2), " mm thick."));
+assert(port_z + Duct_diameter / 2 + 2 <= channel_floor, "The duct must pass 2 mm under the channels. Increase the port drop or use a smaller duct.");
 assert(Duct_diameter <= Port_hole - 1, "The duct must be narrower than the port.");
 assert(Hole_diameter <= Duct_diameter, "The vacuum holes must be no wider than the duct.");
-assert(duct_end_y + 3 <= inner_w / 2 + Channel_width + Groove_width, "The duct must end 3 mm inside the back wall.");
+assert(Hole_diameter <= Channel_width - 1, "The vacuum holes must be at least 1 mm narrower than the channels.");
+assert(duct_end_y + drill_point(Duct_diameter) + 3 <= Puck_width / 2, "The duct must end 3 mm inside the far face.");
 assert(2 * (dog_dx - knob_r) >= Knob_clearance, "The two knobs would hit each other. Put more hole pitches between the dogs.");
-assert(Wing_thickness + Wing_fillet + 1 <= groove_floor, "The wing fillets reach the groove. Make them smaller.");
+assert(Pocket_depth < Wing_thickness - 2, "The pocket must leave at least 2 mm of plate under the puck.");
+assert(countersink_depth <= puck_z - 1, "The countersinks must leave 1 mm of plate under the puck. Use a smaller head or a thicker plate.");
+assert(Screw_inset >= Screw_head / 2 + 1, "The screws must sit 1 mm inside the puck's edge.");
+assert(screw_engagement >= 6, "The screws must reach at least 6 mm into the HDPE. Use longer screws.");
+assert(Screw_length <= max_screw_length, str("The screws would break into the groove or channels. Use screws ", r1(max_screw_length), " mm long or less."));
+assert(min([for (p = screw_xys) abs(p[0] - Port_offset)]) >= npt_major / 2 + Screw_pilot / 2 + 2,
+    "The screws would hit the port or duct. Move the port toward the middle or the screws further in.");
+// The fitting's hex stands just off the puck's face, over the plate's wall,
+// which is notched for it if it's lower than the plate's top.
+assert(fitting_low >= 1, "The fitting's hex would hit the table. Decrease the port drop.");
 // At the back, the fitting and its tube run between the wings and the knobs,
 // unless they're high enough to pass over them.
 assert(!port_back || fitting_low >= knob_top + Knob_clearance
         || abs(Port_offset) + hex_corner_r + Knob_clearance <= dog_dx - knob_r
-            && (fitting_low >= Wing_thickness + Wing_fillet || abs(Port_offset) + hex_corner_r <= dog_dx - pad_r - Wing_fillet),
+            && (fitting_low >= Wing_thickness || abs(Port_offset) + hex_corner_r <= dog_dx - pad_r - Wing_fillet),
     "The fitting would hit a wing or a knob. Move the port toward the middle or put more hole pitches between the dogs.");
 assert(Dog_distance >= slot_near - eps && Dog_distance <= slot_far + eps,
     str("The assembly's dogs must stand within the slots, ", slot_near, " to ", slot_far, " mm behind the block's centre. Change the dog distance."));
 
 // Legend colours as 0-255 RGB. Repeated pieces get their own colour within
 // 3/255 of the legend colour, so the viewer can select each one.
-block_rgb = [208, 106, 31];
+puck_rgb = [220, 228, 233];
+base_rgb = [208, 106, 31];
 cord_rgb = [71, 76, 85];
 fitting_rgb = [168, 134, 44];
 top_knob_rgb = [47, 109, 179];
@@ -237,8 +327,6 @@ function hex2(n) = str("0123456789abcdef"[floor(n / 16)], "0123456789abcdef"[n %
 function hex_color(c) = str("#", hex2(c[0]), hex2(c[1]), hex2(c[2]));
 module paint(rgb) color(rgb / 255) children();
 
-// --- Block ---
-
 module rounded_rect(l, w, r) {
     rr = max(0, min(r, l / 2 - eps, w / 2 - eps));
     // A hull of corner circles rather than offset(): in openrscad-engine 0.14,
@@ -246,56 +334,6 @@ module rounded_rect(l, w, r) {
     // from it.
     if (rr > 0) hull() for (x = [-1, 1] * (l / 2 - rr), y = [-1, 1] * (w / 2 - rr)) translate([x, y]) circle(r = rr);
     else square([l, w], center = true);
-}
-
-// The wing at +X distance x: a pad-width strip along its slot, so the knob
-// bears on it anywhere along it. A wing in line with the block runs straight
-// into its rear face, square across the corner, with its inside corners
-// rounded by the fillet radius. Its outer side stops flush with the block's
-// end, so long as the knob overhangs it by no more than max_knob_overhang;
-// otherwise it reaches as far as that needs. A wing beyond the block's end
-// angles in to it.
-module wing_2d(x) {
-    f = Wing_fillet;
-    hx = max(0, Block_length / 2 - pad_r);
-    hy = max(0, Block_width / 2 - pad_r);
-    sx = Block_length / 2 - corner_r;
-    root_y = Block_width / 2 - corner_r;
-    x_in = x - pad_r;
-    x_out = x <= Block_length / 2 ? wing_out(x) : x + pad_r;
-    // Rounded ends on the wing's own centre line, which a trimmed outer side
-    // moves inboard of the slot's.
-    half = (x_out - x_in) / 2;
-    hull() for (y = [slot_near, slot_far]) translate([x_in + half, y]) circle(r = half);
-    if (x <= Block_length / 2) {
-        translate([x_in, root_y]) square([x_out - x_in, slot_near - root_y]);
-        if (f > 0) {
-            // The wing's inner side into the straight part of the rear face.
-            if (x_in <= sx && x_in - f >= -sx)
-                translate([x_in, Block_width / 2]) mirror([1, 0, 0]) fillet_2d(f);
-            // Its outer side the same way; or, if it reaches past the block's
-            // end, the foot of the square across the corner into the end face.
-            // Flush with the end, it needs none.
-            if (x_out + f <= sx)
-                translate([x_out, Block_width / 2]) fillet_2d(f);
-            else if (x_out > Block_length / 2 + eps)
-                translate([Block_length / 2, root_y]) mirror([0, 1, 0]) fillet_2d(min(f, x_out - Block_length / 2));
-        }
-    } else
-        hull() {
-            translate([x, slot_near]) circle(r = pad_r);
-            translate([hx, hy]) circle(r = pad_r);
-        }
-}
-
-module wings_2d() {
-    union() for (x = wing_xs) if (x >= 0) wing_2d(x); else mirror([1, 0, 0]) wing_2d(-x);
-}
-
-// The block's outline plus its wings.
-module wing_outline() {
-    rounded_rect(Block_length, Block_width, corner_r);
-    wings_2d();
 }
 
 // A fillet of radius f in the corner at the origin between material along -X
@@ -310,40 +348,27 @@ module fillet_2d(f) {
     }
 }
 
-// Cove cross-section: d out from the block's wall, h up from the wing's top.
-module cove_profile(f) {
-    fillet_2d(f);
-}
+// --- HDPE puck ---
 
-// A cove of radius f all round the foot of the block's wall, standing at wing
-// height: a straight run along each side and a quarter turn at each corner.
-// The runs reach 0.1 mm into the turns, so they overlap rather than meet face
-// to face.
-module cove_ring(f) {
-    sx = Block_length / 2 - corner_r;
-    sy = Block_width / 2 - corner_r;
-    rx = sx + 0.1;
-    ry = sy + 0.1;
-    translate([0, 0, Wing_thickness]) union() {
-        translate([-rx, Block_width / 2, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * rx) cove_profile(f);
-        mirror([0, 1, 0]) translate([-rx, Block_width / 2, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * rx) cove_profile(f);
-        translate([Block_length / 2, ry, 0]) rotate([90, 0, 0]) linear_extrude(height = 2 * ry) cove_profile(f);
-        mirror([1, 0, 0]) translate([Block_length / 2, ry, 0]) rotate([90, 0, 0]) linear_extrude(height = 2 * ry) cove_profile(f);
-        for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * sy, 0]) intersection() {
-            rotate_extrude() translate([corner_r, 0]) cove_profile(f);
-            translate([cx > 0 ? 0 : -(corner_r + f + 1), cy > 0 ? 0 : -(corner_r + f + 1), -1])
-                cube([corner_r + f + 1, corner_r + f + 1, f + 2]);
-        }
+module groove() {
+    difference() {
+        rounded_rect(seal_l + Groove_width, seal_w + Groove_width, Seal_bend_radius + Groove_width / 2);
+        rounded_rect(seal_l - Groove_width, seal_w - Groove_width, Seal_bend_radius - Groove_width / 2);
     }
 }
 
-// The fillet along the top of each wing where it meets the block's wall.
-// The cove needs no clipping to the wings: block() keeps it only where the
-// full-height outline has material, which outside the block is the wings. (A
-// clip along the wings' outline would duplicate their side faces, and the
-// engine meshes those with non-manifold edges.)
-module wing_coves() {
-    cove_ring(Wing_fillet);
+// Each channel is one straight pass of the bit, with round ends. They're
+// clipped to the inside of the groove, which changes nothing but makes the
+// engine join them into one outline before they're extruded: extruded one by
+// one, their overlapping floors can mesh with T-junctions.
+module channels_2d() {
+    intersection() {
+        rounded_rect(inner_l, inner_w, inner_r);
+        union() {
+            for (y = long_ys) hull() for (x = [-1, 1] * long_end) translate([x, y]) circle(d = Channel_width);
+            for (x = cross_xs) hull() for (y = [-1, 1] * cross_end) translate([x, y]) circle(d = Channel_width);
+        }
+    }
 }
 
 // The fitting's side: the air path and fitting are modelled at the front and
@@ -353,67 +378,98 @@ module on_port_side() {
     else children();
 }
 
-// Channels: the band inside the groove, less the islands. The islands are
-// squares on a grid with channels along the port's line and the centre line.
-module channels() {
-    n = ceil(max(Block_length, Block_width) / Island_pitch) + 2;
-    difference() {
-        rounded_rect(inner_l, inner_w, inner_r);
-        intersection() {
-            rounded_rect(grid_l, grid_w, max(0, inner_r - Channel_width));
-            // An explicit union: openrscad-engine 0.14 intersects each of a
-            // for loop's children with the rest, where OpenSCAD unions them.
-            union() for (i = [-n:n], j = [-n:n])
-                translate([Port_offset + (i + 0.5) * Island_pitch, (j + 0.5) * Island_pitch]) square(island, center = true);
-        }
-    }
-}
-
-module groove() {
-    difference() {
-        rounded_rect(seal_l + Groove_width, seal_w + Groove_width, Seal_bend_radius + Groove_width / 2);
-        rounded_rect(seal_l - Groove_width, seal_w - Groove_width, Seal_bend_radius - Groove_width / 2);
-    }
-}
-
-// A circle with a 45-degree point on top, so a horizontal hole prints
-// without support.
-module teardrop(r) {
-    circle(r = r);
-    rotate(45) square(r);
-}
-
 module air_path() {
-    // The port, tapered like the thread, with a 1 mm chamfer at its mouth.
-    translate([Port_offset, -Block_width / 2 - eps, port_z]) rotate([-90, 0, 0]) {
-        cylinder(d1 = Port_hole, d2 = Port_hole - Port_depth * npt_taper, h = Port_depth + eps);
+    translate([Port_offset, -Puck_width / 2 - eps, port_z]) rotate([-90, 0, 0]) {
+        // The tap-drilled port, with a 1 mm chamfer at its mouth and its
+        // drill point narrowing into the duct.
+        cylinder(d = Port_hole, h = Port_depth + eps);
         cylinder(d1 = Port_hole + 2, d2 = Port_hole, h = 1 + eps);
+        tip = Duct_diameter - 1;
+        translate([0, 0, Port_depth]) cylinder(d1 = Port_hole, d2 = tip, h = drill_point(Port_hole - tip));
+        // The duct, on past the last hole, with its own drill point.
+        cylinder(d = Duct_diameter, h = duct_depth + eps);
+        translate([0, 0, duct_depth]) cylinder(d1 = Duct_diameter, d2 = 0, h = drill_point(Duct_diameter));
     }
-    // The duct, from just inside the port to past the last hole.
-    translate([Port_offset, duct_end_y, port_z]) rotate([90, 0, 0])
-        linear_extrude(height = duct_end_y - port_end_y + 1) teardrop(Duct_diameter / 2);
-    for (y = hole_ys) translate([Port_offset, y, port_z]) cylinder(d = Hole_diameter, h = channel_floor - port_z + eps);
+    for (y = hole_ys) translate([Port_offset, y, port_z]) cylinder(d = Hole_diameter, h = channel_floor - port_z + eps, $fn = 24);
 }
 
-// One stepped solid: the whole outline at full height, cut down to wing
-// thickness outside the block, except for the coves at the wings' feet. (Two
-// overlapping extrusions would leave internal faces in the engine's display
-// mesh.)
-module block() {
+module puck() {
     difference() {
-        linear_extrude(height = face_z) wing_outline();
-        difference() {
-            translate([0, 0, Wing_thickness]) linear_extrude(height = face_z) difference() {
-                square(2 * [dog_dx + pad_r + Block_length, slot_far + pad_r + Block_width], center = true);
-                rounded_rect(Block_length, Block_width, corner_r);
-            }
-            if (Wing_fillet > 0) wing_coves();
+        translate([0, 0, puck_z]) linear_extrude(height = Stock_thickness) rounded_rect(Puck_length, Puck_width, corner_r);
+        translate([0, 0, groove_floor]) linear_extrude(height = Groove_depth + eps) groove();
+        translate([0, 0, channel_floor]) linear_extrude(height = Channel_depth + eps) channels_2d();
+        on_port_side() air_path();
+        for (p = screw_xys) translate([p[0], p[1], puck_z - eps]) cylinder(d = Screw_pilot, h = pilot_depth + eps, $fn = 16);
+    }
+}
+
+// --- Printed base plate ---
+
+// The wing at +X distance x: a pad-width strip along its slot, so the knob
+// bears on it anywhere along it. A wing in line with the plate runs straight
+// into its rear edge, square across the corner, with its inside corners
+// rounded by the fillet radius. Its outer side stops flush with the plate's
+// end, so long as the knob overhangs it by no more than max_knob_overhang;
+// otherwise it reaches as far as that needs. A wing beyond the plate's end
+// angles in to it.
+module wing_2d(x) {
+    f = Wing_fillet;
+    hx = max(0, body_l / 2 - pad_r);
+    hy = max(0, body_w / 2 - pad_r);
+    sx = body_l / 2 - body_r;
+    root_y = body_w / 2 - body_r;
+    x_in = x - pad_r;
+    x_out = x <= body_l / 2 ? wing_out(x) : x + pad_r;
+    // Rounded ends on the wing's own centre line, which a trimmed outer side
+    // moves inboard of the slot's.
+    half = (x_out - x_in) / 2;
+    hull() for (y = [slot_near, slot_far]) translate([x_in + half, y]) circle(r = half);
+    if (x <= body_l / 2) {
+        translate([x_in, root_y]) square([x_out - x_in, slot_near - root_y]);
+        if (f > 0) {
+            // The wing's inner side into the straight part of the rear edge.
+            if (x_in <= sx && x_in - f >= -sx)
+                translate([x_in, body_w / 2]) mirror([1, 0, 0]) fillet_2d(f);
+            // Its outer side the same way; or, if it reaches past the plate's
+            // end, the foot of the square across the corner into the end.
+            // Flush with the end, it needs none.
+            if (x_out + f <= sx)
+                translate([x_out, body_w / 2]) fillet_2d(f);
+            else if (x_out > body_l / 2 + eps)
+                translate([body_l / 2, root_y]) mirror([0, 1, 0]) fillet_2d(min(f, x_out - body_l / 2));
         }
+    } else
+        hull() {
+            translate([x, slot_near]) circle(r = pad_r);
+            translate([hx, hy]) circle(r = pad_r);
+        }
+}
+
+module wings_2d() {
+    union() for (x = wing_xs) if (x >= 0) wing_2d(x); else mirror([1, 0, 0]) wing_2d(-x);
+}
+
+module base() {
+    difference() {
+        linear_extrude(height = Wing_thickness) {
+            rounded_rect(body_l, body_w, body_r);
+            wings_2d();
+        }
+        if (Pocket_depth > 0) translate([0, 0, puck_z]) linear_extrude(height = Pocket_depth + eps)
+            rounded_rect(Puck_length + 2 * Pocket_clearance, Puck_width + 2 * Pocket_clearance, corner_r + Pocket_clearance);
         for (x = wing_xs) hull() for (y = [slot_near, slot_far])
             translate([x, y, -eps]) cylinder(d = Rod_hole, h = Wing_thickness + 2 * eps);
-        translate([0, 0, groove_floor]) linear_extrude(height = Groove_depth + eps) groove();
-        translate([0, 0, channel_floor]) linear_extrude(height = Channel_depth + eps) channels();
-        on_port_side() air_path();
+        // The notch under the fitting, from outside the wall to the pocket.
+        if (fitting_notch) on_port_side()
+            translate([Port_offset - hex_corner_r - 1, -body_w / 2 - 1, notch_floor])
+                cube([2 * hex_corner_r + 2, rim - Pocket_clearance + 1 + 0.5, Wing_thickness]);
+        // Clearance holes, countersunk from underneath. The cone narrows to
+        // inside the hole, so its surface crosses the hole's rather than
+        // meeting it edge to edge.
+        for (p = screw_xys) translate([p[0], p[1], -eps]) {
+            cylinder(d = Screw_hole, h = Wing_thickness + 2 * eps, $fn = 24);
+            cylinder(d1 = Screw_head, d2 = Screw_hole - 0.5, h = (Screw_head - Screw_hole + 0.5) / 2 + eps, $fn = 24);
+        }
     }
 }
 
@@ -440,12 +496,12 @@ module cord() {
 // inside the port, then the hex, body, release collet and a stub of tube.
 module fitting() {
     hex_l = 7;
-    body_l = Fitting_projection - fitting_standoff - hex_l - 3;
-    translate([Port_offset, -Block_width / 2, port_z]) rotate([90, 0, 0]) {
+    stem_l = Fitting_projection - fitting_standoff - hex_l - 3;
+    translate([Port_offset, -Puck_width / 2, port_z]) rotate([90, 0, 0]) {
         translate([0, 0, fitting_standoff - npt_length])
             cylinder(d1 = npt_major - npt_length * npt_taper, d2 = npt_major, h = npt_length);
         translate([0, 0, fitting_standoff]) cylinder(r = hex_corner_r, h = hex_l, $fn = 6);
-        translate([0, 0, fitting_standoff + hex_l]) cylinder(d = 0.9 * Fitting_hex, h = body_l);
+        translate([0, 0, fitting_standoff + hex_l]) cylinder(d = 0.9 * Fitting_hex, h = stem_l);
         translate([0, 0, Fitting_projection - 3]) cylinder(d = 0.85 * Fitting_hex, h = 3);
         translate([0, 0, Fitting_projection - 1]) cylinder(d = tube_d, h = tube_stub + 1);
     }
@@ -483,9 +539,9 @@ rod_top = knob_top - 1;
 // A patch of table round the block, the fitting's tube and the wings, with a
 // ring of holes on the dogs' grid round them.
 module table() {
-    fitting_reach = Block_width / 2 + Fitting_projection + tube_stub;
-    span_x = max(Block_length / 2, dog_dx + pad_r) + Hole_pitch;
-    y0 = -(port_back ? Block_width / 2 : fitting_reach) - Hole_pitch / 2;
+    fitting_reach = Puck_width / 2 + Fitting_projection + tube_stub;
+    span_x = max(body_l / 2, dog_dx + pad_r) + Hole_pitch;
+    y0 = -(port_back ? body_w / 2 : fitting_reach) - Hole_pitch / 2;
     y1 = max(slot_far + pad_r, Dog_distance + pad_r, port_back ? fitting_reach : 0) + Hole_pitch / 2;
     n = ceil(max(span_x, -y0, y1) / Hole_pitch) + 1;
     difference() {
@@ -499,10 +555,13 @@ module table() {
 }
 
 module assembly() {
-    paint(block_rgb) block();
+    paint(base_rgb) base();
+    translate([0, 0, 0.6 * explode]) {
+        paint(puck_rgb) puck();
+        on_port_side() translate([0, -0.8 * explode, 0]) paint(fitting_rgb) fitting();
+    }
     translate([0, 0, -0.8 * explode]) paint(table_rgb) table();
-    translate([0, 0, 0.8 * explode]) paint(cord_rgb) cord();
-    on_port_side() translate([0, -0.8 * explode, 0]) paint(fitting_rgb) fitting();
+    translate([0, 0, 1.2 * explode]) paint(cord_rgb) cord();
     for (i = [0:1]) {
         p = dogs[i];
         translate([p[0], p[1], Wing_thickness + 0.5 * explode]) paint(shade(top_knob_rgb, i)) top_knob();
@@ -512,20 +571,31 @@ module assembly() {
     }
 }
 
-echo(str("Vacuum face: ", face_z, " mm above the table, where the workpiece rests on the islands; ",
-    face_z >= knob_top ? str(face_z - knob_top, " mm above the dog knobs' tops, so work can overhang the back")
-        : str(knob_top - face_z, " mm below the dog knobs' tops, so keep work off the back"), "."));
-echo(str("Seal: cut ", round(cord_length), " mm of ", Cord_diameter, " mm foam cord and join its ends with CA glue, cut at 45 degrees. It stands ",
-    round(cord_proud * 100) / 100, " mm proud in a ", Groove_width, " mm wide, ", Groove_depth, " mm deep groove."));
-echo(str("Port: ", Port_hole, " mm at the face, tapering to ", Port_hole - Port_depth * npt_taper, " mm, ", Port_depth,
-    " mm deep, its centre ", port_z, " mm above the table. Tap it 1/4\" NPT, or thread the fitting straight in."));
-echo(str("Vacuum: ", len(hole_ys), " holes of ", Hole_diameter, " mm from a ", Duct_diameter, " mm duct to the channels."));
+port_face = port_back ? "back" : "front";
+echo(str("Vacuum face: ", r1(face_z), " mm above the table (", Stock_thickness, " mm HDPE on ", r1(puck_z), " mm of plate), ",
+    face_z >= knob_top ? str(r1(face_z - knob_top), " mm above the dog knobs' tops, so work can overhang the back")
+        : str(r1(knob_top - face_z), " mm below the dog knobs' tops, so keep work off the back"), "."));
+echo(str("Puck: ", Puck_length, " x ", Puck_width, " mm with ", r1(corner_r), " mm corner radii, from ", Stock_thickness, " mm HDPE."));
+echo(str("Seal: rout the groove ", Groove_depth, " mm deep with a ", Groove_width, " mm straight bit, its centre line ", r1(seal_inset),
+    " mm in from the edge. Cut ", round(cord_length), " mm of ", Cord_diameter, " mm foam cord and join its ends with CA glue, cut at 45 degrees. It stands ",
+    round(cord_proud * 100) / 100, " mm proud."));
+echo(str("Channels: rout ", len(long_ys), " lengthwise and ", len(cross_xs), " crosswise at ", Channel_pitch, " mm centres, ",
+    Channel_depth, " mm deep with a ", Channel_width, " mm straight bit. The lengthwise ones run ", r1(2 * long_end),
+    " mm between the bit's end positions, the crosswise ones ", r1(2 * cross_end), " mm."));
+echo(str("Port: drill ", Port_hole, " mm, ", Port_depth, " mm deep into the ", port_face, " face, ", r1(port_z - puck_z),
+    " mm up from the puck's underside", Port_offset != 0 ? str(" and ", Port_offset, " mm off centre") : " on the centre line",
+    ", and tap it 1/4\" NPT."));
+echo(str("Duct: drill ", Duct_diameter, " mm on through the port, ", r1(duct_depth), " mm deep from the ", port_face, " face. Holes: drill ",
+    len(hole_ys), " x ", Hole_diameter, " mm down from the channel floor to meet it, ",
+    join([for (y = hole_ys) r1(y + Puck_width / 2)]), " mm from the ", port_face, " face."));
+echo(str("Screws: four countersunk screws ", Screw_length, " mm long (", r1(max_screw_length), " mm at most), up through the plate into ",
+    Screw_pilot, " mm pilot holes ", r1(pilot_depth), " mm deep, ", Screw_inset, " mm in from the puck's sides and ends."));
 echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_along > 1 ? "es" : "",
-    "), in a row ", round(slot_near * 10) / 10, Slot_length > 0 ? str(" to ", round(slot_far * 10) / 10) : "",
+    "), in a row ", r1(slot_near), Slot_length > 0 ? str(" to ", r1(slot_far)) : "",
     " mm behind the block's centre", Slot_length >= Hole_pitch ? ": with the next row of holes, the block can sit anywhere front to back" : "",
     ". Each clamps ", Table_thickness + Wing_thickness, " mm (table + wing) between its knobs",
     knob_overhang > 0 ? str(", and its top knob overhangs the wing's outer edge",
-        wing_out(dog_dx) <= Block_length / 2 + eps ? ", flush with the block's end," : "", " by ", round(knob_overhang * 10) / 10, " mm") : "",
+        wing_out(dog_dx) <= body_l / 2 + eps ? ", flush with the plate's end," : "", " by ", r1(knob_overhang), " mm") : "",
     "."));
 echo("PIECES_V1", [
     for (i = [0:1]) each [
@@ -536,4 +606,5 @@ echo("PIECES_V1", [
 ]);
 
 if (assembly) assembly();
-else paint(block_rgb) block();
+else if (View == "puck") paint(puck_rgb) translate([0, 0, -puck_z]) puck();
+else paint(base_rgb) base();
