@@ -37,7 +37,8 @@
 // round its sides, and guide a router's guide bushing: round a track for the
 // groove, and along slots for the lengthwise and crosswise channels. The
 // groove template's island is held to its frame by four thin bridges, which
-// the bit cuts as it passes, so it locates in one piece.
+// the bit cuts as it passes, so it locates in one piece. Turn Router templates
+// off for a CNC-machined puck, which needs none.
 //
 // All dimensions are millimetres. Z is up and the table top is Z=0. The block
 // is centred on the origin with its length along X, its front face toward -Y,
@@ -134,6 +135,8 @@ Screw_length = 19; // [6:0.5:50]
 Screw_pilot = 3.2; // [1.5:0.1:6]
 
 /* [Router templates] */
+// Printed router templates, for cutting the puck yourself. Turn this off for a CNC-machined puck, so the templates' checks don't limit its settings.
+Router_templates = true;
 // Guide bushing outside diameter, for the groove and channel templates. 15.88 mm is 5/8 inch.
 Bushing_diameter = 15.88; // [8:0.01:40]
 // How far the guide bushing stands below the router's base. The templates must be thicker.
@@ -218,6 +221,7 @@ port_tip = Duct_diameter - 1;
 print_hole_allowance = 0.2;
 
 assembly = View == "assembly";
+template_view = View == "outline_template" || View == "groove_template" || View == "long_template" || View == "cross_template";
 explode = assembly ? Explode / 100 * 50 : 0;
 function r1(v) = round(v * 10) / 10;
 // "a", "a and b", "a, b and c".
@@ -384,15 +388,19 @@ assert(!port_back || fitting_low >= knob_top + Knob_clearance
     "The fitting would hit a wing or a knob. Move the port toward the middle or put more hole pitches between the dogs.");
 assert(Dog_distance >= slot_near - eps && Dog_distance <= slot_far + eps,
     str("The assembly's dogs must stand within the slots, ", slot_near, " to ", slot_far, " mm behind the block's centre. Change the dog distance."));
-assert(island_r >= 0, "The groove's corners are tighter than the guide bushing can follow round the groove template's island. Use a smaller bushing or raise the seal bend radius.");
-assert(seal_w - 2 * track_r >= 10, "The groove template's island would be less than 10 mm wide. Use a smaller bushing.");
-assert(slot_web >= 3, str("The channel templates' slots would be ", r1(slot_web), " mm apart. Increase the channel pitch to ",
-    ceil((2 * track_r + 3) * 2) / 2, " mm or more, or use a smaller bushing."));
-assert(max(Groove_width, Channel_width) <= Bushing_diameter - 3, "The bits must pass through the guide bushing. Use a larger bushing.");
-assert(Template_thickness >= Bushing_length + Bridge_height + 0.5,
-    "The guide bushing would hit the groove template's bridges. Use a thicker template or a shorter bushing.");
-assert(Template_margin >= Skirt_clearance + Skirt_wall + 2, "The templates' plates must reach at least 2 mm past their skirts.");
-assert(Skirt_depth <= Stock_thickness - 2, "The templates' skirts must be shallower than the puck.");
+assert(Router_templates || !template_view, "Turn on router templates to show them.");
+// The templates' checks apply only to cutting the puck with them.
+if (Router_templates) {
+    assert(island_r >= 0, "The groove's corners are tighter than the guide bushing can follow round the groove template's island. Use a smaller bushing or raise the seal bend radius.");
+    assert(seal_w - 2 * track_r >= 10, "The groove template's island would be less than 10 mm wide. Use a smaller bushing.");
+    assert(slot_web >= 3, str("The channel templates' slots would be ", r1(slot_web), " mm apart. Increase the channel pitch to ",
+        ceil((2 * track_r + 3) * 2) / 2, " mm or more, or use a smaller bushing."));
+    assert(max(Groove_width, Channel_width) <= Bushing_diameter - 3, "The bits must pass through the guide bushing. Use a larger bushing.");
+    assert(Template_thickness >= Bushing_length + Bridge_height + 0.5,
+        "The guide bushing would hit the groove template's bridges. Use a thicker template or a shorter bushing.");
+    assert(Template_margin >= Skirt_clearance + Skirt_wall + 2, "The templates' plates must reach at least 2 mm past their skirts.");
+    assert(Skirt_depth <= Stock_thickness - 2, "The templates' skirts must be shallower than the puck.");
+}
 
 // Legend colours as 0-255 RGB. Repeated pieces get their own colour within
 // 3/255 of the legend colour, so the viewer can select each one.
@@ -768,17 +776,19 @@ echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_a
     knob_overhang > 0 ? str(", and its top knob overhangs the wing's outer edge",
         wing_out(dog_dx) <= body_l / 2 + eps ? ", flush with the plate's end," : "", " by ", r1(knob_overhang), " mm") : "",
     "."));
-echo(str("Outline template: rough-cut the blank 2 to 3 mm oversize, tape the template to its underside and trim it with a pattern or flush-trim bit that cuts at least ",
-    Stock_thickness, " mm deep. Then drill the screws' ", Screw_pilot, " mm pilot holes through the template's guide holes, ", r1(outline_pilot_depth),
-    " mm deep from its face, before taking it off."));
-echo(str("Groove template: drop it over the puck's face, located by its skirt, and tape it down, with tape under its island too. With a ",
-    Bushing_diameter, " mm guide bushing, set the ", Groove_width, " mm bit ", r1(groove_bit_set),
-    " mm below the router's base and rout round the track. The bit cuts the four bridges that hold the island as it passes."));
-echo(str("Channel templates: drop each over the puck in turn and tape it down. Set the ", Channel_width, " mm bit ", r1(channel_bit_set),
-    " mm below the base and rout each slot from end to end."));
-echo(str("Templates: the groove and channel templates are ", r1(template_l), " x ", r1(template_w), " mm, ", Template_thickness,
-    " mm thick with a skirt ", Skirt_depth, " mm deep, and the outline template is ", Outline_template_thickness,
-    " mm thick. Print them as modelled, with no supports."));
+if (Router_templates) {
+    echo(str("Outline template: rough-cut the blank 2 to 3 mm oversize, tape the template to its underside and trim it with a pattern or flush-trim bit that cuts at least ",
+        Stock_thickness, " mm deep. Then drill the screws' ", Screw_pilot, " mm pilot holes through the template's guide holes, ", r1(outline_pilot_depth),
+        " mm deep from its face, before taking it off."));
+    echo(str("Groove template: drop it over the puck's face, located by its skirt, and tape it down, with tape under its island too. With a ",
+        Bushing_diameter, " mm guide bushing, set the ", Groove_width, " mm bit ", r1(groove_bit_set),
+        " mm below the router's base and rout round the track. The bit cuts the four bridges that hold the island as it passes."));
+    echo(str("Channel templates: drop each over the puck in turn and tape it down. Set the ", Channel_width, " mm bit ", r1(channel_bit_set),
+        " mm below the base and rout each slot from end to end."));
+    echo(str("Templates: the groove and channel templates are ", r1(template_l), " x ", r1(template_w), " mm, ", Template_thickness,
+        " mm thick with a skirt ", Skirt_depth, " mm deep, and the outline template is ", Outline_template_thickness,
+        " mm thick. Print them as modelled, with no supports."));
+}
 // The puck's features, for scripts/export-vacuum-puck-step.py, which rebuilds
 // it as a STEP solid for CNC machining. Heights are from the puck's underside,
 // and rectangles are [length, width, corner radius], centred on the origin.
