@@ -123,7 +123,7 @@ Screw_hole = 4.5; // [2:0.1:8]
 Screw_head = 8.5; // [4:0.1:16]
 // Screw length, including its head. 19 mm is 3/4 inch.
 Screw_length = 19; // [6:0.5:50]
-// Pilot hole in the HDPE for the screws. 3.2 mm is 1/8 inch.
+// Pilot hole in the HDPE for the screws, with a drill point. 3.2 mm is 1/8 inch.
 Screw_pilot = 3.2; // [1.5:0.1:6]
 
 /* [Router templates] */
@@ -290,7 +290,9 @@ screw_xys = [for (sx = [-1, 1], sy = [-1, 1]) [sx * (Puck_length / 2 - Screw_ins
 countersink_depth = (Screw_head - Screw_hole) / 2;
 screw_engagement = Screw_length - puck_z;
 pilot_depth = screw_engagement + 1.5;
-max_screw_length = min(groove_floor, channel_floor) - 2;
+// The pilot holes' drill points stop 0.5 mm under the groove or channels at
+// most.
+max_screw_length = min(groove_floor, channel_floor) - 2 - drill_point(Screw_pilot);
 
 // Router templates. A guide bushing runs in each template's openings, which
 // are track_r either side of the cut's centre line, so the bit at its centre
@@ -469,7 +471,10 @@ module puck() {
         translate([0, 0, groove_floor]) linear_extrude(height = Groove_depth + eps) groove();
         translate([0, 0, channel_floor]) linear_extrude(height = Channel_depth + eps) channels_2d();
         on_port_side() air_path();
-        for (p = screw_xys) translate([p[0], p[1], puck_z - eps]) cylinder(d = Screw_pilot, h = pilot_depth + eps, $fn = 16);
+        for (p = screw_xys) translate([p[0], p[1], puck_z - eps]) {
+            cylinder(d = Screw_pilot, h = pilot_depth + eps, $fn = 16);
+            translate([0, 0, pilot_depth + eps]) cylinder(d1 = Screw_pilot, d2 = 0, h = drill_point(Screw_pilot), $fn = 16);
+        }
     }
 }
 
