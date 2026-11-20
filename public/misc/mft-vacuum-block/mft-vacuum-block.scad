@@ -1,8 +1,9 @@
 // MFT vacuum block
 // A single-sided vacuum block for an MFT-style table, in two parts: a puck
-// machined from HDPE, which carries the seal and the vacuum, and a 3D-printed
-// base plate under it, which the dogs clamp to the table. HDPE is airtight all
-// the way through, where air can leak through a print's walls and infill.
+// machined from solid plastic, which carries the seal and the vacuum, and a
+// 3D-printed base plate under it, which the dogs clamp to the table. Solid
+// plastic is airtight all the way through, where air can leak through a
+// print's walls and infill.
 //
 // The puck's top is the vacuum face. A groove round its edge holds a loop of
 // round foam cord as the seal. Inside it, straight channels run lengthwise and
@@ -24,7 +25,7 @@
 // no flange".
 //
 // Everything that stands up off the table is behind the block, so the front
-// and both ends are clear. With 1" HDPE the vacuum face is also a little above
+// and both ends are clear. With a 1" puck the vacuum face is also a little above
 // the knobs' tops, so work can overhang the back too.
 //
 // Four printed router templates cut the puck. The outline template, taped to
@@ -40,15 +41,15 @@
 // is centred on the origin with its length along X, its front face toward -Y,
 // and its wings and fitting to the back (+Y).
 //
-// View = HDPE puck is the part to machine; the echoed lines list its cuts.
+// View = Puck is the part to machine; the echoed lines list its cuts.
 // View = Base plate is the part to print: it prints as modelled, underside on
 // the bed, with no supports. The template views are the templates to print,
 // also as modelled and with no supports: the groove and channel templates
 // face down, which keeps the faces the router slides on flat.
 
 /* [View] */
-// Assembly shows the cord, fitting, dogs and a patch of table for reference. The puck is the part to machine from HDPE; the base plate and the templates are parts to print.
-View = "assembly"; // [assembly:Assembly for reference, puck:HDPE puck (machine this), base:Base plate (print this), outline_template:Outline template (print), groove_template:Groove template (print), long_template:Lengthwise channel template (print), cross_template:Crosswise channel template (print)]
+// Assembly shows the cord, fitting, dogs and a patch of table for reference. The puck is the part to machine; the base plate and the templates are parts to print.
+View = "assembly"; // [assembly:Assembly for reference, puck:Puck (machine this), base:Base plate (print this), outline_template:Outline template (print), groove_template:Groove template (print), long_template:Lengthwise channel template (print), cross_template:Crosswise channel template (print)]
 // Separation of the assembly's parts, in percent. Zero is assembled.
 Explode = 0; // [0:1:100]
 
@@ -57,7 +58,7 @@ Explode = 0; // [0:1:100]
 Puck_length = 120.65; // [60:300]
 // Puck width, front to back. 76.2 mm is 3 inches.
 Puck_width = 76.2; // [40:300]
-// HDPE thickness, which is the puck's height. 25.4 mm is 1 inch.
+// Puck thickness: the stock's, if you cut it yourself. 25.4 mm is 1 inch.
 Stock_thickness = 25.4; // [12:0.1:60]
 
 /* [Seal] */
@@ -67,7 +68,7 @@ Cord_diameter = 6.35; // [2:0.05:15]
 Groove_width = 6; // [2:0.05:15]
 // Groove depth. The cord stands proud of the face by its diameter less this.
 Groove_depth = 4.5; // [1:0.1:15]
-// HDPE between the groove and the puck's outside.
+// Plastic between the groove and the puck's outside.
 Rim_width = 4; // [1.5:0.1:15]
 // Plan radius of the groove's centre line at the corners, where the cord bends. The puck's corners follow it.
 Seal_bend_radius = 10; // [3:0.5:40]
@@ -79,7 +80,7 @@ Channel_width = 6.35; // [2:0.05:15]
 Channel_depth = 3; // [0.5:0.1:10]
 // Centre-to-centre spacing of the channels, both ways. The grid is centred on the puck, with as many channels as fit inside the groove.
 Channel_pitch = 20; // [8:0.5:100]
-// Least HDPE between the channels and the groove.
+// Least plastic between the channels and the groove.
 Channel_land = 4; // [1:0.5:20]
 
 /* [Fitting, duct and holes] */
@@ -123,7 +124,7 @@ Screw_hole = 4.5; // [2:0.1:8]
 Screw_head = 8.5; // [4:0.1:16]
 // Screw length, including its head. 19 mm is 3/4 inch.
 Screw_length = 19; // [6:0.5:50]
-// Pilot hole in the HDPE for the screws, with a drill point. 3.2 mm is 1/8 inch.
+// Pilot hole in the puck for the screws, with a drill point. 3.2 mm is 1/8 inch.
 Screw_pilot = 3.2; // [1.5:0.1:6]
 
 /* [Router templates] */
@@ -199,7 +200,7 @@ bottom_boss_h = 4;
 bottom_knob_nut_depth = 8;
 table_hole_d = 20.3;
 pad_margin = 3;
-// Least HDPE between the port's thread and the groove floor above it.
+// Least plastic between the port's thread and the groove floor above it.
 min_port_cover = 2;
 // Half the point angle of a twist drill, 118 degrees.
 drill_half_angle = 59;
@@ -334,20 +335,20 @@ knob_overhang = dog_dx <= body_l / 2 ? max(0, dog_dx + knob_r - wing_out(dog_dx)
 assert(Groove_width <= Cord_diameter, "The groove must be no wider than the cord, or the cord won't grip it.");
 assert(Groove_depth >= Cord_diameter / 2, "The groove must be at least half the cord's diameter deep to hold it.");
 assert(cord_proud >= 0.5, "The cord must stand at least 0.5 mm proud of the face to seal. Make the groove shallower.");
-assert(Groove_depth + 3 <= Stock_thickness, "The groove is too deep for the HDPE.");
+assert(Groove_depth + 3 <= Stock_thickness, "The groove is too deep for the puck.");
 assert(Groove_width / 2 < Seal_bend_radius, "The groove's inner edge needs a corner radius: raise the seal bend radius above half the groove width.");
 assert(len(long_ys) >= 1 && len(cross_xs) >= 1,
     "There's no room for channels inside the groove. Make the puck bigger, or the rim, groove, channels or land narrower.");
 assert(Channel_pitch >= Channel_width + 2, "The channels must be at least 2 mm apart. Increase the channel pitch.");
 assert(inside_channel_limit(long_end, max_long_y) && inside_channel_limit(max_cross_x, cross_end),
     "The channel grid's corners come too close to the groove's rounded corners. Change the channel pitch or make the seal bend radius smaller.");
-assert(Channel_depth + 3 <= Stock_thickness, "The channels are too deep for the HDPE.");
+assert(Channel_depth + 3 <= Stock_thickness, "The channels are too deep for the puck.");
 assert(len(hole_ys) >= 1, "No vacuum hole fits between the port's end and the groove. Shorten the port or change the channel pitch.");
 assert(abs(Port_offset) <= long_end, "The port's holes must fall in the lengthwise channels. Move the port toward the middle.");
 assert(abs(Port_offset) + npt_major / 2 + 2 <= Puck_length / 2 - corner_r, "The port must stay 2 mm clear of the puck's rounded corners.");
 assert(Port_drop >= Groove_depth + npt_major / 2 + min_port_cover,
     "The port's thread is too close to the groove above it. Increase the port drop.");
-assert(port_z - npt_major / 2 >= puck_z + 2, str("The port must stay 2 mm above the puck's underside. Decrease the port drop, if the groove allows, or use HDPE at least ",
+assert(port_z - npt_major / 2 >= puck_z + 2, str("The port must stay 2 mm above the puck's underside. Decrease the port drop, if the groove allows, or make the puck at least ",
     r1(Groove_depth + min_port_cover + npt_major + 2), " mm thick."));
 assert(port_z + Duct_diameter / 2 + 2 <= channel_floor, "The duct must pass 2 mm under the channels. Increase the port drop or use a smaller duct.");
 assert(Duct_diameter <= Port_hole - 1, "The duct must be narrower than the port.");
@@ -358,7 +359,7 @@ assert(2 * (dog_dx - knob_r) >= Knob_clearance, "The two knobs would hit each ot
 assert(Pocket_depth < Wing_thickness - 2, "The pocket must leave at least 2 mm of plate under the puck.");
 assert(countersink_depth <= puck_z - 1, "The countersinks must leave 1 mm of plate under the puck. Use a smaller head or a thicker plate.");
 assert(Screw_inset >= Screw_head / 2 + 1, "The screws must sit 1 mm inside the puck's edge.");
-assert(screw_engagement >= 6, "The screws must reach at least 6 mm into the HDPE. Use longer screws.");
+assert(screw_engagement >= 6, "The screws must reach at least 6 mm into the puck. Use longer screws.");
 assert(Screw_length <= max_screw_length, str("The screws would break into the groove or channels. Use screws ", r1(max_screw_length), " mm long or less."));
 assert(min([for (p = screw_xys) abs(p[0] - Port_offset)]) >= npt_major / 2 + Screw_pilot / 2 + 2,
     "The screws would hit the port or duct. Move the port toward the middle or the screws further in.");
@@ -420,7 +421,7 @@ module fillet_2d(f) {
     }
 }
 
-// --- HDPE puck ---
+// --- Puck ---
 
 module groove() {
     difference() {
@@ -730,10 +731,10 @@ module assembly() {
 }
 
 port_face = port_back ? "back" : "front";
-echo(str("Vacuum face: ", r1(face_z), " mm above the table (", Stock_thickness, " mm HDPE on ", r1(puck_z), " mm of plate), ",
+echo(str("Vacuum face: ", r1(face_z), " mm above the table (", Stock_thickness, " mm puck on ", r1(puck_z), " mm of plate), ",
     face_z >= knob_top ? str(r1(face_z - knob_top), " mm above the dog knobs' tops, so work can overhang the back")
         : str(r1(knob_top - face_z), " mm below the dog knobs' tops, so keep work off the back"), "."));
-echo(str("Puck: ", Puck_length, " x ", Puck_width, " mm with ", r1(corner_r), " mm corner radii, from ", Stock_thickness, " mm HDPE."));
+echo(str("Puck: ", Puck_length, " x ", Puck_width, " mm with ", r1(corner_r), " mm corner radii, ", Stock_thickness, " mm thick."));
 echo(str("Seal: rout the groove ", Groove_depth, " mm deep with a ", Groove_width, " mm straight bit, its centre line ", r1(seal_inset),
     " mm in from the edge. Cut ", round(cord_length), " mm of ", Cord_diameter, " mm foam cord and join its ends with CA glue, cut at 45 degrees. It stands ",
     round(cord_proud * 100) / 100, " mm proud."));
