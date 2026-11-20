@@ -3,7 +3,9 @@
 // machined from solid plastic, which carries the seal and the vacuum, and a
 // 3D-printed base plate under it, which the dogs clamp to the table. Solid
 // plastic is airtight all the way through, where air can leak through a
-// print's walls and infill.
+// print's walls and infill. Cut the puck from HDPE yourself with the router
+// templates below, or have it CNC machined, in POM (acetal) for instance,
+// from a STEP file of it: see View below.
 //
 // The puck's top is the vacuum face. A groove round its edge holds a loop of
 // round foam cord as the seal. Inside it, straight channels run lengthwise and
@@ -41,7 +43,11 @@
 // is centred on the origin with its length along X, its front face toward -Y,
 // and its wings and fitting to the back (+Y).
 //
-// View = Puck is the part to machine; the echoed lines list its cuts.
+// View = Puck is the part to machine; the echoed lines list its cuts. For CNC
+// machining, mft-vacuum-block-puck.step beside this file is the puck at the
+// default settings, and the site's scripts/export-vacuum-puck-step.py rebuilds
+// it for others from this file's PUCK_STEP_V1 echo. The STEP leaves the port
+// as a plain tap-drilled hole, to tap 1/4" NPT by hand, so it has no threads.
 // View = Base plate is the part to print: it prints as modelled, underside on
 // the bed, with no supports. The template views are the templates to print,
 // also as modelled and with no supports: the groove and channel templates
@@ -204,6 +210,10 @@ pad_margin = 3;
 min_port_cover = 2;
 // Half the point angle of a twist drill, 118 degrees.
 drill_half_angle = 59;
+// The port's chamfer at its mouth, and the diameter its drill point narrows
+// to in the duct.
+port_chamfer = 1;
+port_tip = Duct_diameter - 1;
 // Printed holes come out a little small.
 print_hole_allowance = 0.2;
 
@@ -400,8 +410,11 @@ function hex2(n) = str("0123456789abcdef"[floor(n / 16)], "0123456789abcdef"[n %
 function hex_color(c) = str("#", hex2(c[0]), hex2(c[1]), hex2(c[2]));
 module paint(rgb) color(rgb / 255) children();
 
+// The corner radius rounded_rect() uses, which must leave its sides straight.
+function rect_r(l, w, r) = max(0, min(r, l / 2 - eps, w / 2 - eps));
+
 module rounded_rect(l, w, r) {
-    rr = max(0, min(r, l / 2 - eps, w / 2 - eps));
+    rr = rect_r(l, w, r);
     // A hull of corner circles rather than offset(): in openrscad-engine 0.14,
     // offset()'s output can come out wrong when something is later subtracted
     // from it.
@@ -453,12 +466,11 @@ module on_port_side() {
 
 module air_path() {
     translate([Port_offset, -Puck_width / 2 - eps, port_z]) rotate([-90, 0, 0]) {
-        // The tap-drilled port, with a 1 mm chamfer at its mouth and its
-        // drill point narrowing into the duct.
+        // The tap-drilled port, with a 45 degree chamfer at its mouth and
+        // its drill point narrowing into the duct.
         cylinder(d = Port_hole, h = Port_depth + eps);
-        cylinder(d1 = Port_hole + 2, d2 = Port_hole, h = 1 + eps);
-        tip = Duct_diameter - 1;
-        translate([0, 0, Port_depth]) cylinder(d1 = Port_hole, d2 = tip, h = drill_point(Port_hole - tip));
+        cylinder(d1 = Port_hole + 2 * port_chamfer, d2 = Port_hole, h = port_chamfer + eps);
+        translate([0, 0, Port_depth]) cylinder(d1 = Port_hole, d2 = port_tip, h = drill_point(Port_hole - port_tip));
         // The duct, on past the last hole, with its own drill point.
         cylinder(d = Duct_diameter, h = duct_depth + eps);
         translate([0, 0, duct_depth]) cylinder(d1 = Duct_diameter, d2 = 0, h = drill_point(Duct_diameter));
@@ -767,6 +779,39 @@ echo(str("Channel templates: drop each over the puck in turn and tape it down. S
 echo(str("Templates: the groove and channel templates are ", r1(template_l), " x ", r1(template_w), " mm, ", Template_thickness,
     " mm thick with a skirt ", Skirt_depth, " mm deep, and the outline template is ", Outline_template_thickness,
     " mm thick. Print them as modelled, with no supports."));
+// The puck's features, for scripts/export-vacuum-puck-step.py, which rebuilds
+// it as a STEP solid for CNC machining. Heights are from the puck's underside,
+// and rectangles are [length, width, corner radius], centred on the origin.
+// Each channel is a bit's path [x0, y0, x1, y1]. The air path is given
+// entering the front face (-Y), as air_path() models it, and is mirrored to
+// the back when mirror_y is true.
+echo("PUCK_STEP_V1", [
+    ["body", [Puck_length, Puck_width, rect_r(Puck_length, Puck_width, corner_r)]],
+    ["thickness", Stock_thickness],
+    ["groove_outer", let(l = seal_l + Groove_width, w = seal_w + Groove_width) [l, w, rect_r(l, w, Seal_bend_radius + Groove_width / 2)]],
+    ["groove_inner", let(l = seal_l - Groove_width, w = seal_w - Groove_width) [l, w, rect_r(l, w, Seal_bend_radius - Groove_width / 2)]],
+    ["groove_depth", Groove_depth],
+    ["channel_clip", [inner_l, inner_w, rect_r(inner_l, inner_w, inner_r)]],
+    ["channel_width", Channel_width],
+    ["channel_depth", Channel_depth],
+    ["channels", concat([for (y = long_ys) [-long_end, y, long_end, y]], [for (x = cross_xs) [x, -cross_end, x, cross_end]])],
+    ["mirror_y", port_back],
+    ["port_x", Port_offset],
+    ["port_z", port_z - puck_z],
+    ["port_hole", Port_hole],
+    ["port_depth", Port_depth],
+    ["port_chamfer", port_chamfer],
+    ["port_tip", port_tip],
+    ["duct_diameter", Duct_diameter],
+    ["duct_depth", duct_depth],
+    ["hole_diameter", Hole_diameter],
+    ["hole_ys", hole_ys],
+    ["hole_top", channel_floor - puck_z],
+    ["pilot_diameter", Screw_pilot],
+    ["pilot_depth", pilot_depth],
+    ["pilots", screw_xys],
+    ["drill_half_angle", drill_half_angle]
+]);
 echo("PIECES_V1", [
     for (i = [0:1]) each [
         [hex_color(shade(top_knob_rgb, i)), str("Top knob ", i + 1)],
