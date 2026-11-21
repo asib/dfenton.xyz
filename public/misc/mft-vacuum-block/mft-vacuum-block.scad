@@ -15,7 +15,7 @@
 // duct drilled in from the back face, whose mouth is tapped 1/4" NPT for a
 // push-to-connect fitting.
 //
-// The puck sits in a shallow pocket in the base plate, held by four M4
+// The puck sits in a shallow pocket in the base plate, held by four M5
 // countersunk screws up through the plate into tapped holes in its underside.
 // The plate's two wings run straight back along the table, either side of the
 // fitting. Each dog clamps one wing through a long slot, so both dogs stand in
@@ -48,7 +48,7 @@
 // machining, mft-vacuum-block-puck.step beside this file is the puck at the
 // default settings, and the site's scripts/export-vacuum-puck-step.py rebuilds
 // it for others from this file's PUCK_STEP_V1 echo. The STEP leaves the port
-// and screw holes as plain tap-drilled holes, to tap 1/4" NPT and M4 by hand,
+// and screw holes as plain tap-drilled holes, to tap 1/4" NPT and M5 by hand,
 // so a machining order needs no threads or drawing.
 // View = Base plate is the part to print: it prints as modelled, underside on
 // the bed, with no supports. The template views are the templates to print,
@@ -124,16 +124,12 @@ Pocket_clearance = 0.3; // [0:0.05:1]
 Pocket_wall = 4; // [1:0.5:15]
 // Radius of the rounded inside corners where the wings leave the plate round the puck. Zero leaves sharp corners.
 Wing_fillet = 5; // [0:0.5:15]
-// The four countersunk screws up through the plate into the puck, one near each corner: their distance in from the puck's sides and ends.
+// Metric countersunk machine screws, four of them up through the plate into tapped holes in the puck. The puck's holes are their tap drill, to tap by hand, and the plate's are clearance holes countersunk for flat heads (DIN 7991 or ISO 10642).
+Screw_size = "M5"; // [M3, M4, M5, M6]
+// Screw length, including its head. With 16 mm M5 screws, 11.5 mm of thread holds in the puck.
+Screw_length = 16; // [6:0.5:50]
+// The screws' distance in from the puck's sides and ends, one near each corner.
 Screw_inset = 12; // [5:0.5:40]
-// Clearance hole for the screws. 4.5 mm suits M4.
-Screw_hole = 4.5; // [2:0.1:8]
-// Countersink diameter at the plate's underside, at 90 degrees. 8.5 mm suits M4 flat heads.
-Screw_head = 8.5; // [4:0.1:16]
-// Screw length, including its head. With 12 mm M4 screws, 7.5 mm of thread holds in an aluminium puck.
-Screw_length = 12; // [6:0.5:50]
-// Hole in the puck for each screw, with a drill point. 3.3 mm is the tap drill for M4, to tap by hand. In a plastic puck, self-tapping screws can go in their pilot size instead.
-Screw_pilot = 3.3; // [1.5:0.1:6]
 
 /* [Router templates] */
 // Printed router templates, for cutting the puck yourself. Turn this off for a CNC-machined puck, so the templates' checks don't limit its settings.
@@ -220,6 +216,14 @@ port_chamfer = 1;
 port_tip = Duct_diameter - 1;
 // Printed holes come out a little small.
 print_hole_allowance = 0.2;
+// Metric screws: size, tap drill, medium clearance hole, and the countersink
+// at 90 degrees, 0.5 mm over the flat head's diameter.
+screw_sizes = [["M3", 3, 2.5, 3.4, 6.5], ["M4", 4, 3.3, 4.5, 8.5], ["M5", 5, 4.2, 5.5, 10.5], ["M6", 6, 5, 6.6, 12.5]];
+screw_spec = screw_sizes[search([Screw_size], screw_sizes)[0]];
+screw_d = screw_spec[1];
+screw_tap_drill = screw_spec[2];
+screw_clearance = screw_spec[3];
+screw_head = screw_spec[4];
 
 assembly = View == "assembly";
 template_view = View == "outline_template" || View == "groove_template" || View == "long_template" || View == "cross_template";
@@ -303,14 +307,14 @@ notch_floor = max(0, fitting_low - 0.5);
 
 // Screws, one in from each corner, from under the plate into the puck.
 screw_xys = [for (sx = [-1, 1], sy = [-1, 1]) [sx * (Puck_length / 2 - Screw_inset), sy * (Puck_width / 2 - Screw_inset)]];
-countersink_depth = (Screw_head - Screw_hole) / 2;
+countersink_depth = (screw_head - screw_clearance) / 2;
 screw_engagement = Screw_length - puck_z;
 // The holes go this far past the screws' ends, room for a plug tap's tapered
 // lead, so the full thread reaches as far as the screws do.
 tap_lead = 3;
 pilot_depth = screw_engagement + tap_lead;
 // The holes' drill points stop at least 0.5 mm under the groove or channels.
-max_screw_length = min(groove_floor, channel_floor) - tap_lead - 0.5 - drill_point(Screw_pilot);
+max_screw_length = min(groove_floor, channel_floor) - tap_lead - 0.5 - drill_point(screw_tap_drill);
 
 // Router templates. A guide bushing runs in each template's openings, which
 // are track_r either side of the cut's centre line, so the bit at its centre
@@ -375,10 +379,11 @@ assert(duct_end_y + drill_point(Duct_diameter) + 3 <= Puck_width / 2, "The duct 
 assert(2 * (dog_dx - knob_r) >= Knob_clearance, "The two knobs would hit each other. Put more hole pitches between the dogs.");
 assert(Pocket_depth < Wing_thickness - 2, "The pocket must leave at least 2 mm of plate under the puck.");
 assert(countersink_depth <= puck_z - 1, "The countersinks must leave 1 mm of plate under the puck. Use a smaller head or a thicker plate.");
-assert(Screw_inset >= Screw_head / 2 + 1, "The screws must sit 1 mm inside the puck's edge.");
-assert(screw_engagement >= 6, "The screws must reach at least 6 mm into the puck. Use longer screws.");
+assert(Screw_inset >= screw_head / 2 + 1, "The screws must sit 1 mm inside the puck's edge.");
+assert(screw_engagement >= 1.5 * screw_d, str("The screws must reach at least 1.5 times their diameter, ", 1.5 * screw_d,
+    " mm, into the puck. Use screws ", r1(puck_z + 1.5 * screw_d), " mm long or more."));
 assert(Screw_length <= max_screw_length, str("The screws would break into the groove or channels. Use screws ", r1(max_screw_length), " mm long or less."));
-assert(min([for (p = screw_xys) abs(p[0] - Port_offset)]) >= npt_major / 2 + Screw_pilot / 2 + 2,
+assert(min([for (p = screw_xys) abs(p[0] - Port_offset)]) >= npt_major / 2 + screw_tap_drill / 2 + 2,
     "The screws would hit the port or duct. Move the port toward the middle or the screws further in.");
 // The fitting's hex stands just off the puck's face, over the plate's wall,
 // which is notched for it if it's lower than the plate's top.
@@ -496,8 +501,8 @@ module puck() {
         translate([0, 0, channel_floor]) linear_extrude(height = Channel_depth + eps) channels_2d();
         on_port_side() air_path();
         for (p = screw_xys) translate([p[0], p[1], puck_z - eps]) {
-            cylinder(d = Screw_pilot, h = pilot_depth + eps, $fn = 16);
-            translate([0, 0, pilot_depth + eps]) cylinder(d1 = Screw_pilot, d2 = 0, h = drill_point(Screw_pilot), $fn = 16);
+            cylinder(d = screw_tap_drill, h = pilot_depth + eps, $fn = 16);
+            translate([0, 0, pilot_depth + eps]) cylinder(d1 = screw_tap_drill, d2 = 0, h = drill_point(screw_tap_drill), $fn = 16);
         }
     }
 }
@@ -566,8 +571,8 @@ module base() {
         // inside the hole, so its surface crosses the hole's rather than
         // meeting it edge to edge.
         for (p = screw_xys) translate([p[0], p[1], -eps]) {
-            cylinder(d = Screw_hole, h = Wing_thickness + 2 * eps, $fn = 24);
-            cylinder(d1 = Screw_head, d2 = Screw_hole - 0.5, h = (Screw_head - Screw_hole + 0.5) / 2 + eps, $fn = 24);
+            cylinder(d = screw_clearance, h = Wing_thickness + 2 * eps, $fn = 24);
+            cylinder(d1 = screw_head, d2 = screw_clearance - 0.5, h = (screw_head - screw_clearance + 0.5) / 2 + eps, $fn = 24);
         }
     }
 }
@@ -646,7 +651,7 @@ module outline_template() {
     difference() {
         linear_extrude(height = Outline_template_thickness) rounded_rect(Puck_length, Puck_width, corner_r);
         for (p = screw_xys) translate([p[0], p[1], -eps])
-            cylinder(d = Screw_pilot + print_hole_allowance, h = Outline_template_thickness + 2 * eps, $fn = 16);
+            cylinder(d = screw_tap_drill + print_hole_allowance, h = Outline_template_thickness + 2 * eps, $fn = 16);
     }
 }
 
@@ -770,8 +775,8 @@ echo(str("Port: drill ", Port_hole, " mm, ", Port_depth, " mm deep into the ", p
 echo(str("Duct: drill ", Duct_diameter, " mm on through the port, ", r1(duct_depth), " mm deep from the ", port_face, " face. Holes: drill ",
     len(hole_ys), " x ", Hole_diameter, " mm down from the channel floor to meet it, ",
     join([for (y = hole_ys) r1(y + Puck_width / 2)]), " mm from the ", port_face, " face."));
-echo(str("Screws: four M4 countersunk screws ", Screw_length, " mm long (", r1(max_screw_length), " mm at most), up through the plate into the puck. Drill ",
-    Screw_pilot, " mm holes ", r1(pilot_depth), " mm deep, ", Screw_inset, " mm in from the puck's sides and ends, and tap them M4."));
+echo(str("Screws: four ", Screw_size, " countersunk screws ", Screw_length, " mm long (", r1(max_screw_length), " mm at most), up through the plate into the puck. Drill ",
+    screw_tap_drill, " mm holes ", r1(pilot_depth), " mm deep, ", Screw_inset, " mm in from the puck's sides and ends, and tap them ", Screw_size, "."));
 echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_along > 1 ? "es" : "",
     "), in a row ", r1(slot_near), Slot_length > 0 ? str(" to ", r1(slot_far)) : "",
     " mm behind the block's centre", Slot_length >= Hole_pitch ? ": with the next row of holes, the block can sit anywhere front to back" : "",
@@ -781,7 +786,7 @@ echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_a
     "."));
 if (Router_templates) {
     echo(str("Outline template: rough-cut the blank 2 to 3 mm oversize, tape the template to its underside and trim it with a pattern or flush-trim bit that cuts at least ",
-        Stock_thickness, " mm deep. Then drill the screws' ", Screw_pilot, " mm holes through the template's guide holes, ", r1(outline_pilot_depth),
+        Stock_thickness, " mm deep. Then drill the screws' ", screw_tap_drill, " mm holes through the template's guide holes, ", r1(outline_pilot_depth),
         " mm deep from its face, before taking it off."));
     echo(str("Groove template: drop it over the puck's face, located by its skirt, and tape it down, with tape under its island too. With a ",
         Bushing_diameter, " mm guide bushing, set the ", Groove_width, " mm bit ", r1(groove_bit_set),
@@ -820,7 +825,7 @@ echo("PUCK_STEP_V1", [
     ["hole_diameter", Hole_diameter],
     ["hole_ys", hole_ys],
     ["hole_top", channel_floor - puck_z],
-    ["pilot_diameter", Screw_pilot],
+    ["pilot_diameter", screw_tap_drill],
     ["pilot_depth", pilot_depth],
     ["pilots", screw_xys],
     ["drill_half_angle", drill_half_angle]
