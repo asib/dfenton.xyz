@@ -1,11 +1,11 @@
 // MFT vacuum block
 // A single-sided vacuum block for an MFT-style table, in two parts: a puck
-// machined from solid plastic, which carries the seal and the vacuum, and a
-// 3D-printed base plate under it, which the dogs clamp to the table. Solid
-// plastic is airtight all the way through, where air can leak through a
-// print's walls and infill. Cut the puck from HDPE yourself with the router
-// templates below, or have it CNC machined, in POM (acetal) for instance,
-// from a STEP file of it: see View below.
+// machined from solid aluminium or plastic, which carries the seal and the
+// vacuum, and a 3D-printed base plate under it, which the dogs clamp to the
+// table. A solid puck is airtight all the way through, where air can leak
+// through a print's walls and infill. Have the puck CNC machined from a STEP
+// file of it, in aluminium for instance (see View below), or cut it from HDPE
+// yourself with the router templates below.
 //
 // The puck's top is the vacuum face. A groove round its edge holds a loop of
 // round foam cord as the seal. Inside it, straight channels run lengthwise and
@@ -15,16 +15,16 @@
 // duct drilled in from the back face, whose mouth is tapped 1/4" NPT for a
 // push-to-connect fitting.
 //
-// The puck sits in a shallow pocket in the base plate, held by four
-// countersunk screws up through the plate into its underside. The plate's two
-// wings run straight back along the table, either side of the fitting. Each
-// dog clamps one wing through a long slot, so both dogs stand in one row of
-// table holes behind the block. The slots let the block slide toward or away
-// from that row: with a slot a hole pitch long, it can sit anywhere front to
-// back, moving the dogs to the next row when a slot runs out. Each dog is an
-// M6 rod with a 30 mm knurled knob under the table and a flangeless 30 mm knob
-// on the wing, as in the shared Onshape document's "bottom knob" and "top knob
-// no flange".
+// The puck sits in a shallow pocket in the base plate, held by four M4
+// countersunk screws up through the plate into tapped holes in its underside.
+// The plate's two wings run straight back along the table, either side of the
+// fitting. Each dog clamps one wing through a long slot, so both dogs stand in
+// one row of table holes behind the block. The slots let the block slide
+// toward or away from that row: with a slot a hole pitch long, it can sit
+// anywhere front to back, moving the dogs to the next row when a slot runs
+// out. Each dog is an M6 rod with a 30 mm knurled knob under the table and a
+// flangeless 30 mm knob on the wing, as in the shared Onshape document's
+// "bottom knob" and "top knob no flange".
 //
 // Everything that stands up off the table is behind the block, so the front
 // and both ends are clear. With a 1" puck the vacuum face is also a little above
@@ -32,13 +32,13 @@
 //
 // Four printed router templates cut the puck. The outline template, taped to
 // the blank's underside, guides a pattern or flush-trim bit round the puck's
-// outline, then a drill for the screws' pilot holes. The groove template and
-// the two channel templates drop over the trimmed puck, located by a skirt
-// round its sides, and guide a router's guide bushing: round a track for the
-// groove, and along slots for the lengthwise and crosswise channels. The
-// groove template's island is held to its frame by four thin bridges, which
-// the bit cuts as it passes, so it locates in one piece. Turn Router templates
-// off for a CNC-machined puck, which needs none.
+// outline, then a drill for the screw holes. The groove template and the two
+// channel templates drop over the trimmed puck, located by a skirt round its
+// sides, and guide a router's guide bushing: round a track for the groove, and
+// along slots for the lengthwise and crosswise channels. The groove template's
+// island is held to its frame by four thin bridges, which the bit cuts as it
+// passes, so it locates in one piece. Turn Router templates off for a
+// CNC-machined puck, which needs none.
 //
 // All dimensions are millimetres. Z is up and the table top is Z=0. The block
 // is centred on the origin with its length along X, its front face toward -Y,
@@ -48,7 +48,8 @@
 // machining, mft-vacuum-block-puck.step beside this file is the puck at the
 // default settings, and the site's scripts/export-vacuum-puck-step.py rebuilds
 // it for others from this file's PUCK_STEP_V1 echo. The STEP leaves the port
-// as a plain tap-drilled hole, to tap 1/4" NPT by hand, so it has no threads.
+// and screw holes as plain tap-drilled holes, to tap 1/4" NPT and M4 by hand,
+// so a machining order needs no threads or drawing.
 // View = Base plate is the part to print: it prints as modelled, underside on
 // the bed, with no supports. The template views are the templates to print,
 // also as modelled and with no supports: the groove and channel templates
@@ -75,7 +76,7 @@ Cord_diameter = 6.35; // [2:0.05:15]
 Groove_width = 6; // [2:0.05:15]
 // Groove depth. The cord stands proud of the face by its diameter less this.
 Groove_depth = 4.5; // [1:0.1:15]
-// Plastic between the groove and the puck's outside.
+// Material between the groove and the puck's outside.
 Rim_width = 4; // [1.5:0.1:15]
 // Plan radius of the groove's centre line at the corners, where the cord bends. The puck's corners follow it.
 Seal_bend_radius = 10; // [3:0.5:40]
@@ -87,7 +88,7 @@ Channel_width = 6.35; // [2:0.05:15]
 Channel_depth = 3; // [0.5:0.1:10]
 // Centre-to-centre spacing of the channels, both ways. The grid is centred on the puck, with as many channels as fit inside the groove.
 Channel_pitch = 20; // [8:0.5:100]
-// Least plastic between the channels and the groove.
+// Least material between the channels and the groove.
 Channel_land = 4; // [1:0.5:20]
 
 /* [Fitting, duct and holes] */
@@ -125,14 +126,14 @@ Pocket_wall = 4; // [1:0.5:15]
 Wing_fillet = 5; // [0:0.5:15]
 // The four countersunk screws up through the plate into the puck, one near each corner: their distance in from the puck's sides and ends.
 Screw_inset = 12; // [5:0.5:40]
-// Clearance hole for the screws. 4.5 mm suits #8 or M4.
+// Clearance hole for the screws. 4.5 mm suits M4.
 Screw_hole = 4.5; // [2:0.1:8]
-// Countersink diameter at the plate's underside, at 90 degrees. 8.5 mm suits #8 or M4 flat heads.
+// Countersink diameter at the plate's underside, at 90 degrees. 8.5 mm suits M4 flat heads.
 Screw_head = 8.5; // [4:0.1:16]
-// Screw length, including its head. 19 mm is 3/4 inch.
-Screw_length = 19; // [6:0.5:50]
-// Pilot hole in the puck for the screws, with a drill point. 3.2 mm is 1/8 inch.
-Screw_pilot = 3.2; // [1.5:0.1:6]
+// Screw length, including its head. With 12 mm M4 screws, 7.5 mm of thread holds in an aluminium puck.
+Screw_length = 12; // [6:0.5:50]
+// Hole in the puck for each screw, with a drill point. 3.3 mm is the tap drill for M4, to tap by hand. In a plastic puck, self-tapping screws can go in their pilot size instead.
+Screw_pilot = 3.3; // [1.5:0.1:6]
 
 /* [Router templates] */
 // Printed router templates, for cutting the puck yourself. Turn this off for a CNC-machined puck, so the templates' checks don't limit its settings.
@@ -209,7 +210,7 @@ bottom_boss_h = 4;
 bottom_knob_nut_depth = 8;
 table_hole_d = 20.3;
 pad_margin = 3;
-// Least plastic between the port's thread and the groove floor above it.
+// Least material between the port's thread and the groove floor above it.
 min_port_cover = 2;
 // Half the point angle of a twist drill, 118 degrees.
 drill_half_angle = 59;
@@ -304,10 +305,12 @@ notch_floor = max(0, fitting_low - 0.5);
 screw_xys = [for (sx = [-1, 1], sy = [-1, 1]) [sx * (Puck_length / 2 - Screw_inset), sy * (Puck_width / 2 - Screw_inset)]];
 countersink_depth = (Screw_head - Screw_hole) / 2;
 screw_engagement = Screw_length - puck_z;
-pilot_depth = screw_engagement + 1.5;
-// The pilot holes' drill points stop 0.5 mm under the groove or channels at
-// most.
-max_screw_length = min(groove_floor, channel_floor) - 2 - drill_point(Screw_pilot);
+// The holes go this far past the screws' ends, room for a plug tap's tapered
+// lead, so the full thread reaches as far as the screws do.
+tap_lead = 3;
+pilot_depth = screw_engagement + tap_lead;
+// The holes' drill points stop at least 0.5 mm under the groove or channels.
+max_screw_length = min(groove_floor, channel_floor) - tap_lead - 0.5 - drill_point(Screw_pilot);
 
 // Router templates. A guide bushing runs in each template's openings, which
 // are track_r either side of the cut's centre line, so the bit at its centre
@@ -638,7 +641,7 @@ module channel_template(lengthwise) {
     }
 }
 
-// The puck's outline, with guide holes for drilling the screws' pilot holes.
+// The puck's outline, with guide holes for drilling the screw holes.
 module outline_template() {
     difference() {
         linear_extrude(height = Outline_template_thickness) rounded_rect(Puck_length, Puck_width, corner_r);
@@ -767,8 +770,8 @@ echo(str("Port: drill ", Port_hole, " mm, ", Port_depth, " mm deep into the ", p
 echo(str("Duct: drill ", Duct_diameter, " mm on through the port, ", r1(duct_depth), " mm deep from the ", port_face, " face. Holes: drill ",
     len(hole_ys), " x ", Hole_diameter, " mm down from the channel floor to meet it, ",
     join([for (y = hole_ys) r1(y + Puck_width / 2)]), " mm from the ", port_face, " face."));
-echo(str("Screws: four countersunk screws ", Screw_length, " mm long (", r1(max_screw_length), " mm at most), up through the plate into ",
-    Screw_pilot, " mm pilot holes ", r1(pilot_depth), " mm deep, ", Screw_inset, " mm in from the puck's sides and ends."));
+echo(str("Screws: four M4 countersunk screws ", Screw_length, " mm long (", r1(max_screw_length), " mm at most), up through the plate into the puck. Drill ",
+    Screw_pilot, " mm holes ", r1(pilot_depth), " mm deep, ", Screw_inset, " mm in from the puck's sides and ends, and tap them M4."));
 echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_along > 1 ? "es" : "",
     "), in a row ", r1(slot_near), Slot_length > 0 ? str(" to ", r1(slot_far)) : "",
     " mm behind the block's centre", Slot_length >= Hole_pitch ? ": with the next row of holes, the block can sit anywhere front to back" : "",
@@ -778,7 +781,7 @@ echo(str("Dogs: ", 2 * dog_dx, " mm apart (", Pitches_along, " pitch", Pitches_a
     "."));
 if (Router_templates) {
     echo(str("Outline template: rough-cut the blank 2 to 3 mm oversize, tape the template to its underside and trim it with a pattern or flush-trim bit that cuts at least ",
-        Stock_thickness, " mm deep. Then drill the screws' ", Screw_pilot, " mm pilot holes through the template's guide holes, ", r1(outline_pilot_depth),
+        Stock_thickness, " mm deep. Then drill the screws' ", Screw_pilot, " mm holes through the template's guide holes, ", r1(outline_pilot_depth),
         " mm deep from its face, before taking it off."));
     echo(str("Groove template: drop it over the puck's face, located by its skirt, and tape it down, with tape under its island too. With a ",
         Bushing_diameter, " mm guide bushing, set the ", Groove_width, " mm bit ", r1(groove_bit_set),
