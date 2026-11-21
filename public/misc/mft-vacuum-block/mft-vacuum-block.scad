@@ -27,8 +27,8 @@
 // "bottom knob" and "top knob no flange".
 //
 // Everything that stands up off the table is behind the block, so the front
-// and both ends are clear. With a 1" puck the vacuum face is also a little above
-// the knobs' tops, so work can overhang the back too.
+// and both ends are clear. With the default 24 mm puck the vacuum face is also
+// a little above the knobs' tops, so work can overhang the back too.
 //
 // Four printed router templates cut the puck. The outline template, taped to
 // the blank's underside, guides a pattern or flush-trim bit round the puck's
@@ -62,17 +62,17 @@ View = "assembly"; // [assembly:Assembly for reference, puck:Puck (machine this)
 Explode = 0; // [0:1:100]
 
 /* [Puck] */
-// Puck length, along the row of dogs. 120.65 mm is 4 3/4 inches.
-Puck_length = 120.65; // [60:300]
-// Puck width, front to back. 76.2 mm is 3 inches.
-Puck_width = 76.2; // [40:300]
-// Puck thickness: the stock's, if you cut it yourself. 25.4 mm is 1 inch.
-Stock_thickness = 25.4; // [12:0.1:60]
+// Puck length, along the row of dogs. The vacuum holds in proportion to the area inside the groove.
+Puck_length = 100; // [60:300]
+// Puck width, front to back.
+Puck_width = 60; // [40:300]
+// Puck thickness: the stock's, if you cut it yourself. 24 mm can be machined from 25 mm plate, and leaves the vacuum face a little above the knobs' tops.
+Stock_thickness = 24; // [12:0.1:60]
 
 /* [Seal] */
 // Foam cord diameter. 6.35 mm is 1/4 inch.
 Cord_diameter = 6.35; // [2:0.05:15]
-// Groove width: the diameter of the straight bit that cuts it in one pass. A little under the cord's diameter, so the cord grips its walls.
+// Groove width: the diameter of the straight bit or end mill that cuts it in one pass. A little under the cord's diameter, so the cord grips its walls.
 Groove_width = 6; // [2:0.05:15]
 // Groove depth. The cord stands proud of the face by its diameter less this.
 Groove_depth = 4.5; // [1:0.1:15]
@@ -82,12 +82,12 @@ Rim_width = 4; // [1.5:0.1:15]
 Seal_bend_radius = 10; // [3:0.5:40]
 
 /* [Channels] */
-// Channel width: the diameter of the straight bit that cuts them. 6.35 mm is 1/4 inch.
-Channel_width = 6.35; // [2:0.05:15]
+// Channel width: the diameter of the straight bit or end mill that cuts them in one pass.
+Channel_width = 6; // [2:0.05:15]
 // Depth of the channels below the vacuum face.
 Channel_depth = 3; // [0.5:0.1:10]
 // Centre-to-centre spacing of the channels, both ways. The grid is centred on the puck, with as many channels as fit inside the groove.
-Channel_pitch = 20; // [8:0.5:100]
+Channel_pitch = 25; // [8:0.5:100]
 // Least material between the channels and the groove.
 Channel_land = 4; // [1:0.5:20]
 
@@ -102,10 +102,10 @@ Port_drop = 13.5; // [5:0.05:100]
 Port_hole = 11.1; // [8:0.05:16]
 // Depth of the tap-drilled port. Deeper than the fitting's thread, so it doesn't bottom out.
 Port_depth = 14; // [6:0.5:30]
-// Diameter of the duct drilled on in from the port. 6.35 mm is 1/4 inch.
-Duct_diameter = 6.35; // [3:0.05:12]
-// Diameter of the holes drilled down from the channels to the duct. 4.76 mm is 3/16 inch.
-Hole_diameter = 4.76; // [2:0.01:12]
+// Diameter of the duct drilled on in from the port.
+Duct_diameter = 6; // [3:0.05:12]
+// Diameter of the holes drilled down from the channels to the duct.
+Hole_diameter = 5; // [2:0.01:12]
 // Number of holes down to the duct, in the lengthwise channels nearest the port.
 Vacuum_holes = 2; // [1:1:10]
 // Fitting hex across flats. An estimate: measure yours.
