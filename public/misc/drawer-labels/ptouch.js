@@ -212,13 +212,29 @@ export function jobCommands(raster) {
   return chunks;
 }
 
+// How long to wait for the printing-completed notification once a job is
+// sent. The whole strip, its leader and the final feed print after the last
+// write, at up to 20 mm/s; allow 30 seconds plus 5 mm/s. print_batch.py's
+// flat 20 seconds ran out before an 8-label strip finished, and ptouch-rs
+// allows the PT-D410 up to 10 minutes.
+export const completionTimeoutMs = (raster) => 30000 + Math.round((raster.length / 16) * 25.4 / 180 / 5 * 1000);
+
+const STATUS_NAMES = { 0: 'a status reply', 1: 'printing completed', 2: 'an error', 4: 'turned off' };
+export const describeNotification = (status) => status.statusType === STATUS_TYPES.PHASE_CHANGE
+  ? `phase change to ${status.phaseType === 1 ? 'printing' : status.phaseType === 0 ? 'ready' : `phase ${status.phaseType}`}`
+  : STATUS_NAMES[status.statusType] ?? `status type ${status.statusType}`;
+
 // Print a raster as print_batch.py's send_batch() does: check the printer is
 // idle with 6 mm laminated tape, initialise, check again, write each chunk
 // once without retrying, then wait for the printing-completed notification.
-// An error carries `result`, whose printDataWriteAttempted says whether
-// printing may have started.
-export async function printRaster(connection, raster, { onProgress = () => {}, completionMs = 20000, replyMs } = {}) {
-  const result = { printDataWriteAttempted: false, jobSent: false, completionConfirmed: false, commandsWritten: 0 };
+// The result records what the printer sent while printing and how long it
+// took. An error carries `result`, whose printDataWriteAttempted says
+// whether printing may have started.
+export async function printRaster(connection, raster, { onProgress = () => {}, completionMs = completionTimeoutMs(raster), replyMs } = {}) {
+  const result = {
+    printDataWriteAttempted: false, jobSent: false, completionConfirmed: false, commandsWritten: 0,
+    notifications: [], waitedMs: 0, waitLimitMs: completionMs,
+  };
   const ready = async () => {
     const problem = readinessProblem(await requestStatus(connection, { replyMs }));
     if (problem) throw new PrinterError(problem);
@@ -237,10 +253,13 @@ export async function printRaster(connection, raster, { onProgress = () => {}, c
     }
     result.jobSent = true;
     onProgress('printing');
-    const deadline = Date.now() + completionMs;
+    const sent = Date.now();
+    const deadline = sent + completionMs;
     for (;;) {
       const status = await connection.frame(Math.max(0, deadline - Date.now()));
+      result.waitedMs = Date.now() - sent;
       if (!status) break;
+      result.notifications.push(describeNotification(status));
       if (status.statusType === STATUS_TYPES.TURNED_OFF) throw new PrinterError('The printer turned off.');
       if (status.hasError) throw new PrinterError(readinessProblem(status));
       if (status.statusType === STATUS_TYPES.PRINTING_COMPLETED) {

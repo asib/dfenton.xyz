@@ -293,10 +293,13 @@ async function printStrip(strip, out, what) {
     report(out, 'Choose the PT-D410 if the browser asks…');
     connection = await connect(await choosePrinter(navigator.usb));
     const result = await printRaster(connection, raster, { onProgress: (phase, fraction) => report(out, phases[phase](fraction)) });
+    const seconds = (ms) => `${Math.round(ms / 1000)} s`;
     if (result.completionConfirmed) {
-      report(out, `Printed ${what}. Cut a little past the last mark, then trim at the marks.`, 'ok');
+      report(out, `Printed ${what} in ${seconds(result.waitedMs)}. Cut a little past the last mark, then trim at the marks.`, 'ok');
     } else {
-      report(out, `Sent ${what}, but the printer didn’t say it had finished. Check the tape before printing again.`, 'error');
+      const heard = result.notifications.length ? `It sent ${result.notifications.join(', ')}.` : 'It sent nothing back.';
+      report(out, `Sent ${what}, but the printer didn’t say it had finished within ${seconds(result.waitLimitMs)}. ${heard} ` +
+        'Check the tape before printing again.', 'error');
     }
   } catch (error) {
     const started = error.result?.printDataWriteAttempted;
