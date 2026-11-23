@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { buildStrip, decodeLabelData, encodeRaster, renderLabel } from '../public/misc/drawer-labels/labels.js';
 import {
-  checkRaster, choosePrinter, connect, INITIALIZE, jobCommands, parseStatus, PrinterError, printRaster, readinessProblem,
-  requestStatus, STATUS_REQUEST,
+  checkRaster, choosePrinter, completionTimeoutMs, connect, describeNotification, INITIALIZE, jobCommands, parseStatus,
+  PrinterError, printRaster, readinessProblem, requestStatus, STATUS_REQUEST,
 } from '../public/misc/drawer-labels/ptouch.js';
 
 const read = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
@@ -135,6 +135,8 @@ test('printing checks, initialises, checks again, sends the job and waits for co
   const result = await printRaster(connection, raster, { onProgress: (phase) => phases.push(phase) });
   await connection.close();
   expect(result).toMatchObject({ completionConfirmed: true, jobSent: true, printDataWriteAttempted: true, commandsWritten: fixtures.job.chunks });
+  expect(result.notifications).toEqual(['phase change to printing', 'printing completed']);
+  expect(result.waitLimitMs).toBe(completionTimeoutMs(raster));
   const writes = device.writes.map(([endpoint, bytes]) => [endpoint, bytes]);
   expect(writes.slice(0, 3)).toEqual([[2, Array.from(STATUS_REQUEST)], [2, Array.from(INITIALIZE)], [2, Array.from(STATUS_REQUEST)]]);
   expect(writes.slice(3).map(([, bytes]) => bytes)).toEqual(jobCommands(raster).map((c) => Array.from(c)));
@@ -167,7 +169,8 @@ test('a job the printer never confirms is sent once and left unconfirmed', async
   const connection = await connect(device);
   const result = await printRaster(connection, raster, { completionMs: 300 });
   await connection.close();
-  expect(result).toMatchObject({ jobSent: true, completionConfirmed: false });
+  expect(result).toMatchObject({ jobSent: true, completionConfirmed: false, notifications: [], waitLimitMs: 300 });
+  expect(result.waitedMs).toBeGreaterThanOrEqual(300);
   expect(device.writes.filter(([, bytes]) => bytes.length === 1 && bytes[0] === 0x1a)).toHaveLength(1);
 });
 
@@ -176,4 +179,19 @@ test('a raster with dots off the tape is refused', () => {
   bad[0] = 1;
   expect(() => checkRaster(bad)).toThrow('outside the 6 mm tape');
   expect(() => checkRaster(new Uint8Array(16))).toThrow('at least two');
+});
+
+test('the wait for completion grows with the strip', () => {
+  // 30 seconds, plus 5 mm of tape a second: 180 lines are an inch.
+  expect(completionTimeoutMs(new Uint8Array(2 * 16))).toBe(30000 + Math.round(2 * 25.4 / 180 / 5 * 1000));
+  expect(completionTimeoutMs(new Uint8Array(1260 * 16))).toBe(30000 + 35560);
+  // An 8-label strip, around 1200 lines, gets about a minute, three times print_batch.py's 20 seconds.
+  expect(completionTimeoutMs(new Uint8Array(1200 * 16))).toBeGreaterThan(60000);
+});
+
+test('notifications are named for the page', () => {
+  expect(describeNotification(parseStatus(frame({ type: 6, phase: 1 })))).toBe('phase change to printing');
+  expect(describeNotification(parseStatus(frame({ type: 6, phase: 0 })))).toBe('phase change to ready');
+  expect(describeNotification(parseStatus(frame({ type: 1 })))).toBe('printing completed');
+  expect(describeNotification(parseStatus(frame({ type: 9 })))).toBe('status type 9');
 });
