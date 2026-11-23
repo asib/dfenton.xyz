@@ -1,6 +1,6 @@
 // What each kind of part puts on its label, written the way the drawer labels
-// already are: 1/4-20×1-1/4", M4×35mm, #10×1" over WOOD, 5/16" over FLAT WASHER,
-// and M3×5.7mm over HEAT-SET for inserts.
+// already are: 1/4-20×1-1/4", M4×35mm, #10×1" over WOOD, 5/16" over FLAT WASHER.
+// A heat-set insert is just its size, M3×5.7mm: its icon says what it is.
 
 export const PARTS = [
   { id: 'hex', name: 'Hex bolt', icon: 'hex', kind: 'screw' },
@@ -11,7 +11,7 @@ export const PARTS = [
   { id: 'combo', name: 'Round head', icon: 'combo', kind: 'screw' },
   { id: 'wood', name: 'Wood screw', icon: 'flat-phillips', kind: 'wood', bottom: 'WOOD' },
   { id: 'nut', name: 'Hex nut', icon: 'nut', kind: 'nut' },
-  { id: 'insert', name: 'Heat-set insert', icon: 'insert', kind: 'insert', bottom: 'HEAT-SET' },
+  { id: 'insert', name: 'Heat-set insert', icon: 'insert', kind: 'insert' },
   { id: 'washer', name: 'Flat washer', icon: 'washer', kind: 'washer', bottom: 'FLAT WASHER' },
   { id: 'text', name: 'Text only', icon: 'none', kind: 'text' },
 ];

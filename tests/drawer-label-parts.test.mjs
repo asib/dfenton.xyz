@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { decodeLabelData, renderLabel } from '../public/misc/drawer-labels/labels.js';
-import { isMetric, labelSpec, lengthSuggestions, partById, sizeSuggestions } from '../public/misc/drawer-labels/parts.js';
+import { labelSpec, lengthSuggestions, partById, sizeSuggestions } from '../public/misc/drawer-labels/parts.js';
 
 const spec = (id, fields) => labelSpec(partById(id), fields);
 
@@ -15,21 +15,18 @@ test('sizes and lengths read the way the drawer labels do', () => {
   expect(spec('washer', { size: '5/16', bottom: 'FLAT WASHER' })).toEqual({ icon: 'washer', top: '5/16"', bottom: 'FLAT WASHER' });
   expect(spec('washer', { size: '#10', bottom: 'FLAT WASHER' }).top).toBe('#10');
   expect(spec('text', { top: '  M8   spare ', bottom: 'SS' })).toEqual({ icon: 'none', top: 'M8 spare', bottom: 'SS' });
-  expect(spec('insert', { size: 'm3', length: '5.7 mm', bottom: 'HEAT-SET' })).toEqual({ icon: 'insert', top: 'M3×5.7mm', bottom: 'HEAT-SET' });
-  expect(spec('insert', { size: '1/4-20', length: '0.3', bottom: 'HEAT-SET' }).top).toBe('1/4-20×0.3"');
+  expect(spec('insert', { size: 'm3', length: '5.7 mm' })).toEqual({ icon: 'insert', top: 'M3×5.7mm', bottom: '' });
+  expect(spec('insert', { size: '1/4-20', length: '0.3' }).top).toBe('1/4-20×0.3"');
   expect(spec('insert', { size: 'M4', length: '' }).top).toBe('M4');
 });
 
-test('every suggested metric insert, and the usual inch ones, fit on a label', () => {
+test('every suggested insert size fits on a label', () => {
   const data = decodeLabelData(JSON.parse(readFileSync(new URL('../public/misc/drawer-labels/label-data.json', import.meta.url), 'utf8')));
   const insert = partById('insert');
-  for (const size of sizeSuggestions(insert).filter(isMetric)) {
+  for (const size of sizeSuggestions(insert)) {
     for (const length of lengthSuggestions(insert, size)) {
-      expect(renderLabel(data, labelSpec(insert, { size, length, bottom: insert.bottom })).width).toBeLessThanOrEqual(180);
+      expect(renderLabel(data, labelSpec(insert, { size, length })).width).toBeLessThanOrEqual(180);
     }
-  }
-  for (const [size, length] of [['#4-40', '0.135'], ['#6-32', '0.15'], ['#8-32', '0.188'], ['1/4-20', '0.3'], ['5/16-18', '1/2']]) {
-    expect(renderLabel(data, labelSpec(insert, { size, length, bottom: insert.bottom })).width).toBeLessThanOrEqual(180);
   }
 });
 
