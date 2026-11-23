@@ -1,7 +1,7 @@
 import type { ParameterCondition } from '../../misc';
 
 // FeatureScript designs compile in the browser with the FeatureScript engine compiled to
-// WebAssembly (vendor/featurescript-engine). The engine reads a feature's parameters from
+// WebAssembly (the featurescript-engine package). The engine reads a feature's parameters from
 // its precondition in the shape OpenSCAD's Customizer gives; this turns them into the
 // panel's schema: each parameter's annotation name as its label (angles marked in degrees),
 // and the conditions under which a parameter applies, which the panel takes from the
