@@ -222,9 +222,14 @@ def main():
         draw.line((x, 0, x, 1), fill=0)
         draw.line((x, 30, x, 31), fill=0)
     raster = encode_columns(strip)
+    # The print job print_batch.py would send for it, one USB write per chunk.
+    from print_batch import job_commands
+    chunks = list(job_commands(raster))
     FIXTURES.parent.mkdir(parents=True, exist_ok=True)
     FIXTURES.write_text(json.dumps({'labels': labels, 'strip': {
-        'guides': guides, 'columns': strip.width, 'raster_sha256': hashlib.sha256(raster).hexdigest()}},
+        'guides': guides, 'columns': strip.width, 'raster_sha256': hashlib.sha256(raster).hexdigest()},
+        'job': {'chunks': len(chunks), 'sha256': hashlib.sha256(b''.join(chunks)).hexdigest(),
+                'head': [c.hex(' ') for c in chunks[:3]], 'tail': chunks[-1].hex(' ')}},
         ensure_ascii=False, indent=1) + '\n')
     print(f'{DATA.relative_to(REPO)}: {DATA.stat().st_size} bytes; '
           f'{FIXTURES.relative_to(REPO)}: {len(labels)} labels, strip {strip.width} dots')

@@ -1,5 +1,17 @@
 import { expect, test } from 'bun:test';
-import { choosePrinter, connect, parseStatus, PrinterError, readinessProblem, requestStatus, STATUS_REQUEST } from '../public/misc/drawer-labels/ptouch.js';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { buildStrip, decodeLabelData, encodeRaster, renderLabel } from '../public/misc/drawer-labels/labels.js';
+import {
+  checkRaster, choosePrinter, connect, INITIALIZE, jobCommands, parseStatus, PrinterError, printRaster, readinessProblem,
+  requestStatus, STATUS_REQUEST,
+} from '../public/misc/drawer-labels/ptouch.js';
+
+const read = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
+// The fixture strip, and the job print_batch.py's job_commands() makes for it.
+const fixtures = read('./fixtures/drawer-labels.json');
+const data = decodeLabelData(read('../public/misc/drawer-labels/label-data.json'));
+const raster = encodeRaster(buildStrip(fixtures.labels.map((label) => renderLabel(data, label))).strip);
 
 // A 32-byte status frame, as ptouch_status.py reads it.
 function frame({ width = 6, media = 1, type = 0, phase = 0, err1 = 0, err2 = 0, tape = 1, text = 8 } = {}) {
@@ -10,8 +22,10 @@ function frame({ width = 6, media = 1, type = 0, phase = 0, err1 = 0, err2 = 0, 
 }
 
 // A WebUSB device that answers the status request with the `reply` packets,
-// after `stale` packets left over from earlier.
-function fakePrinter({ reply = [frame()], stale = [], answer = true, claimFails = false } = {}) {
+// after `stale` packets left over from earlier, and the end of a print job
+// with the `done` packets.
+const finished = [frame({ type: 6, phase: 1 }), frame({ type: 1 })];
+function fakePrinter({ reply = [frame()], stale = [], answer = true, claimFails = false, done = finished } = {}) {
   const queue = [...stale];
   let waiting = null;
   const deliver = () => {
@@ -36,7 +50,9 @@ function fakePrinter({ reply = [frame()], stale = [], answer = true, claimFails 
     async releaseInterface() { this.claimed = false; },
     async transferOut(endpoint, bytes) {
       this.writes.push([endpoint, Array.from(bytes)]);
-      if (answer) { queue.push(...reply); deliver(); }
+      const isStatusRequest = bytes.length === 3 && bytes.every((b, i) => b === STATUS_REQUEST[i]);
+      if (isStatusRequest && answer) { queue.push(...reply); deliver(); }
+      if (bytes.length === 1 && bytes[0] === 0x1a) { queue.push(...done); deliver(); }
       return { status: 'ok', bytesWritten: bytes.length };
     },
     transferIn() {
@@ -99,4 +115,65 @@ test('a printer this site may already use is picked without asking', async () =>
   expect(await choosePrinter(usb)).toBe(printer);
   const ask = { getDevices: async () => [], requestDevice: async (options) => options };
   expect(await choosePrinter(ask)).toEqual({ filters: [{ vendorId: 0x04f9, productId: 0x20df }] });
+});
+
+test('the print job is the one print_batch.py sends', () => {
+  const chunks = jobCommands(raster);
+  expect(chunks.length).toBe(fixtures.job.chunks);
+  const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(' ');
+  expect(chunks.slice(0, 3).map(hex)).toEqual(fixtures.job.head);
+  expect(hex(chunks.at(-1))).toBe(fixtures.job.tail);
+  const all = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  chunks.reduce((offset, c) => { all.set(c, offset); return offset + c.length; }, 0);
+  expect(createHash('sha256').update(all).digest('hex')).toBe(fixtures.job.sha256);
+});
+
+test('printing checks, initialises, checks again, sends the job and waits for completion', async () => {
+  const device = fakePrinter();
+  const connection = await connect(device);
+  const phases = [];
+  const result = await printRaster(connection, raster, { onProgress: (phase) => phases.push(phase) });
+  await connection.close();
+  expect(result).toMatchObject({ completionConfirmed: true, jobSent: true, printDataWriteAttempted: true, commandsWritten: fixtures.job.chunks });
+  const writes = device.writes.map(([endpoint, bytes]) => [endpoint, bytes]);
+  expect(writes.slice(0, 3)).toEqual([[2, Array.from(STATUS_REQUEST)], [2, Array.from(INITIALIZE)], [2, Array.from(STATUS_REQUEST)]]);
+  expect(writes.slice(3).map(([, bytes]) => bytes)).toEqual(jobCommands(raster).map((c) => Array.from(c)));
+  expect(phases[0]).toBe('checking');
+  expect(phases.at(-1)).toBe('printing');
+});
+
+test('the wrong tape stops printing before anything but the status request is sent', async () => {
+  const device = fakePrinter({ reply: [frame({ width: 12 })] });
+  const connection = await connect(device);
+  const error = await printRaster(connection, raster).catch((e) => e);
+  await connection.close();
+  expect(error).toBeInstanceOf(PrinterError);
+  expect(error.message).toMatch(/need 6 mm laminated tape/);
+  expect(error.result.printDataWriteAttempted).toBe(false);
+  expect(device.writes).toEqual([[2, Array.from(STATUS_REQUEST)]]);
+});
+
+test('an error while printing is reported, saying printing may have started', async () => {
+  const device = fakePrinter({ done: [frame({ type: 2, err2: 0x10 })] });
+  const connection = await connect(device);
+  const error = await printRaster(connection, raster).catch((e) => e);
+  await connection.close();
+  expect(error.message).toBe('The printer reports: cover open.');
+  expect(error.result).toMatchObject({ printDataWriteAttempted: true, jobSent: true, completionConfirmed: false });
+});
+
+test('a job the printer never confirms is sent once and left unconfirmed', async () => {
+  const device = fakePrinter({ done: [] });
+  const connection = await connect(device);
+  const result = await printRaster(connection, raster, { completionMs: 300 });
+  await connection.close();
+  expect(result).toMatchObject({ jobSent: true, completionConfirmed: false });
+  expect(device.writes.filter(([, bytes]) => bytes.length === 1 && bytes[0] === 0x1a)).toHaveLength(1);
+});
+
+test('a raster with dots off the tape is refused', () => {
+  const bad = raster.slice();
+  bad[0] = 1;
+  expect(() => checkRaster(bad)).toThrow('outside the 6 mm tape');
+  expect(() => checkRaster(new Uint8Array(16))).toThrow('at least two');
 });

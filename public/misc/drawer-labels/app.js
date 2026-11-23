@@ -1,6 +1,6 @@
-import { buildStrip, decodeLabelData, dotsToMm, HEIGHT, LabelError, renderLabel } from './labels.js';
+import { buildStrip, decodeLabelData, dotsToMm, encodeRaster, HEIGHT, LabelError, renderLabel } from './labels.js';
 import { hasLength, isMetric, labelSpec, lengthSuggestions, partById, PARTS, sizeSuggestions } from './parts.js';
-import { choosePrinter, connect, describeTape, PrinterError, readinessProblem, requestStatus } from './ptouch.js';
+import { choosePrinter, connect, describeTape, PrinterError, printRaster, readinessProblem, requestStatus } from './ptouch.js';
 
 const data = decodeLabelData(await (await fetch(new URL('label-data.json', import.meta.url))).json());
 
@@ -9,6 +9,8 @@ const TAPE_DOTS = 43;
 const TAPE_OFFSET = 5;
 const STORAGE_KEY = 'drawer-labels';
 const $ = (id) => document.getElementById(id);
+const hasUsb = 'usb' in navigator;
+let busy = false; // one printer conversation at a time
 
 const state = {
   part: 'hex',
@@ -185,7 +187,18 @@ function renderStrip() {
   }));
   $('download').disabled = !labels.length;
   $('clear').disabled = !count;
+  updatePrinterButtons();
   save();
+}
+
+const stripLabels = () => state.strip.map((spec) => render(spec).label).filter(Boolean);
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+function updatePrinterButtons() {
+  const count = stripLabels().length;
+  $('print-strip').textContent = count ? `Print ${plural(count, 'label')}` : 'Print strip';
+  $('print-strip').disabled = busy || !hasUsb || !count;
+  $('check-printer').disabled = busy || !hasUsb;
 }
 
 function move(index, step) {
@@ -202,7 +215,7 @@ function addCurrent() {
 }
 
 function download() {
-  const labels = state.strip.map((spec) => render(spec).label).filter(Boolean);
+  const labels = stripLabels();
   if (!labels.length) return;
   const { strip } = buildStrip(labels);
   const canvas = document.createElement('canvas');
@@ -225,10 +238,11 @@ function download() {
   }, 'image/png');
 }
 
-function showPrinter(text, tone = '') {
-  $('printer-status').className = tone;
-  $('printer-status').textContent = text;
+function report(element, text, tone = '') {
+  element.className = `print-status ${tone}`;
+  element.textContent = text;
 }
+const showPrinter = (text, tone) => report($('printer-status'), text, tone);
 
 function printerErrorText(error) {
   if (error instanceof PrinterError) return error.message;
@@ -239,8 +253,9 @@ function printerErrorText(error) {
 
 // Read-only: the printer is sent the status request and nothing else.
 async function checkPrinter() {
-  const button = $('check-printer');
-  button.disabled = true;
+  if (busy) return;
+  busy = true;
+  updatePrinterButtons();
   $('printer-raw').hidden = true;
   showPrinter('Choose the PT-D410 if the browser asks…');
   let connection;
@@ -257,7 +272,40 @@ async function checkPrinter() {
     showPrinter(printerErrorText(error), 'error');
   } finally {
     await connection?.close();
-    button.disabled = false;
+    busy = false;
+    updatePrinterButtons();
+  }
+}
+
+// Print a strip bitmap, reporting progress in `out`. `what` names it, as
+// "3 labels".
+async function printStrip(strip, out, what) {
+  if (busy) return;
+  busy = true;
+  updatePrinterButtons();
+  const phases = {
+    checking: () => 'Checking the printer…',
+    sending: (fraction) => `Sending ${what}… ${Math.round(fraction * 100)}%`,
+    printing: () => 'Printing…',
+  };
+  let connection;
+  try {
+    const raster = encodeRaster(strip);
+    report(out, 'Choose the PT-D410 if the browser asks…');
+    connection = await connect(await choosePrinter(navigator.usb));
+    const result = await printRaster(connection, raster, { onProgress: (phase, fraction) => report(out, phases[phase](fraction)) });
+    if (result.completionConfirmed) {
+      report(out, `Printed ${what}. Cut a little past the last mark, then trim at the marks.`, 'ok');
+    } else {
+      report(out, `Sent ${what}, but the printer didn’t say it had finished. Check the tape before printing again.`, 'error');
+    }
+  } catch (error) {
+    const started = error.result?.printDataWriteAttempted;
+    report(out, `${printerErrorText(error)}${started ? ' Printing may have started: check the printer before trying again. Nothing was resent.' : ''}`, 'error');
+  } finally {
+    await connection?.close();
+    busy = false;
+    updatePrinterButtons();
   }
 }
 
@@ -308,11 +356,15 @@ for (const key of Object.keys(state.fields)) {
 $('add').addEventListener('click', addCurrent);
 $('download').addEventListener('click', download);
 $('clear').addEventListener('click', () => { state.strip = []; renderStrip(); });
-if ('usb' in navigator) {
-  $('check-printer').addEventListener('click', checkPrinter);
-} else {
-  $('check-printer').disabled = true;
-  showPrinter('This browser can’t reach USB devices. Use Chrome or Edge on a computer.', 'error');
+$('check-printer').addEventListener('click', checkPrinter);
+$('print-strip').addEventListener('click', () => {
+  const labels = stripLabels();
+  if (labels.length) printStrip(buildStrip(labels).strip, $('strip-print-status'), plural(labels.length, 'label'));
+});
+if (!hasUsb) {
+  const why = 'This browser can’t reach USB devices, so it can’t print. Use Chrome or Edge on a computer.';
+  showPrinter(why, 'error');
+  report($('strip-print-status'), why, 'error');
 }
 drawPartIcons();
 syncBuilder();

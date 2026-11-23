@@ -1,7 +1,7 @@
-// A Brother PT-D410 over WebUSB, following the PT-D410 label scripts'
-// ptouch_status.py: interface 0's bulk endpoints, the status request
-// ESC i S, and its 32-byte reply. Protocol facts are from
-// https://github.com/vowstar/ptouch-rs (crates/ptouch-core).
+// A Brother PT-D410 over WebUSB, following the PT-D410 label scripts:
+// ptouch_status.py for interface 0's bulk endpoints, the status request ESC i S
+// and its 32-byte reply, and print_batch.py for the print job. Protocol facts
+// are from https://github.com/vowstar/ptouch-rs (crates/ptouch-core).
 
 export const VENDOR_ID = 0x04f9;
 export const PRODUCT_ID = 0x20df;
@@ -99,14 +99,14 @@ class Connection {
     return new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
   }
 
-  // The next status frame of one of the given types; others are skipped.
-  async status(types, ms) {
+  // The next status frame, or null after ms.
+  async frame(ms) {
     const deadline = Date.now() + ms;
     for (;;) {
-      while (this.buffer.length >= 32) {
+      if (this.buffer.length >= 32) {
         const status = parseStatus(this.buffer.slice(0, 32));
         this.buffer = this.buffer.slice(32);
-        if (types.includes(status.statusType)) return status;
+        return status;
       }
       const left = deadline - Date.now();
       if (left <= 0) return null;
@@ -117,6 +117,15 @@ class Connection {
         joined.set(data, this.buffer.length);
         this.buffer = joined;
       }
+    }
+  }
+
+  // The next status frame of one of the given types; others are skipped.
+  async status(types, ms) {
+    const deadline = Date.now() + ms;
+    for (;;) {
+      const status = await this.frame(Math.max(0, deadline - Date.now()));
+      if (!status || types.includes(status.statusType)) return status;
     }
   }
 
@@ -165,4 +174,83 @@ export async function requestStatus(connection, { replyMs = 5000 } = {}) {
   const status = await connection.status([STATUS_TYPES.REPLY, STATUS_TYPES.ERROR], replyMs);
   if (!status) throw new PrinterError(`No status reply within ${replyMs / 1000} seconds; nothing else was sent.`);
   return status;
+}
+
+// Protocol initialisation as print_batch.py sends it: 100 NULs, then ESC @.
+// It is not a USB reset.
+export const INITIALIZE = Uint8Array.from({ length: 102 }, (_, i) => [0x1b, 0x40][i - 100] ?? 0);
+
+// Refuse a raster print_hardware_batch.py would refuse: whole 16-byte lines,
+// more than one of them, and no dots outside the 6 mm tape's bytes 6 to 9.
+export function checkRaster(raster) {
+  if (raster.length < 32 || raster.length % 16) throw new PrinterError('The strip must be at least two whole raster lines.');
+  for (let i = 0; i < raster.length; i += 16) {
+    if (raster.subarray(i, i + 6).some(Boolean) || raster.subarray(i + 10, i + 16).some(Boolean)) {
+      throw new PrinterError('The strip has dots outside the 6 mm tape’s printable area.');
+    }
+  }
+}
+
+// The job print_batch.py's job_commands() sends, one USB write per chunk:
+// raster mode, print information with the line count, the D460BT margin
+// bytes, one line per column (G and 16 bytes, or Z for a blank line), and
+// print with feeding. The whole strip is one page.
+export function jobCommands(raster) {
+  checkRaster(raster);
+  const lines = raster.length / 16;
+  const chunks = [
+    Uint8Array.of(0x1b, 0x69, 0x52, 0x01),
+    Uint8Array.of(0x1b, 0x69, 0x7a, 0x00, 0x00, 0x06, 0x00,
+      lines & 0xff, (lines >> 8) & 0xff, (lines >> 16) & 0xff, (lines >>> 24) & 0xff, 0x02, 0x00),
+    Uint8Array.of(0x1b, 0x69, 0x64, 0x01, 0x00, 0x4d, 0x00),
+  ];
+  for (let i = 0; i < raster.length; i += 16) {
+    const line = raster.subarray(i, i + 16);
+    chunks.push(line.some(Boolean) ? Uint8Array.of(0x47, 0x10, 0x00, ...line) : Uint8Array.of(0x5a));
+  }
+  chunks.push(Uint8Array.of(0x1a));
+  return chunks;
+}
+
+// Print a raster as print_batch.py's send_batch() does: check the printer is
+// idle with 6 mm laminated tape, initialise, check again, write each chunk
+// once without retrying, then wait for the printing-completed notification.
+// An error carries `result`, whose printDataWriteAttempted says whether
+// printing may have started.
+export async function printRaster(connection, raster, { onProgress = () => {}, completionMs = 20000, replyMs } = {}) {
+  const result = { printDataWriteAttempted: false, jobSent: false, completionConfirmed: false, commandsWritten: 0 };
+  const ready = async () => {
+    const problem = readinessProblem(await requestStatus(connection, { replyMs }));
+    if (problem) throw new PrinterError(problem);
+  };
+  try {
+    const chunks = jobCommands(raster);
+    onProgress('checking');
+    await ready();
+    await connection.write(INITIALIZE);
+    await ready();
+    for (const [i, chunk] of chunks.entries()) {
+      if (chunk[0] === 0x47 || chunk[0] === 0x5a || chunk[0] === 0x1a) result.printDataWriteAttempted = true;
+      await connection.write(chunk);
+      result.commandsWritten += 1;
+      if (i % 64 === 0) onProgress('sending', i / chunks.length);
+    }
+    result.jobSent = true;
+    onProgress('printing');
+    const deadline = Date.now() + completionMs;
+    for (;;) {
+      const status = await connection.frame(Math.max(0, deadline - Date.now()));
+      if (!status) break;
+      if (status.statusType === STATUS_TYPES.TURNED_OFF) throw new PrinterError('The printer turned off.');
+      if (status.hasError) throw new PrinterError(readinessProblem(status));
+      if (status.statusType === STATUS_TYPES.PRINTING_COMPLETED) {
+        result.completionConfirmed = true;
+        break;
+      }
+    }
+    return result;
+  } catch (error) {
+    error.result = result;
+    throw error;
+  }
 }

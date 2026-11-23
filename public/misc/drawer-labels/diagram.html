@@ -94,7 +94,8 @@
   button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-  #printer-status { margin-top: 0.75rem; }
+  .print-status { margin-top: 0.75rem; }
+  .print-status:empty { display: none; }
   #printer-raw code { display: block; margin-top: 0.35rem; font-size: 12px; overflow-wrap: anywhere; }
   summary { cursor: pointer; font-size: 12px; }
 
@@ -121,8 +122,8 @@
 <body>
 <main>
   <p>Labels for a Brother P-touch PT-D410 on 6 mm tape, in the style of my parts drawers: the head of the
-    screw, then its size. Pick the part, add each label to the strip, and download the strip at the
-    printer’s 180 dots per inch.</p>
+    screw, then its size. Pick the part, add each label to the strip, and print the strip straight from the
+    browser over USB, or download it at the printer’s 180 dots per inch.</p>
 
   <h2>Label</h2>
   <fieldset>
@@ -154,15 +155,17 @@
   <div class="strip-scroll" id="strip-scroll"><canvas class="tape" id="strip-canvas" role="img"></canvas></div>
   <ol class="strip-list" id="strip-list"></ol>
   <div class="actions">
+    <button type="button" class="primary" id="print-strip">Print strip</button>
     <button type="button" id="download">Download PNG</button>
     <button type="button" id="clear">Clear strip</button>
   </div>
+  <p class="print-status" id="strip-print-status" aria-live="polite"></p>
 
   <h2>Printer</h2>
-  <p class="muted" id="printer-intro">Reads the status of a PT-D410 plugged into this computer, over USB from the
-    browser. It doesn’t print anything.</p>
+  <p class="muted" id="printer-intro">Printing talks to a PT-D410 plugged into this computer, over USB from the
+    browser, in Chrome or Edge. Check printer only reads its tape and status; it doesn’t print anything.</p>
   <div class="actions"><button type="button" id="check-printer">Check printer</button></div>
-  <p id="printer-status" aria-live="polite"></p>
+  <p class="print-status" id="printer-status" aria-live="polite"></p>
   <details id="printer-raw" hidden><summary class="muted">Status reply</summary><code id="printer-raw-bytes"></code></details>
 </main>
 <script type="module" src="app.js"></script>
