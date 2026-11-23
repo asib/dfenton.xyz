@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { createEngine } from '../vendor/featurescript-engine/index.js';
+import { createEngine } from 'featurescript-engine';
 import { featureScriptDownload, isFeatureScript, siteSchema } from '../src/components/cad/featurescript';
 import { parseParameters } from '../src/components/cad/parameters';
 
-const vendor = new URL('../vendor/featurescript-engine/', import.meta.url);
+const engineFiles = new URL('.', import.meta.resolve('featurescript-engine'));
 const source = readFileSync(new URL('../public/misc/featurescript-desk-tidy/desk-tidy.fs', import.meta.url), 'utf8');
 const engine = await createEngine({
-  locateFile: (name) => new URL(name, vendor).pathname,
-  loadFont: async (name) => readFileSync(new URL(`fonts/${name}`, vendor)),
+  locateFile: (name) => new URL(name, engineFiles).pathname,
+  loadFont: async (name) => readFileSync(new URL(`fonts/${name}`, engineFiles)),
 });
 const volume = (log) => Number(/Desk tidy: ([\d.]+) mm³/.exec(log)?.[1]);
 // A binary STL is an 80-byte header, a triangle count and 50 bytes per triangle.
