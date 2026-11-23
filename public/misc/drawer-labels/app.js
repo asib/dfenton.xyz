@@ -1,4 +1,6 @@
-import { buildStrip, decodeLabelData, dotsToMm, encodeRaster, HEIGHT, LabelError, renderLabel } from './labels.js';
+import {
+  buildStrip, cutMarks, decodeLabelData, dotsToMm, encodeRaster, HEIGHT, LabelError, renderLabel, stripFromImageData, stripToImageData,
+} from './labels.js';
 import { hasLength, isMetric, labelSpec, lengthSuggestions, partById, PARTS, sizeSuggestions } from './parts.js';
 import { choosePrinter, connect, describeTape, PrinterError, printRaster, readinessProblem, requestStatus } from './ptouch.js';
 
@@ -11,6 +13,7 @@ const STORAGE_KEY = 'drawer-labels';
 const $ = (id) => document.getElementById(id);
 const hasUsb = 'usb' in navigator;
 let busy = false; // one printer conversation at a time
+let saved = null; // { name, strip, labels } from a chosen PNG
 
 const state = {
   part: 'hex',
@@ -199,6 +202,7 @@ function updatePrinterButtons() {
   $('print-strip').textContent = count ? `Print ${plural(count, 'label')}` : 'Print strip';
   $('print-strip').disabled = busy || !hasUsb || !count;
   $('check-printer').disabled = busy || !hasUsb;
+  $('print-png').disabled = busy || !hasUsb || !saved;
 }
 
 function move(index, step) {
@@ -220,14 +224,9 @@ function download() {
   const { strip } = buildStrip(labels);
   const canvas = document.createElement('canvas');
   canvas.width = strip.width;
-  canvas.height = HEIGHT;
-  const ctx = canvas.getContext('2d');
-  const image = ctx.createImageData(strip.width, HEIGHT);
-  strip.bits.forEach((bit, i) => {
-    const v = bit ? 0 : 255;
-    image.data.set([v, v, v, 255], i * 4);
-  });
-  ctx.putImageData(image, 0, 0);
+  canvas.height = strip.height;
+  const { data } = stripToImageData(strip);
+  canvas.getContext('2d').putImageData(new ImageData(data, strip.width, strip.height), 0, 0);
   canvas.toBlob((blob) => {
     const link = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(blob),
@@ -309,10 +308,46 @@ async function printStrip(strip, out, what) {
   }
 }
 
+// A strip PNG saved from this page, read back into dots for printing.
+async function choosePng(file) {
+  saved = null;
+  $('png-scroll').hidden = true;
+  report($('png-print-status'), '');
+  try {
+    const bitmap = await createImageBitmap(file, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
+      .catch(() => { throw new LabelError(`${file.name} isn’t an image this browser can read.`); });
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0);
+    const strip = stripFromImageData(ctx.getImageData(0, 0, bitmap.width, bitmap.height));
+    const marks = cutMarks(strip);
+    // Ticks at both ends and between labels, as this page saves them.
+    const labels = marks.length >= 2 && marks[0] === 0 && marks.at(-1) === strip.width - 1 ? marks.length - 1 : 0;
+    saved = { name: file.name, strip, labels };
+    report($('png-info'), `${file.name}: ${dotsToMm(strip.width).toFixed(1)} mm of tape${labels ? `, ${plural(labels, 'label')}` : ''}.`);
+    drawSaved();
+  } catch (error) {
+    if (!(error instanceof LabelError)) throw error;
+    report($('png-info'), error.message, 'error');
+  } finally {
+    updatePrinterButtons();
+  }
+}
+
+function drawSaved() {
+  if (!saved) return;
+  $('png-scroll').hidden = false;
+  drawTape($('png-canvas'), saved.strip, 2);
+  $('png-canvas').setAttribute('aria-label', `Saved strip from ${saved.name}`);
+}
+
 function redrawAll() {
   drawPartIcons();
   updatePreview();
   renderStrip();
+  drawSaved();
 }
 
 // The host page sends the site theme; follow it without rebuilding anything.
@@ -360,6 +395,14 @@ $('check-printer').addEventListener('click', checkPrinter);
 $('print-strip').addEventListener('click', () => {
   const labels = stripLabels();
   if (labels.length) printStrip(buildStrip(labels).strip, $('strip-print-status'), plural(labels.length, 'label'));
+});
+$('png-file').addEventListener('change', (event) => {
+  const [file] = event.target.files;
+  event.target.value = ''; // so choosing the same file again reads it again
+  if (file) choosePng(file);
+});
+$('print-png').addEventListener('click', () => {
+  if (saved) printStrip(saved.strip, $('png-print-status'), saved.labels ? plural(saved.labels, 'label') : saved.name);
 });
 if (!hasUsb) {
   const why = 'This browser can’t reach USB devices, so it can’t print. Use Chrome or Edge on a computer.';

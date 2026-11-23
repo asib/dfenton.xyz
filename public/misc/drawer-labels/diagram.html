@@ -93,6 +93,13 @@
   button:hover:not(:disabled) { border-color: currentColor; }
   button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .file-button {
+    position: relative; display: inline-block; padding: 0.45rem 0.9rem; cursor: pointer;
+    border: 1px solid color-mix(in srgb, currentColor 60%, transparent);
+  }
+  .file-button:hover { border-color: currentColor; }
+  .file-button:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .file-button input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .print-status { margin-top: 0.75rem; }
   .print-status:empty { display: none; }
@@ -160,6 +167,16 @@
     <button type="button" id="clear">Clear strip</button>
   </div>
   <p class="print-status" id="strip-print-status" aria-live="polite"></p>
+
+  <h2>Saved strip</h2>
+  <p class="muted">Print a strip downloaded from this page earlier: choose its PNG.</p>
+  <div class="actions">
+    <label class="file-button">Choose PNG…<input type="file" id="png-file" accept="image/png"></label>
+    <button type="button" class="primary" id="print-png" disabled>Print PNG</button>
+  </div>
+  <p class="print-status" id="png-info" aria-live="polite"></p>
+  <div class="strip-scroll" id="png-scroll" hidden><canvas class="tape" id="png-canvas" role="img"></canvas></div>
+  <p class="print-status" id="png-print-status" aria-live="polite"></p>
 
   <h2>Printer</h2>
   <p class="muted" id="printer-intro">Printing talks to a PT-D410 plugged into this computer, over USB from the

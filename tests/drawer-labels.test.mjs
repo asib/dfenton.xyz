@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { buildStrip, decodeLabelData, encodeRaster, LabelError, MAX_WIDTH, renderLabel, textBitmap } from '../public/misc/drawer-labels/labels.js';
+import {
+  buildStrip, cutMarks, decodeLabelData, encodeRaster, LabelError, MAX_WIDTH, renderLabel, stripFromImageData, stripToImageData, textBitmap,
+} from '../public/misc/drawer-labels/labels.js';
 
 const read = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 const data = decodeLabelData(read('../public/misc/drawer-labels/label-data.json'));
@@ -60,4 +62,23 @@ test('labels that cannot print are refused with a reason', () => {
 test('an icon alone is a label', () => {
   const label = renderLabel(data, { icon: 'washer', top: '' });
   expect(label.width).toBe(7 + data.icons.washer.width + 7);
+});
+
+test('a downloaded strip PNG reads back as the same dots', () => {
+  const labels = fixtures.labels.map((expected) => renderLabel(data, expected));
+  const { strip, guides } = buildStrip(labels);
+  const back = stripFromImageData(stripToImageData(strip));
+  expect(back.width).toBe(strip.width);
+  expect(Array.from(back.bits)).toEqual(Array.from(strip.bits));
+  expect(cutMarks(back)).toEqual(guides);
+  expect(createHash('sha256').update(encodeRaster(back)).digest('hex')).toBe(fixtures.strip.raster_sha256);
+});
+
+test('only dark, opaque pixels of a 32-pixel-tall image are ink', () => {
+  const pixels = (rgba) => ({ width: 2, height: 32, data: new Uint8ClampedArray(Array.from({ length: 64 }, () => rgba).flat()) });
+  expect(stripFromImageData(pixels([20, 20, 20, 255])).bits.every(Boolean)).toBe(true);
+  expect(stripFromImageData(pixels([0, 0, 0, 0])).bits.some(Boolean)).toBe(false);
+  expect(stripFromImageData(pixels([200, 200, 200, 255])).bits.some(Boolean)).toBe(false);
+  expect(() => stripFromImageData({ width: 10, height: 43, data: new Uint8ClampedArray(10 * 43 * 4) }))
+    .toThrow('This image is 10 × 43 pixels. A strip saved from this page is 32 pixels tall');
 });

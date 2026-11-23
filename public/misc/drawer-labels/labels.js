@@ -148,3 +148,38 @@ export function encodeRaster(strip) {
   }
   return raster;
 }
+
+// A strip as RGBA pixels, one per dot, black ink on white: what Download PNG saves.
+export function stripToImageData(strip) {
+  const data = new Uint8ClampedArray(strip.width * strip.height * 4);
+  strip.bits.forEach((bit, i) => {
+    const v = bit ? 0 : 255;
+    data.set([v, v, v, 255], i * 4);
+  });
+  return { width: strip.width, height: strip.height, data };
+}
+
+// A strip PNG saved from this page, read back into dots: dark, opaque pixels
+// are ink. It has to be 32 pixels tall, one per dot across the tape.
+export function stripFromImageData({ width, height, data }) {
+  if (height !== HEIGHT) {
+    throw new LabelError(`This image is ${width} × ${height} pixels. A strip saved from this page is ${HEIGHT} pixels tall, one per dot across the tape.`);
+  }
+  if (width < 2) throw new LabelError('This image is too short to print.');
+  const strip = blank(width, height);
+  for (let i = 0; i < width * height; i++) {
+    const [r, g, b, a] = data.subarray(i * 4, i * 4 + 4);
+    strip.bits[i] = a >= 128 && 0.299 * r + 0.587 * g + 0.114 * b < 128 ? 1 : 0;
+  }
+  return strip;
+}
+
+// Columns carrying a cut tick: ink in the top two and bottom two rows, where
+// labels themselves never print.
+export function cutMarks(strip) {
+  const marks = [];
+  for (let x = 0; x < strip.width; x++) {
+    if ([0, 1, HEIGHT - 2, HEIGHT - 1].every((y) => strip.bits[y * strip.width + x])) marks.push(x);
+  }
+  return marks;
+}
