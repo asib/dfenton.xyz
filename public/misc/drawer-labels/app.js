@@ -1,5 +1,6 @@
 import { buildStrip, decodeLabelData, dotsToMm, HEIGHT, LabelError, renderLabel } from './labels.js';
 import { hasLength, isMetric, labelSpec, lengthSuggestions, partById, PARTS, sizeSuggestions } from './parts.js';
+import { choosePrinter, connect, describeTape, PrinterError, readinessProblem, requestStatus } from './ptouch.js';
 
 const data = decodeLabelData(await (await fetch(new URL('label-data.json', import.meta.url))).json());
 
@@ -224,6 +225,42 @@ function download() {
   }, 'image/png');
 }
 
+function showPrinter(text, tone = '') {
+  $('printer-status').className = tone;
+  $('printer-status').textContent = text;
+}
+
+function printerErrorText(error) {
+  if (error instanceof PrinterError) return error.message;
+  if (error.name === 'NotFoundError') return 'No printer was chosen.';
+  if (error.name === 'SecurityError') return `The browser won’t allow USB here: ${error.message}`;
+  return `${error.name}: ${error.message}`;
+}
+
+// Read-only: the printer is sent the status request and nothing else.
+async function checkPrinter() {
+  const button = $('check-printer');
+  button.disabled = true;
+  $('printer-raw').hidden = true;
+  showPrinter('Choose the PT-D410 if the browser asks…');
+  let connection;
+  try {
+    const device = await choosePrinter(navigator.usb);
+    connection = await connect(device);
+    showPrinter('Reading status…');
+    const status = await requestStatus(connection);
+    const problem = readinessProblem(status);
+    showPrinter(`${device.productName || 'PT-D410'}: ${describeTape(status)}. ${problem ?? 'Ready.'}`, problem ? 'error' : 'ok');
+    $('printer-raw-bytes').textContent = status.raw;
+    $('printer-raw').hidden = false;
+  } catch (error) {
+    showPrinter(printerErrorText(error), 'error');
+  } finally {
+    await connection?.close();
+    button.disabled = false;
+  }
+}
+
 function redrawAll() {
   drawPartIcons();
   updatePreview();
@@ -271,6 +308,12 @@ for (const key of Object.keys(state.fields)) {
 $('add').addEventListener('click', addCurrent);
 $('download').addEventListener('click', download);
 $('clear').addEventListener('click', () => { state.strip = []; renderStrip(); });
+if ('usb' in navigator) {
+  $('check-printer').addEventListener('click', checkPrinter);
+} else {
+  $('check-printer').disabled = true;
+  showPrinter('This browser can’t reach USB devices. Use Chrome or Edge on a computer.', 'error');
+}
 drawPartIcons();
 syncBuilder();
 renderStrip();

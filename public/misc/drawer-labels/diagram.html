@@ -94,6 +94,9 @@
   button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  #printer-status { margin-top: 0.75rem; }
+  #printer-raw code { display: block; margin-top: 0.35rem; font-size: 12px; overflow-wrap: anywhere; }
+  summary { cursor: pointer; font-size: 12px; }
 
   canvas.tape { display: block; image-rendering: pixelated; box-shadow: 0 1px 4px var(--tape-shadow); }
   .preview { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin-bottom: 1rem; }
@@ -154,6 +157,13 @@
     <button type="button" id="download">Download PNG</button>
     <button type="button" id="clear">Clear strip</button>
   </div>
+
+  <h2>Printer</h2>
+  <p class="muted" id="printer-intro">Reads the status of a PT-D410 plugged into this computer, over USB from the
+    browser. It doesn’t print anything.</p>
+  <div class="actions"><button type="button" id="check-printer">Check printer</button></div>
+  <p id="printer-status" aria-live="polite"></p>
+  <details id="printer-raw" hidden><summary class="muted">Status reply</summary><code id="printer-raw-bytes"></code></details>
 </main>
 <script type="module" src="app.js"></script>
 </body>
