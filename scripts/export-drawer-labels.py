@@ -10,7 +10,8 @@
       so the JavaScript can be checked against it.
 
 The icons come from the PT-D410 label scripts (render_inventory_labels.py and
-render_head_catalog.py), which aren't in this repository:
+render_head_catalog.py), which aren't in this repository. The heat-set insert
+isn't among their icons; it is modelled here and drawn by their renderer.
 
   python3 scripts/export-drawer-labels.py --label-scripts ~/ptouch-labels/outputs
 
@@ -19,6 +20,7 @@ Needs Pillow.
 import argparse
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -30,7 +32,7 @@ DATA = REPO / 'public/misc/drawer-labels/label-data.json'
 FIXTURES = REPO / 'tests/fixtures/drawer-labels.json'
 CHARS = [chr(c) for c in range(32, 127)] + ['×', '°']
 SIZES = (20, 14)
-ICONS = ('hex', 'socket', 'button', 'flat-socket', 'flat-phillips', 'combo', 'nut', 'washer')
+ICONS = ('hex', 'socket', 'button', 'flat-socket', 'flat-phillips', 'combo', 'nut', 'washer', 'insert')
 
 
 def ink_points(im):
@@ -73,9 +75,37 @@ def export_font(size):
     return {'glyphs': glyphs, 'kerning': kerning}
 
 
+def insert_model(Model, height=1.6, bore=.52, knurls=10, twist=.5):
+    """A heat-set insert: a tapered lead-in, a diamond-knurled body, a bore on top."""
+    profile = [(0, 0), (.80, 0), (.84, .28), (1, .34), (1, height - .08), (.93, height), (0, height)]
+    model = Model()
+    model.lathe(profile, sides=64, angle=math.pi / 64)
+    model.profile = profile
+    for sign in (1, -1):
+        for i in range(knurls):
+            a = 2 * math.pi * i / knurls
+            b = a + sign * twist
+            model.lines.append(((1.003 * math.cos(a), 1.003 * math.sin(a), .34),
+                                (1.003 * math.cos(b), 1.003 * math.sin(b), height - .08)))
+    model.drive = ('bore', height, bore)
+    return model
+
+
+def flatten_tips(im, ink_box):
+    """A shape as tall as the icon has the top and bottom of its outline on a
+    pixel centre, which leaves one dot above a gap; put the dot in the gap."""
+    box = ink_box(im)
+    for edge, inner in ((box[1], box[1] + 1), (box[3] - 1, box[3] - 2)):
+        xs = [x for x in range(im.width) if im.getpixel((x, edge)) == 0]
+        if len(xs) == 1 and im.getpixel((xs[0], inner)) != 0:
+            im.putpixel((xs[0], edge), 1)
+            im.putpixel((xs[0], inner), 0)
+    return im
+
+
 def export_icons(label_scripts):
     sys.path.insert(0, str(label_scripts))
-    from render_head_catalog import profile_model, rasterize
+    from render_head_catalog import Model, profile_model, rasterize
     from render_inventory_labels import icon, ink_box
     icons = {}
     for kind in ICONS:
@@ -83,6 +113,8 @@ def export_icons(label_scripts):
             model = profile_model([(0, 0), (1, 0), (1, .14), (0, .14)], edges=(1, 2), neck=False)
             model.drive = ('bore', .14, .50)
             im = rasterize(model)
+        elif kind == 'insert':
+            im = flatten_tips(rasterize(insert_model(Model)), ink_box)
         else:
             im = icon(kind)
         box = ink_box(im)
@@ -159,6 +191,7 @@ CASES = [
     ('flat-phillips', '#6×3/8"', 'WOOD'),
     ('combo', '#12-24×1"', None),
     ('washer', '5/16"', 'FLAT WASHER'),
+    ('insert', 'M3×5.7mm', 'HEAT-SET'),
     ('none', 'M8', 'SPARE'),
 ]
 

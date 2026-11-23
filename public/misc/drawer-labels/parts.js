@@ -1,5 +1,6 @@
 // What each kind of part puts on its label, written the way the drawer labels
-// already are: 1/4-20×1-1/4", M4×35mm, #10×1" over WOOD, 5/16" over FLAT WASHER.
+// already are: 1/4-20×1-1/4", M4×35mm, #10×1" over WOOD, 5/16" over FLAT WASHER,
+// and M3×5.7mm over HEAT-SET for inserts.
 
 export const PARTS = [
   { id: 'hex', name: 'Hex bolt', icon: 'hex', kind: 'screw' },
@@ -10,6 +11,7 @@ export const PARTS = [
   { id: 'combo', name: 'Round head', icon: 'combo', kind: 'screw' },
   { id: 'wood', name: 'Wood screw', icon: 'flat-phillips', kind: 'wood', bottom: 'WOOD' },
   { id: 'nut', name: 'Hex nut', icon: 'nut', kind: 'nut' },
+  { id: 'insert', name: 'Heat-set insert', icon: 'insert', kind: 'insert', bottom: 'HEAT-SET' },
   { id: 'washer', name: 'Flat washer', icon: 'washer', kind: 'washer', bottom: 'FLAT WASHER' },
   { id: 'text', name: 'Text only', icon: 'none', kind: 'text' },
 ];
@@ -20,10 +22,15 @@ const METRIC_THREADS = ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12'
 const WOOD_GAUGES = ['#4', '#6', '#8', '#9', '#10', '#12', '#14'];
 const WASHER_SIZES = ['#4', '#6', '#8', '#10', '#12', '1/4"', '5/16"', '3/8"', '1/2"', '5/8"',
   'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12'];
+const INSERT_THREADS = ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8',
+  '#2-56', '#4-40', '#6-32', '#8-32', '#10-24', '#10-32', '1/4-20', '5/16-18', '3/8-16'];
 const INCH_LENGTHS = ['1/4', '3/8', '1/2', '5/8', '3/4', '7/8', '1', '1-1/4', '1-1/2', '1-3/4',
   '2', '2-1/4', '2-1/2', '3', '3-1/2', '4'];
 const MM_LENGTHS = ['4', '5', '6', '8', '10', '12', '14', '16', '20', '25', '30', '35', '40',
   '45', '50', '55', '60', '65', '70', '80', '90', '100'];
+// Inserts are short, and often sold by decimal length.
+const INSERT_INCH_LENGTHS = ['0.115', '0.135', '0.15', '0.188', '0.25', '0.3', '0.375', '1/8', '3/16', '1/4', '5/16', '3/8', '1/2'];
+const INSERT_MM_LENGTHS = ['3', '4', '5', '5.7', '6', '7', '8', '8.1', '9.5', '10', '12.7'];
 
 export const partById = (id) => PARTS.find((part) => part.id === id) ?? PARTS[0];
 export const isMetric = (thread) => /^M\d/i.test(thread.trim());
@@ -31,16 +38,18 @@ export const isMetric = (thread) => /^M\d/i.test(thread.trim());
 export function sizeSuggestions(part) {
   if (part.kind === 'wood') return WOOD_GAUGES;
   if (part.kind === 'washer') return WASHER_SIZES;
+  if (part.kind === 'insert') return INSERT_THREADS;
   if (part.kind === 'text') return [];
   return [...IMPERIAL_THREADS, ...METRIC_THREADS];
 }
 
 export function lengthSuggestions(part, size) {
+  if (part.kind === 'insert') return isMetric(size) ? INSERT_MM_LENGTHS : INSERT_INCH_LENGTHS;
   if (part.kind === 'nut' || part.kind === 'washer' || part.kind === 'text') return [];
   return isMetric(size) ? MM_LENGTHS : INCH_LENGTHS;
 }
 
-export const hasLength = (part) => part.kind === 'screw' || part.kind === 'wood';
+export const hasLength = (part) => part.kind === 'screw' || part.kind === 'wood' || part.kind === 'insert';
 
 const tidy = (text) => (text ?? '').trim().replace(/\s+/g, ' ');
 
