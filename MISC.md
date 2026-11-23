@@ -32,6 +32,19 @@ Give each diagram explicit light and dark semantic palettes. Define a light valu
 
 The cutting-edge diagram uses coral for the back (`#b63e4a` / `#ff8c99`), blue for the bevel (`#1769b0` / `#71b7ff`), and teal for the burr (`#087f6b` / `#60d9ba`), with light values first. These are diagram-specific tokens, independent of the site’s primary/accent colors.
 
+### Drawer labels
+
+`public/misc/drawer-labels/` makes labels for a Brother PT-D410 on 6 mm tape: an isometric head icon, the size in 20 px Liberation Sans Bold, an optional 14 px second line, 32 dots tall at 180 dpi with 7 blank dots at each end. It matches the PT-D410 label scripts (Python, outside this repository) that printed the existing drawer labels.
+
+Its `diagram.html` is the authored page, not a sandboxed export, because WebUSB needs a real origin. A same-origin frame may use USB by default, since the `usb` permissions policy allows `'self'`; keep the page unsandboxed, and keep any `Permissions-Policy` added to `_headers` allowing `usb` for the site. The page takes the `site-theme` message and reports `diagram-height` itself. The tape is white with black print in both themes, as on the drawers.
+
+- `labels.js` lays out labels, joins them into a strip with 2-dot cut ticks at every boundary, and encodes the printer's 16-byte raster lines (rows on head bytes 6 to 9).
+- `parts.js` turns a part, size and length into the label's lines, in the drawers' style: `1/4-20×1-1/4"`, `M4×35mm`, `#10×1"` over `WOOD`, `5/16"` over `FLAT WASHER`.
+- `ptouch.js` talks to the printer over WebUSB as the label scripts' `ptouch_status.py` does, sending only the status request `1b 69 53`.
+- `label-data.json` holds the glyph and icon bitmaps. `scripts/export-drawer-labels.py --label-scripts <folder with render_inventory_labels.py>` regenerates it with Pillow, from `public/fonts/liberation-sans-bold.ttf` and the label scripts' icon renderer, and rewrites `tests/fixtures/drawer-labels.json`. Rerun it to add characters or icons. Each glyph is one bitmap drawn at its rounded pen position, so a label can differ by a dot from Pillow's own text rendering, which rasterises each glyph at its fractional position.
+
+Run `bun test tests/drawer-labels.test.mjs tests/drawer-label-parts.test.mjs tests/drawer-labels-ptouch.test.mjs`. The strip's raster is checked against the label scripts' `encode_columns()` through the fixture, and the printer code against a simulated WebUSB device. Check a real printer from Chrome or Edge on a computer; headless Chrome stops at the device chooser.
+
 ## CAD models
 
 CAD entries use the same list, local page URLs, and theme-aware previews. Set `type` to `cad` in metadata; omitted `type` still means an embedded diagram. CAD pages load a shared Three.js viewer only when opened, so the index and diagrams do not load the 3D runtime. They do not need `diagram.html`.
