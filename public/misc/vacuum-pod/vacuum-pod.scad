@@ -29,11 +29,15 @@
 //
 // View = Pod is the part to print. It prints as modelled, either face down,
 // with no supports: the bed face's groove prints as a short bridge, its
-// channels as arches, and the duct is a teardrop. Air leaks through a print's walls and infill, so
-// print it solid, with 100% infill, then seal every surface, inside the port
-// too, with three or more thin coats of polycrylic or a brush-on epoxy,
-// blowing the hole and channels clear after each coat. Wrap the fitting's
-// thread in PTFE tape.
+// channels as arches, and the duct is a teardrop. Air leaks through a print's
+// walls and infill, so print it to be airtight: in PETG, ASA or ABS, with
+// extra walls, more top and bottom layers in a concentric pattern, the nozzle a
+// little hotter, a slight over-extrusion, and an infill such as cubic that
+// closes off its cells. vacuum-pod.3mf beside this file is a Bambu Studio
+// project of the default pod set up that way. Then seal every surface with two
+// or three coats of polycrylic, inside the port, duct and hole too, blowing the
+// hole and channels clear after each coat. Wrap the fitting's thread in PTFE
+// tape.
 
 /* [View] */
 // Assembly shows the pod on a patch of table with work on top, before the vacuum pulls them down onto the cords. Pod is the part to print.
@@ -340,8 +344,9 @@ module assembly() {
 }
 
 echo(str("Pod: ", Pod_length, " x ", Pod_width, " x ", Pod_thickness,
-    " mm. Print it as modelled, either face down, with no supports and 100% infill. Then seal every surface, inside the port too,",
-    " with three or more thin coats of polycrylic or brush-on epoxy, blowing the hole and channels clear after each coat."));
+    " mm. Print it as modelled, either face down, with no supports, to be airtight: extra walls, more concentric top and bottom layers,",
+    " a little hotter, slightly over-extruded, with cubic infill. Then seal every surface with two or three coats of polycrylic,",
+    " inside the port, duct and hole too, blowing the hole and channels clear after each coat."));
 echo(str("Seals: cut two ", round(cord_length), " mm lengths of ", Cord_diameter,
     " mm foam cord, one for each face, and join each one's ends with CA glue, cut at 45 degrees. Each stands ", r2(cord_proud), " mm proud in a ",
     Groove_width, " mm wide, ", Groove_depth, " mm deep groove."));
