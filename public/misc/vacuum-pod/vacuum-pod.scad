@@ -129,7 +129,6 @@ function r2(x) = round(x * 100) / 100;
 assembly = View == "assembly";
 explode = assembly ? Explode / 100 * 50 : 0;
 
-mid_z = Pod_thickness / 2;
 top_groove_floor = Pod_thickness - Groove_depth;
 // The bottom face prints on the plate, so its grooves and channel close over
 // as the pod prints. Their round sides meet beyond their centre in a
@@ -190,11 +189,16 @@ port_end_y = Pod_width / 2 - Port_depth;
 port_mouth_r = Port_hole / 2 + port_chamfer;
 hex_corner_r = Fitting_hex / sqrt(3);
 fitting_reach = Pod_width / 2 + Fitting_projection + tube_stub;
-// The pod's least thickness for the fitting's thread to pass between the
-// faces' grooves and channels. The port is centred in the pod's thickness, so
-// the bottom face's deeper grooves and channel set it.
-face_cut = max(bottom_groove_depth, bottom_channel_depth);
-min_thickness = 2 * (face_cut + min_cover) + npt_major;
+// The port runs between the faces' grooves and channels, centred between the
+// bottom face's cuts and the top face's shallower ones, so that the fitting's
+// thread has as much plastic above it as below. The pod's least thickness
+// leaves min_cover on both sides.
+top_groove_depth = groove_centre + groove_r;
+bottom_cut = max(bottom_groove_depth, bottom_channel_depth);
+top_cut = max(top_groove_depth, top_channel_depth);
+port_z = (bottom_cut + Pod_thickness - top_cut) / 2;
+min_thickness = bottom_cut + top_cut + 2 * min_cover + npt_major;
+hex_room = min(port_z, Pod_thickness - port_z);
 // The clear space between neighbouring rows of the table's holes.
 hole_gap = Hole_pitch - Table_hole_diameter;
 seal_small = min(cord_outer_l, cord_outer_w);
@@ -206,10 +210,10 @@ assert(cord_proud >= 0.5, "The cord must stand at least 0.5 mm proud of each fac
 assert(Groove_width / 2 < Seal_bend_radius, "The grooves' inner edges need a corner radius: raise the seal bend radius above half the groove width.");
 assert(min(ring_l, ring_w) >= 2 * Channel_width,
     "There's no room for the channels inside the grooves. Make the pod bigger, or the rim, grooves, channels or land narrower.");
-assert(mid_z - npt_major / 2 - face_cut >= min_cover - eps,
+assert(port_z - npt_major / 2 - bottom_cut >= min_cover - eps,
     str("The pod is too thin for the port to run in between its two faces' grooves and channels. Make it at least ", r1(min_thickness),
         " mm thick, or the grooves shallower or the channels narrower."));
-assert(mid_z + Duct_diameter / 2 * sqrt(2) <= top_channel_floor - min_cover && mid_z - Duct_diameter / 2 >= bottom_channel_depth + min_cover,
+assert(port_z + Duct_diameter / 2 * sqrt(2) <= top_channel_floor - min_cover && port_z - Duct_diameter / 2 >= bottom_channel_depth + min_cover,
     "The duct comes too close to the channels. Make the pod thicker, or the channels or duct narrower.");
 assert(Duct_diameter <= Port_hole - 1, "The duct must be narrower than the port.");
 assert(Hole_diameter / 2 + 1 <= channel_r + Channel_land, "The hole must stay 1 mm clear of the grooves. Make it smaller, or the channels or land wider.");
@@ -296,12 +300,12 @@ module teardrop(r) {
 module air_path() {
     // The port in the back face, tapered like the thread, with a chamfer at
     // its mouth.
-    translate([0, Pod_width / 2 + eps, mid_z]) rotate([90, 0, 0]) {
+    translate([0, Pod_width / 2 + eps, port_z]) rotate([90, 0, 0]) {
         cylinder(d1 = Port_hole, d2 = Port_hole - Port_depth * npt_taper, h = Port_depth + eps);
         cylinder(d1 = Port_hole + 2 * port_chamfer, d2 = Port_hole, h = port_chamfer + eps);
     }
     // The duct, from just inside the port to just past the hole.
-    translate([0, port_end_y + 1, mid_z]) rotate([90, 0, 0])
+    translate([0, port_end_y + 1, port_z]) rotate([90, 0, 0])
         linear_extrude(height = port_end_y + 1 - hole_y + Duct_diameter / 2) teardrop(Duct_diameter / 2);
     // The hole, from one face's channel to the other's, with an 80-degree
     // countersink at each face. It starts where the countersinks narrow to
@@ -349,7 +353,7 @@ module cord(z) {
 module fitting() {
     hex_l = 7;
     body_l = Fitting_projection - fitting_standoff - hex_l - 3;
-    translate([0, Pod_width / 2, mid_z]) rotate([-90, 0, 0]) {
+    translate([0, Pod_width / 2, port_z]) rotate([-90, 0, 0]) {
         translate([0, 0, fitting_standoff - npt_length])
             cylinder(d1 = npt_major - npt_length * npt_taper, d2 = npt_major, h = npt_length);
         translate([0, 0, fitting_standoff]) cylinder(r = hex_corner_r, h = hex_l, $fn = 6);
@@ -410,11 +414,12 @@ echo(str("Channel: ", Channel_width, " mm wide, round each face just inside its 
     r1(bottom_channel_depth), " mm deep in the bottom face, with a 45-degree point so that it prints without support. A ",
     Hole_diameter, " mm hole through the pod on the back of the channels joins them", sink_depth > 0 ? str(", countersunk ", r1(sink_d), " mm across at ", 2 * sink_angle, " degrees in each face") : "", "."));
 echo(str("Port: ", Port_hole, " mm at the back face, tapering to ", r2(Port_hole - Port_depth * npt_taper), " mm, ", Port_depth,
-    " mm deep and centred ", r1(mid_z), " mm up, for a 1/4\" NPT fitting to cut its own thread into, or a 1/4\" NPT tap. A ",
+    " mm deep and centred ", r1(port_z), " mm up, midway between the faces' grooves, for a 1/4\" NPT fitting to cut its own thread into, or a 1/4\" NPT tap. A ",
     Duct_diameter, " mm duct runs from it to the hole."));
-echo(hex_corner_r <= mid_z
+echo(hex_corner_r <= hex_room
     ? "Fitting: its hex stays within the pod's thickness, so work can overhang the back too."
-    : str("Fitting: its hex stands ", r1(hex_corner_r - mid_z), " mm beyond the faces, so keep work off the back."));
+    : str("Fitting: its hex stands ", r1(hex_corner_r - hex_room), " mm beyond the ", port_z > Pod_thickness / 2 ? "top" : "bottom",
+        " face, so keep work off the back."));
 echo("PIECES_V1", [
     [hex_color(shade(cord_rgb, 0)), "Top cord"],
     [hex_color(shade(cord_rgb, 1)), "Bottom cord"]
