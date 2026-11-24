@@ -2,11 +2,11 @@
 // A square, 3D-printed vacuum pod that holds itself down as well as the work,
 // so it needs no dogs or clamps: it works on any smooth, airtight surface.
 // Each face has a groove round its edge, holding a loop of round foam cord as
-// the seal, and inside it a channel round the edge and two crossing in the
-// middle to spread the vacuum. The channels are round-bottomed and the rest of
-// the face is flat, so they're easy to coat with a brush, and the work is
-// supported all over. A hole through the middle joins the two faces' channels,
-// and a duct runs to it from a 1/4" NPT fitting threaded into the back face: a
+// the seal, and just inside that a single round-bottomed channel, so that air
+// can get out from under the work all round. The rest of the face is flat, so
+// there's little to coat and the work is supported all over. A hole through
+// the pod, on the back of the channel, joins the two faces' channels, and a
+// short duct runs to it from a 1/4" NPT fitting threaded into the back face: a
 // push-to-connect fitting, or a quick-connect insert so the pod unplugs from
 // its hose.
 //
@@ -62,15 +62,15 @@ Rim_width = 4; // [1.5:0.1:15]
 Seal_bend_radius = 10; // [3:0.5:40]
 
 /* [Channels] */
-// Channel width. The channels are round-bottomed, half as deep as they're wide: one runs round just inside each groove, and two cross over the hole in the middle.
+// Channel width. The channel round each face, just inside its groove, is round-bottomed, half as deep as it's wide.
 Channel_width = 6; // [2:0.1:12]
-// Land between the channel round the edge and each groove.
+// Land between each channel and its groove.
 Channel_land = 3; // [1:0.5:15]
 
 /* [Air path] */
-// Diameter of the hole through the middle, which joins the two faces' channels.
+// Diameter of the hole through the pod, on the back of the channels, which joins the two faces' channels.
 Hole_diameter = 6; // [2:0.1:15]
-// Diameter of the duct from the port to the hole.
+// Diameter of the short duct from the port to the hole.
 Duct_diameter = 6; // [3:0.1:12]
 // Port diameter at the face, for a 1/4" NPT male thread to cut its own thread into, or for a 1/4" NPT tap. It narrows by 1/16 of its depth, as the thread does.
 Port_hole = 11.6; // [8:0.05:16]
@@ -149,6 +149,12 @@ inner_r = Seal_bend_radius - Groove_width / 2;
 ring_l = inner_l - 2 * (Channel_land + channel_r);
 ring_w = inner_w - 2 * (Channel_land + channel_r);
 ring_r = min(max(Channel_width, inner_r - Channel_land - channel_r), ring_l / 2, ring_w / 2);
+// The hole sits on the back of the channel, in line with the port. Its
+// countersink dishes it into the channel, stopping half the land short of the
+// groove.
+hole_y = ring_w / 2;
+sink_d = max(Hole_diameter, min(Hole_diameter + 2 * channel_depth, Channel_width + Channel_land));
+sink_depth = (sink_d - Hole_diameter) / 2;
 
 port_end_y = Pod_width / 2 - Port_depth;
 port_mouth_r = Port_hole / 2 + port_chamfer;
@@ -175,7 +181,8 @@ assert(mid_z - npt_major / 2 - face_cut >= min_cover - eps,
 assert(mid_z + Duct_diameter / 2 * sqrt(2) <= top_channel_floor - min_cover && mid_z - Duct_diameter / 2 >= channel_depth + min_cover,
     "The duct comes too close to the channels. Make the pod thicker, or the channels or duct narrower.");
 assert(Duct_diameter <= Port_hole - 1, "The duct must be narrower than the port.");
-assert(port_end_y - Hole_diameter / 2 >= 1, "The port runs into the hole in the middle. Make the port shallower, or the pod wider.");
+assert(Hole_diameter / 2 + 1 <= channel_r + Channel_land, "The hole must stay 1 mm clear of the grooves. Make it smaller, or the channels or land wider.");
+assert(port_end_y >= hole_y - Hole_diameter / 2, "The port reaches past the hole. Make it shallower.");
 assert(port_mouth_r + 2 <= Pod_length / 2 - corner_r,
     str("The port must stay 2 mm clear of the pod's rounded corners. Make the pod at least ", r1(2 * (corner_r + port_mouth_r + 2)),
         " mm long, or the seal bend radius smaller."));
@@ -210,12 +217,11 @@ module groove() {
     }
 }
 
-// The cutter for one face's channels, with the face at height z: a circle
-// swept round the edge channel's centre line, and along both centre lines
-// across it, over the hole. Its centre sits a hair outside the face, so that
-// its widest part doesn't lie exactly in the face. The sweep's straight
-// lengths reach 0.1 mm into its corners, so they overlap rather than meet face
-// to face.
+// The cutter for one face's channel, with the face at height z: a circle
+// swept round the channel's centre line. Its centre sits a hair outside the
+// face, so that its widest part doesn't lie exactly in the face. The sweep's
+// straight lengths reach 0.1 mm into its corners, so they overlap rather than
+// meet face to face.
 module channels(z) {
     r = channel_r;
     sx = ring_l / 2 - ring_r;
@@ -228,8 +234,6 @@ module channels(z) {
             rotate_extrude() translate([ring_r, 0]) circle(r = r);
             translate([cx > 0 ? 0 : -box, cy > 0 ? 0 : -box, -box]) cube([box, box, 2 * box]);
         }
-        translate([-ring_l / 2, 0, 0]) rotate([0, 90, 0]) cylinder(r = r, h = ring_l);
-        translate([0, -ring_w / 2, 0]) rotate([-90, 0, 0]) cylinder(r = r, h = ring_w);
     }
 }
 
@@ -249,12 +253,14 @@ module air_path() {
     }
     // The duct, from just inside the port to just past the hole.
     translate([0, port_end_y + 1, mid_z]) rotate([90, 0, 0])
-        linear_extrude(height = port_end_y + 1 + Duct_diameter / 2) teardrop(Duct_diameter / 2);
-    // The hole through the middle, from one face's channels to the other's,
-    // dished at each face by a 90-degree countersink as deep as the channels.
-    translate([0, 0, channel_depth / 2]) cylinder(d = Hole_diameter, h = Pod_thickness - channel_depth);
-    for (z = [-0.02, Pod_thickness + 0.02]) translate([0, 0, z]) mirror([0, 0, z > 0 ? 0 : 1]) translate([0, 0, -channel_depth - 0.02])
-        cylinder(d1 = Hole_diameter, d2 = Hole_diameter + 2 * channel_depth + 0.04, h = channel_depth + 0.02);
+        linear_extrude(height = port_end_y + 1 - hole_y + Duct_diameter / 2) teardrop(Duct_diameter / 2);
+    // The hole, from one face's channel to the other's, with a 90-degree
+    // countersink at each face.
+    translate([0, hole_y, 0]) {
+        translate([0, 0, channel_depth / 2]) cylinder(d = Hole_diameter, h = Pod_thickness - channel_depth);
+        if (sink_depth > 0) for (z = [-0.02, Pod_thickness + 0.02]) translate([0, 0, z]) mirror([0, 0, z > 0 ? 0 : 1])
+            translate([0, 0, -sink_depth - 0.02]) cylinder(d1 = Hole_diameter, d2 = sink_d + 0.04, h = sink_depth + 0.02);
+    }
 }
 
 module pod() {
@@ -347,8 +353,8 @@ echo(seal_small > hole_gap
     : str("On an MFT-style top: the bottom seal's ", r1(seal_small), " mm fits in the ", hole_gap,
         " mm between two rows of holes, so the pod can sit anywhere along the gap between them",
         seal_big <= hole_gap ? ", either way round." : str(", with its ", cord_outer_l >= cord_outer_w ? "length" : "width", " along the rows.")));
-echo(str("Channels: ", Channel_width, " mm wide and ", r1(channel_depth), " mm deep, round-bottomed: one round the edge of each face and two crossing over a ",
-    Hole_diameter, " mm hole through the middle, which joins the faces and is countersunk ", r1(Hole_diameter + 2 * channel_depth), " mm across in each."));
+echo(str("Channel: ", Channel_width, " mm wide and ", r1(channel_depth), " mm deep, round-bottomed, round each face just inside its groove. A ",
+    Hole_diameter, " mm hole through the pod on the back of the channels joins them", sink_depth > 0 ? str(", countersunk ", r1(sink_d), " mm across in each face") : "", "."));
 echo(str("Port: ", Port_hole, " mm at the back face, tapering to ", r2(Port_hole - Port_depth * npt_taper), " mm, ", Port_depth,
     " mm deep and centred ", r1(mid_z), " mm up, for a 1/4\" NPT fitting to cut its own thread into, or a 1/4\" NPT tap. A ",
     Duct_diameter, " mm duct runs from it to the hole."));
