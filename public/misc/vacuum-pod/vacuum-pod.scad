@@ -28,8 +28,9 @@
 // centred on the origin, with its fitting in the back face (+Y).
 //
 // View = Pod is the part to print. It prints as modelled, either face down,
-// with no supports: the bed face's groove prints as a short bridge, its
-// channels as arches, and the duct is a teardrop. Air leaks through a print's
+// with no supports: each groove has a 45-degree point beyond the cord's seat,
+// so the bed face's groove closes over a step at a time rather than as a
+// bridge, its channel prints as an arch, and the duct is a teardrop. Air leaks through a print's
 // walls and infill, so print it to be airtight: in PETG, ASA or ABS, with
 // extra walls, more top and bottom layers in a concentric pattern, the nozzle a
 // little hotter, a slight over-extrusion, and an infill such as cubic that
@@ -58,7 +59,7 @@ Pod_thickness = 28; // [20:0.5:60]
 Cord_diameter = 6.35; // [2:0.05:15]
 // Groove width. A little under the cord's diameter, so the cord grips its walls.
 Groove_width = 6; // [2:0.05:15]
-// Groove depth. The cord stands proud of each face by its diameter less this, and compresses that much before the face lands. At least half the cord's diameter, to hold it.
+// Groove depth. The cord stands proud of each face by its diameter less this, and compresses that much before the face lands. At least half the cord's diameter, to hold it. This is the depth of the cord's half-round seat: a 45-degree point beyond it, so that the groove prints without support, takes the groove about 1 mm deeper at its centre line.
 Groove_depth = 3.5; // [1:0.1:15]
 // Material between each groove and the pod's outside.
 Rim_width = 4; // [1.5:0.1:15]
@@ -124,6 +125,15 @@ explode = assembly ? Explode / 100 * 50 : 0;
 
 mid_z = Pod_thickness / 2;
 top_groove_floor = Pod_thickness - Groove_depth;
+// Each groove's cross-section: straight walls from the face, a half-round
+// seat for the cord at Groove_depth, and beyond that a 45-degree point, cut
+// off flat where it's groove_tip wide. Printed face down, each layer of the
+// point steps in by no more than the layer height, so the groove closes over
+// without a bridge. The seat's centre stays a hair inside the face.
+groove_r = Groove_width / 2;
+groove_centre = max(Groove_depth - groove_r, 0.05);
+groove_tip = 0.4;
+groove_top = groove_centre + groove_r * sqrt(2) - groove_tip / 2;
 channel_r = Channel_width / 2;
 channel_depth = channel_r;
 top_channel_floor = Pod_thickness - channel_depth;
@@ -166,7 +176,7 @@ hex_corner_r = Fitting_hex / sqrt(3);
 fitting_reach = Pod_width / 2 + Fitting_projection + tube_stub;
 // The pod's least thickness for the fitting's thread to pass between the
 // faces' grooves and channels.
-face_cut = max(Groove_depth, channel_depth);
+face_cut = max(groove_top, channel_depth);
 min_thickness = 2 * (face_cut + min_cover) + npt_major;
 // The clear space between neighbouring rows of the table's holes.
 hole_gap = Hole_pitch - Table_hole_diameter;
@@ -214,31 +224,48 @@ module rounded_rect(l, w, r) {
     else square([l, w], center = true);
 }
 
-module groove() {
-    difference() {
-        rounded_rect(seal_l + Groove_width, seal_w + Groove_width, Seal_bend_radius + Groove_width / 2);
-        rounded_rect(seal_l - Groove_width, seal_w - Groove_width, Seal_bend_radius - Groove_width / 2);
+// Sweeps a cross-section round a rounded rectangle l by w, with corners of
+// radius bend, centred on the origin: straight lengths along each side and a
+// quarter turn at each corner. The cross-section is the child, drawn in 2D
+// across the path (x) and up from the plane z = 0 (y), reaching no more than
+// reach from its origin. The straight lengths reach 0.1 mm into the corners,
+// so they overlap rather than meet face to face.
+module loop_sweep(l, w, bend, reach) {
+    sx = l / 2 - bend;
+    sy = w / 2 - bend;
+    box = bend + reach + 1;
+    for (y = [-1, 1] * w / 2) translate([-sx - 0.1, y, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * sx + 0.2) children();
+    for (x = [-1, 1] * l / 2) translate([x, sy + 0.1, 0]) rotate([90, 0, 0]) linear_extrude(height = 2 * sy + 0.2) children();
+    for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * sy, 0]) intersection() {
+        rotate_extrude() translate([bend, 0]) children();
+        translate([cx > 0 ? 0 : -box, cy > 0 ? 0 : -box, -box]) cube([box, box, 2 * box]);
     }
 }
 
-// The cutter for one face's channel, with the face at height z: a circle
-// swept round the channel's centre line. Its centre sits a hair outside the
-// face, so that its widest part doesn't lie exactly in the face. The sweep's
-// straight lengths reach 0.1 mm into its corners, so they overlap rather than
-// meet face to face.
-module channels(z) {
-    r = channel_r;
-    sx = ring_l / 2 - ring_r;
-    sy = ring_w / 2 - ring_r;
-    box = ring_r + r + 1;
-    translate([0, 0, z]) {
-        for (y = [-1, 1] * ring_w / 2) translate([-sx - 0.1, y, 0]) rotate([0, 90, 0]) cylinder(r = r, h = 2 * sx + 0.2);
-        for (x = [-1, 1] * ring_l / 2) translate([x, -sy - 0.1, 0]) rotate([-90, 0, 0]) cylinder(r = r, h = 2 * sy + 0.2);
-        for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * sy, 0]) intersection() {
-            rotate_extrude() translate([ring_r, 0]) circle(r = r);
-            translate([cx > 0 ? 0 : -box, cy > 0 ? 0 : -box, -box]) cube([box, box, 2 * box]);
-        }
-    }
+// A groove's cross-section, from just outside the face, as a single polygon:
+// the engine meshes the sweep of a 2D union with non-manifold edges where the
+// straight lengths meet the corners.
+module groove_section() {
+    r = groove_r;
+    c = groove_centre;
+    polygon(concat(
+        [[-r, -0.05]],
+        [for (a = [180:-7.5:135]) [r * cos(a), c + r * sin(a)]],
+        [[-groove_tip / 2, groove_top], [groove_tip / 2, groove_top]],
+        [for (a = [45:-7.5:0]) [r * cos(a), c + r * sin(a)]],
+        [[r, -0.05]]));
+}
+
+// A channel's cross-section. Its centre sits a hair outside the face, so that
+// its widest part doesn't lie exactly in the face.
+module channel_section() {
+    translate([0, -0.02]) circle(r = channel_r);
+}
+
+// The cutters for one face, with the face at z = 0 and the pod above it.
+module face_cuts() {
+    loop_sweep(seal_l, seal_w, Seal_bend_radius, max(Groove_width, groove_top)) groove_section();
+    loop_sweep(ring_l, ring_w, ring_r, Channel_width) channel_section();
 }
 
 // A circle with a 45-degree point on top, so a horizontal hole prints
@@ -270,9 +297,8 @@ module air_path() {
 module pod() {
     difference() {
         linear_extrude(height = Pod_thickness) rounded_rect(Pod_length, Pod_width, corner_r);
-        for (z = [-eps, top_groove_floor]) translate([0, 0, z]) linear_extrude(height = Groove_depth + eps) groove();
-        channels(-0.02);
-        channels(Pod_thickness + 0.02);
+        face_cuts();
+        translate([0, 0, Pod_thickness]) mirror([0, 0, 1]) face_cuts();
         air_path();
     }
 }
@@ -349,7 +375,7 @@ echo(str("Pod: ", Pod_length, " x ", Pod_width, " x ", Pod_thickness,
     " inside the port, duct and hole too, blowing the hole and channels clear after each coat."));
 echo(str("Seals: cut two ", round(cord_length), " mm lengths of ", Cord_diameter,
     " mm foam cord, one for each face, and join each one's ends with CA glue, cut at 45 degrees. Each stands ", r2(cord_proud), " mm proud in a ",
-    Groove_width, " mm wide, ", Groove_depth, " mm deep groove."));
+    Groove_width, " mm wide groove with a half-round seat ", Groove_depth, " mm deep, and a point beyond it that takes the groove to ", r2(groove_top), " mm."));
 echo(str("Holding: each face pulls on ", r1(seal_area / 100), " cm2 inside its seal, ", round(seal_area / 100),
     " N for every 0.1 bar of vacuum. The work must cover the top seal, at least ", r1(cord_outer_l), " x ", r1(cord_outer_w),
     " mm, and the surface under the bottom seal must be smooth and airtight."));
