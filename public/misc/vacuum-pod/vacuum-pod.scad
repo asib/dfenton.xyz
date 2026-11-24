@@ -116,6 +116,10 @@ tube_stub = 20;
 // the duct and each face's channels.
 min_cover = 2.5;
 port_chamfer = 1;
+// The countersinks' sides are this many degrees from the hole's axis, so the
+// bottom face's slopes at 50 degrees as it prints, well clear of a slicer's
+// 40-degree overhang limit.
+sink_angle = 40;
 
 function r1(x) = round(x * 10) / 10;
 function r2(x) = round(x * 100) / 100;
@@ -171,10 +175,10 @@ ring_w = inner_w - 2 * (Channel_land + channel_r);
 ring_r = min(max(Channel_width, inner_r - Channel_land - channel_r), ring_l / 2, ring_w / 2);
 // The hole sits on the back of the channel, in line with the port. Its
 // countersink dishes it into the channel, stopping half the land short of the
-// groove.
+// groove, and no deeper than the channel.
 hole_y = ring_w / 2;
-sink_d = max(Hole_diameter, min(Hole_diameter + 2 * channel_depth, Channel_width + Channel_land));
-sink_depth = (sink_d - Hole_diameter) / 2;
+sink_d = max(Hole_diameter, min(Hole_diameter + 2 * channel_depth * tan(sink_angle), Channel_width + Channel_land));
+sink_depth = (sink_d - Hole_diameter) / 2 / tan(sink_angle);
 
 port_end_y = Pod_width / 2 - Port_depth;
 port_mouth_r = Port_hole / 2 + port_chamfer;
@@ -285,14 +289,15 @@ module air_path() {
     // The duct, from just inside the port to just past the hole.
     translate([0, port_end_y + 1, mid_z]) rotate([90, 0, 0])
         linear_extrude(height = port_end_y + 1 - hole_y + Duct_diameter / 2) teardrop(Duct_diameter / 2);
-    // The hole, from one face's channel to the other's, with a 90-degree
+    // The hole, from one face's channel to the other's, with an 80-degree
     // countersink at each face. It starts where the countersinks narrow to
     // it, so that it leaves no ledge.
     hole_end = sink_depth > 0 ? sink_depth : channel_r / 2;
     translate([0, hole_y, 0]) {
         translate([0, 0, hole_end]) cylinder(d = Hole_diameter, h = Pod_thickness - 2 * hole_end);
         if (sink_depth > 0) for (z = [-0.02, Pod_thickness + 0.02]) translate([0, 0, z]) mirror([0, 0, z > 0 ? 0 : 1])
-            translate([0, 0, -sink_depth - 0.02]) cylinder(d1 = Hole_diameter, d2 = sink_d + 0.04, h = sink_depth + 0.02);
+            translate([0, 0, -sink_depth - 0.02])
+                cylinder(d1 = Hole_diameter, d2 = Hole_diameter + 2 * (sink_depth + 0.02) * tan(sink_angle), h = sink_depth + 0.02);
     }
 }
 
@@ -387,7 +392,7 @@ echo(seal_small > hole_gap
         " mm between two rows of holes, so the pod can sit anywhere along the gap between them",
         seal_big <= hole_gap ? ", either way round." : str(", with its ", cord_outer_l >= cord_outer_w ? "length" : "width", " along the rows.")));
 echo(str("Channel: ", Channel_width, " mm wide and ", r1(channel_depth), " mm deep, round-sided with a 45-degree point, round each face just inside its groove. A ",
-    Hole_diameter, " mm hole through the pod on the back of the channels joins them", sink_depth > 0 ? str(", countersunk ", r1(sink_d), " mm across in each face") : "", "."));
+    Hole_diameter, " mm hole through the pod on the back of the channels joins them", sink_depth > 0 ? str(", countersunk ", r1(sink_d), " mm across at ", 2 * sink_angle, " degrees in each face") : "", "."));
 echo(str("Port: ", Port_hole, " mm at the back face, tapering to ", r2(Port_hole - Port_depth * npt_taper), " mm, ", Port_depth,
     " mm deep and centred ", r1(mid_z), " mm up, for a 1/4\" NPT fitting to cut its own thread into, or a 1/4\" NPT tap. A ",
     Duct_diameter, " mm duct runs from it to the hole."));
