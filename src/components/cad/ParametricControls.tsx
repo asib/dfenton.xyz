@@ -20,7 +20,9 @@ type Entry = CadEntry & { href: string; source: string };
 export interface LocalModel { name: string; text: string; parameters: Parameter[]; model: CompiledModel; conditions?: Record<string, ParameterCondition> }
 // A FeatureScript design's conditions come from its precondition, not the item's metadata.
 interface Source { text: string; parameters: Parameter[]; conditions?: Record<string, ParameterCondition> }
-interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet; warnings?: string; step?: string }
+// A FeatureScript rebuild is shown before its files are made: until they are, `exporting`
+// holds the job making them, and there's nothing to download.
+interface Result { values: Values; stl: string; source: string; output: string; drawings?: DrawingSheet; warnings?: string; step?: string; exporting?: AbortController }
 
 export default function ParametricControls({ entry, local, available, onCompiled, onOutput, onViewCutList, onDrawings, worksheets, onWorksheets }: {
   entry: Entry; local?: LocalModel; available: boolean; onCompiled: (model: CompiledModel) => void;
@@ -206,8 +208,15 @@ export default function ParametricControls({ entry, local, available, onCompiled
       const updating = () => { if (!controller.signal.aborted) setPhase('Updating model…'); };
       let compiled;
       if (featureScript) {
+        // The model comes back as a coarse mesh to show; its STL and STEP follow.
         compiled = await compileJob({ kind: 'compile', language: 'featurescript', source: source.text,
-          values: values as Record<string, string | number | boolean> }, controller.signal, updating);
+          values: values as Record<string, string | number | boolean>, preview: true, volumes: !!outputLabel }, controller.signal, updating,
+        (exports) => {
+          if (controller.signal.aborted) return;
+          const stl = URL.createObjectURL(new Blob([exports.stl], { type: 'model/stl' }));
+          const step = URL.createObjectURL(new Blob([exports.step], { type: 'model/step' }));
+          setResult((current) => current?.exporting === controller ? { ...current, stl, step, output: exports.output, exporting: undefined } : current);
+        });
       } else {
         text = configuredSource(source.text, source.parameters, values);
         compiled = await compileJob({ kind: 'compile', source: text, drawings: hasDrawings, lenient: !!local }, controller.signal, updating);
@@ -215,9 +224,10 @@ export default function ParametricControls({ entry, local, available, onCompiled
       if (controller.signal.aborted || compiled.kind !== 'model') return;
       onCompiled(compiled);
       setResult({ values: { ...values },
-        stl: URL.createObjectURL(new Blob([compiled.stl], { type: 'model/stl' })),
+        stl: featureScript ? '' : URL.createObjectURL(new Blob([compiled.stl], { type: 'model/stl' })),
         source: featureScript ? sourceUrl : URL.createObjectURL(new Blob([text], { type: 'text/plain' })),
         step: compiled.step && URL.createObjectURL(new Blob([compiled.step], { type: 'model/step' })),
+        exporting: featureScript ? controller : undefined,
         output: compiled.output,
         drawings: compiled.drawings,
         warnings: compiled.warnings,
@@ -623,7 +633,7 @@ export default function ParametricControls({ entry, local, available, onCompiled
     }}>View cut list ↓</a></p>}
     {!source && error && <button type="button" onClick={() => { setError(''); setPhase('Loading parameters…'); setRetry((value) => value + 1); }}>Retry controls</button>}
     <div className="cad-downloads">
-      {canDownload ? <>
+      {canDownload && result.exporting ? <span className="cad-download-pending">Preparing the STL and STEP…</span> : canDownload ? <>
         <a href={result.stl} download={stlName}>Download STL ↓</a>
         {featureScript ? result.step && <a href={result.step} download={stepName}>Download STEP ↓</a>
           : <a href={result.source} download={configuredName}>Configured source ↓</a>}
