@@ -18,7 +18,10 @@ export interface CadEntry extends EntryBase {
   type: 'cad';
   model: string;
   displayModel?: string;
+  // An OpenSCAD (.scad) or FeatureScript (.fs) source.
   source?: string;
+  // A FeatureScript design's default STEP, offered until an edit builds another.
+  step?: string;
   sourceUrl?: string;
   notes?: string;
   // Direction from the model's center to the default camera; Z is up.
@@ -102,7 +105,8 @@ export const miscEntries = Object.entries(metadata).map(([path, entry]) => {
   if (entry.type === 'cad' && (
     typeof entry.model !== 'string' || !/^[a-z0-9][a-z0-9-]*\.stl$/.test(entry.model) ||
     (entry.displayModel !== undefined && (typeof entry.displayModel !== 'string' || !/^[a-z0-9][a-z0-9-]*\.json$/.test(entry.displayModel))) ||
-    (entry.source !== undefined && (typeof entry.source !== 'string' || !/^[a-z0-9][a-z0-9-]*\.scad$/.test(entry.source))) ||
+    (entry.source !== undefined && (typeof entry.source !== 'string' || !/^[a-z0-9][a-z0-9-]*\.(scad|fs)$/.test(entry.source))) ||
+    (entry.step !== undefined && (typeof entry.step !== 'string' || !/^[a-z0-9][a-z0-9-]*\.step$/.test(entry.step) || !entry.source?.endsWith('.fs'))) ||
     (entry.sourceUrl !== undefined && (typeof entry.sourceUrl !== 'string' || !entry.sourceUrl.startsWith('https://'))) ||
     (entry.notes !== undefined && typeof entry.notes !== 'string') ||
     (entry.camera !== undefined && (!Array.isArray(entry.camera) || (entry.camera as unknown[]).length !== 3 ||

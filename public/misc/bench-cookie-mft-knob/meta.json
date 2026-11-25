@@ -1,0 +1,31 @@
+{
+  "type": "cad",
+  "title": "Bench cookie MFT knob",
+  "description": "A 3D-printed knob that clamps a Rockler Bench Cookie Plus to an MFT-style table with a 5/16-18 bolt through a dog hole. Set your table thickness and the cookie's insert depth, pick a bolt length that fits, then download the knob to print.",
+  "date": "2026-11-13",
+  "preview": "preview.webp",
+  "previewDark": "preview-dark.webp",
+  "model": "bench-cookie-mft-knob.stl",
+  "displayModel": "bench-cookie-mft-knob-display.json",
+  "source": "bench-cookie-mft-knob.scad",
+  "camera": [1.35, -1.8, -0.45],
+  "notes": "The Bench Cookie Plus has a 5/16-18 threaded insert in its underside. A 5/16-18 hex bolt comes up through a 20 mm table hole into it, its head captive in a hex pocket in the knob's underside. Turning the knob under the table screws the bolt into the cookie and pulls the cookie down onto the table. Three crush ribs in the pocket grip the head's flats, so the bolt stays in the knob when the cookie is unscrewed; press the head in once, with a vise or clamp if it's tight. The knob's boss locates in the hole and centres the bolt, and the ring round it bears on the table's underside, as on the tightening dogs' bottom knob, whose body, ring, boss and knurl this copies. The bolt must reach far enough into the insert to hold but stop short of its bottom, or it bottoms out before the cookie clamps; the build notes list the bolt lengths that fit. Rockler doesn't publish the insert's depth; a bolt threads 15 mm into the cookies measured here, so check yours by threading one in until it stops. The defaults are an 18 mm table top and that 15 mm insert, which take a 1 1/2 inch bolt. Choose Knob only before downloading an STL to print. It prints as shown, head pocket on the bed and boss up, with two sacrificial bridging layers over the pocket. The cookie, insert, bolt and table are reference geometry.",
+  "attribution": {
+    "text": "The knob's body, ring and boss are the bottom knob from the shared Onshape tightening-dog document.",
+    "url": "https://cad.onshape.com/documents/e98aca560585c6c2aecfad66/w/663a361251d2ed28f8948995/e/89734733be4fd7256d7fefaf"
+  },
+  "customizer": {
+    "outputLabel": "Build notes",
+    "conditions": {
+      "Explode": { "parameter": "View", "value": "assembly" },
+      "Knurl_teeth": { "parameter": "Knurl", "value": true }
+    },
+    "parts": [
+      { "id": "knob", "label": "Knob (printed)", "color": "#d06a1f", "darkColor": "#f59a52" },
+      { "id": "bolt", "label": "5/16-18 hex bolt", "color": "#2e3238", "darkColor": "#a3abb8" },
+      { "id": "cookie", "label": "Bench Cookie Plus", "color": "#2f6db3", "darkColor": "#78aef0" },
+      { "id": "insert", "label": "Threaded insert", "color": "#a8862c", "darkColor": "#e2bf5d" },
+      { "id": "table", "label": "Table top", "color": "#c9c3b6", "darkColor": "#77726a" }
+    ]
+  }
+}

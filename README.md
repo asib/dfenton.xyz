@@ -14,7 +14,9 @@ Dependabot opens weekly dependency PRs, configured in `.github/dependabot.yml`. 
 
 Dependabot gives `occt-import-js` PRs of its own, as it does `openrscad-engine`, rather than batching it with other updates: it runs third-party WebAssembly on visitors' STEP files, so review a new version on its own.
 
-`public/_headers` sets Pages' response headers. It gives the workers that read visitors' files (`dist/assets/workers/`, where `vite.config.ts` puts them) a Content-Security-Policy allowing requests only to this site, so their third-party WebAssembly can't send a file anywhere else. `vite preview` ignores `_headers`; check headers on a Pages preview.
+The FeatureScript engine isn't on npm: the `featurescript-engine` dependency is the archive attached to a `wasm-v*` release of github.com/asib/featurescript-engine (the engine and OpenCascade 7.9.2 compiled to WebAssembly, std, and the fonts sketch text uses, built by that repository's `crates/fs-wasm/pack.sh`; `ENGINE_COMMIT` in the package names its commit), and `bun.lock` pins its hash. Dependabot doesn't update it. To update it, `bun add` the new release's archive URL, rebuild each FeatureScript item's default model with `bun scripts/export-featurescript.mjs <source.fs> <model.stl> <model.step>` and run `bun test tests/featurescript.test.mjs`. The module, `fs_wasm.wasm`, must stay under Pages' 25 MiB file limit (it's 22 MiB).
+
+`public/_headers` sets Pages' response headers. It gives the workers that read visitors' files (`dist/assets/workers/`, where `vite.config.ts` puts them; the FeatureScript engine's among them) a Content-Security-Policy allowing requests only to this site, so their third-party WebAssembly can't send a file anywhere else. `vite preview` ignores `_headers`; check headers on a Pages preview.
 
 Otherwise, Pages is setup with push-to-deploy, so there's really nothing that needs doing beyond that!
 
