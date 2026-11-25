@@ -52,12 +52,26 @@ describe('FeatureScript designs', () => {
 
   test('build the committed default model, and edited values', async () => {
     const defaults = await engine.build(source);
-    expect(volume(defaults.log)).toBeCloseTo(108876.153, 2);
+    expect(volume(defaults.log)).toBeCloseTo(109322.241, 2);
     const committed = new Uint8Array(readFileSync(new URL('../public/misc/featurescript-desk-tidy/desk-tidy.stl', import.meta.url)));
     expect(triangles(defaults.stl)).toBe(triangles(committed));
     expect(new TextDecoder().decode(defaults.step.slice(0, 13))).toBe('ISO-10303-21;');
     const edited = await engine.build(source, { length: 160, pins: 5, handle: false, label: 'HI' });
     expect(volume(edited.log)).toBeGreaterThan(volume(defaults.log) + 10_000);
+  }, 120_000);
+
+  test('give a coarse mesh to show before the files a build writes', async () => {
+    const built = await engine.build(source, { pins: 5 });
+    const model = await engine.model(source, { pins: 5 });
+    // As the page's worker asks: a mesh to 0.05 mm first, then the STL and STEP to download.
+    const preview = model.mesh(0.05);
+    expect(triangles(preview) * 2).toBeLessThan(triangles(built.stl));
+    expect(Buffer.from(model.mesh()).equals(Buffer.from(built.stl))).toBe(true);
+    expect(new TextDecoder().decode(model.step().slice(0, 13))).toBe('ISO-10303-21;');
+    expect(model.output + model.volumes()).toBe(built.log);
+    // The engine holds one model: a later one replaces it.
+    await engine.model(source, { pins: 4 });
+    expect(() => model.mesh()).toThrow('later model');
   }, 120_000);
 
   test('refuse values outside a choice with the engine’s message', async () => {
