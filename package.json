@@ -13,7 +13,7 @@
   "dependencies": {
     "@react-spring/web": "^10.1.2",
     "clsx": "^2.1.1",
-    "featurescript-engine": "https://github.com/asib/featurescript-engine/releases/download/wasm-v0.2.0/featurescript-engine-wasm-0.2.0.tar.gz",
+    "featurescript-engine": "https://github.com/asib/featurescript-engine/releases/download/wasm-v0.3.0/featurescript-engine-wasm-0.3.0.tar.gz",
     "jspdf": "4.2.1",
     "occt-import-js": "0.0.23",
     "openrscad-engine": "0.14.2",
