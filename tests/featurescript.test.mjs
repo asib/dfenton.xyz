@@ -60,6 +60,20 @@ describe('FeatureScript designs', () => {
     expect(volume(edited.log)).toBeGreaterThan(volume(defaults.log) + 10_000);
   }, 120_000);
 
+  test('give a coarse mesh to show before the files a build writes', async () => {
+    const built = await engine.build(source, { pins: 5 });
+    const model = await engine.model(source, { pins: 5 });
+    // As the page's worker asks: a mesh to 0.05 mm first, then the STL and STEP to download.
+    const preview = model.mesh(0.05);
+    expect(triangles(preview) * 2).toBeLessThan(triangles(built.stl));
+    expect(Buffer.from(model.mesh()).equals(Buffer.from(built.stl))).toBe(true);
+    expect(new TextDecoder().decode(model.step().slice(0, 13))).toBe('ISO-10303-21;');
+    expect(model.output + model.volumes()).toBe(built.log);
+    // The engine holds one model: a later one replaces it.
+    await engine.model(source, { pins: 4 });
+    expect(() => model.mesh()).toThrow('later model');
+  }, 120_000);
+
   test('refuse values outside a choice with the engine’s message', async () => {
     await expect(engine.build(source, { edgeFinish: 'WAVY' })).rejects.toThrow('edgeFinish must be one of its choices');
   }, 120_000);
