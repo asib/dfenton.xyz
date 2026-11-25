@@ -52,7 +52,7 @@ describe('FeatureScript designs', () => {
 
   test('build the committed default model, and edited values', async () => {
     const defaults = await engine.build(source);
-    expect(volume(defaults.log)).toBeCloseTo(108876.153, 2);
+    expect(volume(defaults.log)).toBeCloseTo(109322.241, 2);
     const committed = new Uint8Array(readFileSync(new URL('../public/misc/featurescript-desk-tidy/desk-tidy.stl', import.meta.url)));
     expect(triangles(defaults.stl)).toBe(triangles(committed));
     expect(new TextDecoder().decode(defaults.step.slice(0, 13))).toBe('ISO-10303-21;');

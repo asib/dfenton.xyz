@@ -7,7 +7,7 @@
       "dependencies": {
         "@react-spring/web": "^10.1.2",
         "clsx": "^2.1.1",
-        "featurescript-engine": "https://github.com/asib/featurescript-engine/releases/download/wasm-v0.1.0/featurescript-engine-wasm-0.1.0.tar.gz",
+        "featurescript-engine": "https://github.com/asib/featurescript-engine/releases/download/wasm-v0.1.1/featurescript-engine-wasm-0.1.1.tar.gz",
         "jspdf": "4.2.1",
         "occt-import-js": "0.0.23",
         "openrscad-engine": "0.14.2",
@@ -260,7 +260,7 @@
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" } }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
 
-    "featurescript-engine": ["featurescript-engine@https://github.com/asib/featurescript-engine/releases/download/wasm-v0.1.0/featurescript-engine-wasm-0.1.0.tar.gz", {}, "sha512-pRnheyvztzT/9OpBXBZVVpjLVjDGh0iP5vJIFYHDHAylYqNVGOOY8D5j+bopcEl/avzDVXXu7IWQgOlfRih1JQ=="],
+    "featurescript-engine": ["featurescript-engine@https://github.com/asib/featurescript-engine/releases/download/wasm-v0.1.1/featurescript-engine-wasm-0.1.1.tar.gz", {}, "sha512-BD0i+4Nt180VMWjrgz/6BmUzxThD9vPHy+vmZLFJNI6dg9lNPk4oIdOx08yyIEMcMvdSLWE/ghWddhdZDqdTVQ=="],
 
     "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
