@@ -55,8 +55,10 @@
 //
 // View = MFT platform is the platform to print. It prints as modelled,
 // underside down, with no supports. The bed's top face is what the bottom
-// seal pulls against, so print its top skin airtight, with several concentric
-// top layers, and coat it like the pod.
+// seal pulls against, so print it solid, with a concentric top surface,
+// whose rings run along the seal rather than under it, and coat it like the
+// pod. vacuum-pod-platform.3mf beside this file is a Bambu Studio project of
+// the default platform set up that way.
 
 /* [View] */
 // Assembly shows the pod on a patch of table with work on top, before the vacuum pulls them down onto the cords; Assembly on the MFT platform stands it on its platform, held to the table by two tightening dogs. Pod and MFT platform are the parts to print.
@@ -664,7 +666,7 @@ echo(hex_corner_r <= hex_room
 if (platform_view) {
     echo(str("MFT platform: ", r1(plat_max[0] - plat_min[0]), " x ", r1(plat_max[1] - plat_min[1]), " mm, a ", Platform_thickness,
         " mm bed with ", Stop_height, " mm stops at its corners, ", Stop_clearance, " mm clear of the pod. Print it as modelled, underside down,",
-        " with no supports. The bottom seal pulls against the bed's top face, so print its top skin airtight, with several concentric top layers,",
+        " with no supports. The bottom seal pulls against the bed's top face, so print it solid, with a concentric top surface,",
         " and coat it like the pod."));
     echo(str("Dogs: ", Pitches_x, " pitch(es) along X and ", Pitches_y, " along Y, ", r1(dog_spacing), " mm apart",
         Slot_length > 0 ? str("; dog 2's slot takes ", r1(dog_spacing - Slot_length / 2), " to ", r1(dog_spacing + Slot_length / 2), " mm") : "",
