@@ -28,10 +28,12 @@
 // on its MFT platform: a flat bed for the bottom seal, with low stops at its
 // corners that box the pod in, and two pads that the tightening dogs from the
 // vacuum puck MFT mount clamp to an MFT-style top. Each dog is an M6 rod with
-// a knurled knob under the table and a flangeless one on the pad. The vacuum
-// still holds the pod down, and nothing fastens it to the platform: the stops
-// only keep it from sliding, and leave the middle of each side open, so the
-// fitting is clear.
+// a knurled knob under the table and a flangeless one on the pad. By default
+// the dogs go in two neighbouring holes, one either side of the pod, which is
+// narrow enough along X for their 30 mm knobs to clear it. The vacuum still
+// holds the pod down, and nothing fastens it to the platform: the stops only
+// keep it from sliding, and leave the middle of each side open for the knobs
+// and the fitting.
 //
 // All dimensions are millimetres. Z is up and the table top is Z=0. The pod is
 // centred on the origin, with its fitting in the back face (+Y).
@@ -63,8 +65,8 @@ View = "assembly"; // [assembly:Assembly with table and work, platform_assembly:
 Explode = 0; // [0:1:100]
 
 /* [Pod] */
-// Pod length, along X.
-Pod_length = 75; // [40:0.5:200]
+// Pod length, along X. 60 mm leaves room for the MFT platform's dog knobs in the holes either side. A 75 mm pod fits the platform with its dogs at diagonal corners of a square of holes instead, one pitch apart both ways.
+Pod_length = 60; // [40:0.5:200]
 // Pod width, along Y, front to back. The fitting is in the back face.
 Pod_width = 75; // [40:0.5:200]
 // Pod thickness. The port runs in between the two grooves, so it sets the least thickness.
@@ -125,14 +127,14 @@ Stop_height = 6; // [1:0.5:20]
 Stop_wall = 3; // [1.5:0.5:10]
 // Gap all round between the pod and the stops.
 Stop_clearance = 0.5; // [0:0.1:3]
-// Hole pitches between the two dogs along X. With an odd number both ways, the pod sits in the middle of a square of holes, the dogs at two of its corners.
+// Hole pitches between the two dogs along X. One along X and none along Y puts them in two neighbouring holes, one either side of the pod. With an odd number both ways, the pod sits in the middle of a square of holes, the dogs at two of its corners, which suits pods too long to go between neighbouring holes.
 Pitches_x = 1; // [0:1:6]
 // Hole pitches between the two dogs along Y, front to back.
-Pitches_y = 1; // [0:1:6]
+Pitches_y = 0; // [0:1:6]
 // Pad hole width for the dog's M6 rod.
 Rod_hole = 7; // [6.2:0.1:12]
-// Slot length in the back dog's hole, along the line between the dogs, for table holes off their nominal spacing. The front dog's hole is round, so the platform can't slide. Zero leaves both round.
-Slot_length = 2; // [0:0.5:30]
+// Slot length in dog 2's hole, toward +X (and +Y), along the line between the dogs, for table holes off their nominal spacing. Dog 1's hole stays round, so the platform can't slide. Zero leaves both round: their play on the rods takes about 1 mm either way, plenty between neighbouring holes.
+Slot_length = 0; // [0:0.5:30]
 // Top knob diameter. Each pad is 3 mm larger in radius.
 Knob_diameter = 30; // [16:0.5:50]
 // Top knob height above the pad.
@@ -305,10 +307,10 @@ pocket_l = Pod_length + 2 * Stop_clearance;
 pocket_w = Pod_width + 2 * Stop_clearance;
 pocket_r = corner_r + Stop_clearance;
 // The dogs sit in table holes whole pitches apart, symmetric about the pod's
-// centre: the front one, round-holed, at front left, and the slotted one at
-// back right. Each slot runs along the line through both dogs, which passes
-// through the pod's centre, so a knob is nearest the pod at its slot's inner
-// end.
+// centre: dog 1, always round-holed, toward -X (and -Y), and dog 2, which may
+// be slotted, toward +X (and +Y). The slot runs along the line through both
+// dogs, which passes through the pod's centre, so dog 2's knob is nearest the
+// pod at the slot's inner end.
 dog_dx = Pitches_x * Hole_pitch / 2;
 dog_dy = Pitches_y * Hole_pitch / 2;
 dogs = [[-dog_dx, -dog_dy], [dog_dx, dog_dy]];
@@ -323,9 +325,18 @@ plat_max = [max(bed_l / 2, max([for (e = pad_ends) e[0]]) + pad_r), max(bed_w / 
 function rounded_gap(p, l, w, r) = norm([max(abs(p[0]) - (l / 2 - r), 0), max(abs(p[1]) - (w / 2 - r), 0)]) - r;
 // Plan distance from a point to an axis-aligned box, zero inside it.
 function box_gap(p, x0, x1, y0, y1) = norm([max(x0 - p[0], 0, p[0] - x1), max(y0 - p[1], 0, p[1] - y1)]);
-// Closest a dog's knob comes to the stops, and to the fitting and its tube,
-// sampled along its slot.
-function knob_stop_gap(i) = min([for (t = [-1:0.5:1]) rounded_gap(slot_end(i, t), stops_l, stops_w, stops_r)]) - knob_r;
+// Plan distance from a point q, relative to a quarter disc's centre and
+// turned so the quarter lies toward +X and +Y, to that quarter of a disc of
+// radius r.
+function quarter_gap(q, r) = q[0] >= 0 && q[1] >= 0 ? max(norm(q) - r, 0)
+    : norm([q[0] < 0 ? q[0] : max(q[0] - r, 0), q[1] < 0 ? q[1] : max(q[1] - r, 0)]);
+// Plan distance from a point to the nearest corner stop.
+stop_centre = [Pod_length / 2 - corner_r, Pod_width / 2 - corner_r];
+function stops_gap(p) = min([for (sx = [-1, 1], sy = [-1, 1]) quarter_gap([sx * p[0] - stop_centre[0], sy * p[1] - stop_centre[1]], stops_r)]);
+// Closest a dog's knob comes to the pod, wherever it sits inside the stops,
+// to the stops, and to the fitting and its tube, sampled along its slot.
+function knob_gap(i) = min([for (t = [-1:0.5:1])
+    min(rounded_gap(slot_end(i, t), pocket_l, pocket_w, pocket_r), stops_gap(slot_end(i, t)))]) - knob_r;
 function knob_fitting_gap(i) = min([for (t = [-1:0.5:1])
     box_gap(slot_end(i, t), -hex_corner_r, hex_corner_r, Pod_width / 2, fitting_reach)]) - knob_r;
 platform_pod_z = Platform_thickness + cord_proud + 0.1;
@@ -337,12 +348,12 @@ if (platform_view) {
     assert(Pod_length / 2 - corner_r >= hex_corner_r + 1, "The back stops would touch the fitting. Make the pod longer, or the seal bend radius smaller.");
     assert(knob_top + 1 <= Platform_thickness + Pod_thickness, "The dog knobs must sit below the pod's top face, so that work can overhang them.");
     for (i = [0:1]) {
-        assert(knob_stop_gap(i) >= Knob_clearance,
-            str(i == 0 ? "The front" : "The back", " dog's knob would hit the stops or pod",
-                dog_slot(i) > 0 ? " at the inner end of its slot" : "", ". Increase the hole pitches between the dogs",
-                dog_slot(i) > 0 ? ", shorten the slot" : "", " or make the stops thinner."));
+        assert(knob_gap(i) >= Knob_clearance,
+            str("Dog ", i + 1, "'s knob would hit the pod or a stop",
+                dog_slot(i) > 0 ? " at the inner end of its slot" : "", ". Make the pod smaller or the stops thinner, or increase the hole pitches between the dogs",
+                dog_slot(i) > 0 ? ", or shorten the slot." : "."));
         assert(knob_top + Knob_clearance <= platform_pod_z + port_z - hex_corner_r || knob_fitting_gap(i) >= Knob_clearance,
-            str(i == 0 ? "The front" : "The back", " dog's knob would hit the fitting. Change the hole pitches between the dogs."));
+            str("Dog ", i + 1, "'s knob would hit the fitting. Change the hole pitches between the dogs."));
     }
 }
 
@@ -656,9 +667,9 @@ if (platform_view) {
         " with no supports. The bottom seal pulls against the bed's top face, so print its top skin airtight, with several concentric top layers,",
         " and coat it like the pod."));
     echo(str("Dogs: ", Pitches_x, " pitch(es) along X and ", Pitches_y, " along Y, ", r1(dog_spacing), " mm apart",
-        Slot_length > 0 ? str("; the back dog's slot takes ", r1(dog_spacing - Slot_length / 2), " to ", r1(dog_spacing + Slot_length / 2), " mm") : "",
+        Slot_length > 0 ? str("; dog 2's slot takes ", r1(dog_spacing - Slot_length / 2), " to ", r1(dog_spacing + Slot_length / 2), " mm") : "",
         ". Each clamps ", Table_thickness + Platform_thickness, " mm (table + pad) between its knobs. The knobs come within ",
-        r1(min(knob_stop_gap(0), knob_stop_gap(1))), " mm of the stops."));
+        r1(min(knob_gap(0), knob_gap(1))), " mm of the pod and stops."));
     echo(str("Knob tops: ", knob_top, " mm above the table, ", Platform_thickness + Pod_thickness - knob_top,
         " mm below the pod's top face once the vacuum pulls it down, so work can overhang them."));
 }
