@@ -24,6 +24,15 @@
 // along the gap between them. The fitting stays within the pod's thickness, so
 // work can overhang every side.
 //
+// On a top that leaks, such as bare MDF, or to stop the pod sliding, stand it
+// on its MFT platform: a flat bed for the bottom seal, with low stops at its
+// corners that box the pod in, and two pads that the tightening dogs from the
+// vacuum puck MFT mount clamp to an MFT-style top. Each dog is an M6 rod with
+// a knurled knob under the table and a flangeless one on the pad. The vacuum
+// still holds the pod down, and nothing fastens it to the platform: the stops
+// only keep it from sliding, and leave the middle of each side open, so the
+// fitting is clear.
+//
 // All dimensions are millimetres. Z is up and the table top is Z=0. The pod is
 // centred on the origin, with its fitting in the back face (+Y).
 //
@@ -41,10 +50,15 @@
 // or three coats of polycrylic, inside the port, duct and hole too, blowing the
 // hole and channels clear after each coat. Wrap the fitting's thread in PTFE
 // tape.
+//
+// View = MFT platform is the platform to print. It prints as modelled,
+// underside down, with no supports. The bed's top face is what the bottom
+// seal pulls against, so print its top skin airtight, with several concentric
+// top layers, and coat it like the pod.
 
 /* [View] */
-// Assembly shows the pod on a patch of table with work on top, before the vacuum pulls them down onto the cords. Pod is the part to print.
-View = "assembly"; // [assembly:Assembly with table and work, pod:Pod (print this)]
+// Assembly shows the pod on a patch of table with work on top, before the vacuum pulls them down onto the cords; Assembly on the MFT platform stands it on its platform, held to the table by two tightening dogs. Pod and MFT platform are the parts to print.
+View = "assembly"; // [assembly:Assembly with table and work, platform_assembly:Assembly on the MFT platform, pod:Pod (print this), platform:MFT platform (print this)]
 // Separation of the assembly's parts, in percent. Zero is assembled.
 Explode = 0; // [0:1:100]
 
@@ -102,6 +116,30 @@ Work_width = 110; // [40:1:600]
 // Work thickness, for the assembly.
 Work_thickness = 18; // [3:0.5:100]
 
+/* [MFT platform] */
+// Thickness of the platform's bed and dog pads. 6 mm matches the vacuum puck MFT mount's wings, so the same dog rods fit.
+Platform_thickness = 6; // [3:0.5:20]
+// Height of the stops above the bed. The pod rests on its bottom cord until the vacuum pulls it down, so they must stand taller than the cord stands proud.
+Stop_height = 6; // [1:0.5:20]
+// Thickness of the stops' walls.
+Stop_wall = 3; // [1.5:0.5:10]
+// Gap all round between the pod and the stops.
+Stop_clearance = 0.5; // [0:0.1:3]
+// Hole pitches between the two dogs along X. With an odd number both ways, the pod sits in the middle of a square of holes, the dogs at two of its corners.
+Pitches_x = 1; // [0:1:6]
+// Hole pitches between the two dogs along Y, front to back.
+Pitches_y = 1; // [0:1:6]
+// Pad hole width for the dog's M6 rod.
+Rod_hole = 7; // [6.2:0.1:12]
+// Slot length in the back dog's hole, along the line between the dogs, for table holes off their nominal spacing. The front dog's hole is round, so the platform can't slide. Zero leaves both round.
+Slot_length = 2; // [0:0.5:30]
+// Top knob diameter. Each pad is 3 mm larger in radius.
+Knob_diameter = 30; // [16:0.5:50]
+// Top knob height above the pad.
+Knob_height = 20; // [5:0.5:50]
+// Smallest gap allowed between a knob and the stops, pod or fitting.
+Knob_clearance = 2; // [0:0.5:10]
+
 /* [Hidden] */
 
 $fn = 48;
@@ -130,7 +168,9 @@ function r1(x) = round(x * 10) / 10;
 function r2(x) = round(x * 100) / 100;
 
 assembly = View == "assembly";
-explode = assembly ? Explode / 100 * 50 : 0;
+on_platform = View == "platform_assembly";
+platform_view = on_platform || View == "platform";
+explode = assembly || on_platform ? Explode / 100 * 50 : 0;
 
 top_groove_floor = Pod_thickness - Groove_depth;
 // The bottom face prints on the plate, so its grooves and channel close over
@@ -225,6 +265,87 @@ assert(port_mouth_r + 2 <= Pod_length / 2 - corner_r,
     str("The port must stay 2 mm clear of the pod's rounded corners. Make the pod at least ", r1(2 * (corner_r + port_mouth_r + 2)),
         " mm long, or the seal bend radius smaller."));
 
+// --- MFT platform ---
+
+// The tightening dogs, from the shared Onshape document the vacuum puck MFT
+// mount follows: both knobs take an M6 rod in a 6.15 mm bore with a captive
+// 9.93 mm (across flats) nut, and the bottom knob's 20 mm boss locates in the
+// table hole, centring the rod.
+rod_d = 6;
+knob_bore = 6.15;
+knob_nut_flats = 9.93;
+top_knob_nut_depth = 10;
+bottom_knob_d = 30;
+bottom_knob_h = 13.5;
+bottom_ring_d = 21;
+bottom_ring_h = 3;
+bottom_boss_d = 20;
+bottom_boss_h = 4;
+bottom_knob_nut_depth = 8;
+pad_margin = 3;
+// A chamfer round the top of the stops' inner faces, to lead the pod in.
+stop_lead_in = 1;
+// Bed beyond the stops' outsides. (Stops flush with the bed's edge meet the
+// hull to the pads at a tangent, which the engine meshes with slivers.)
+bed_margin = 2;
+
+knob_r = Knob_diameter / 2;
+pad_r = knob_r + pad_margin;
+knob_top = Platform_thickness + Knob_height;
+// The stops, the pocket inside them and the bed round them are all
+// concentric with the pod's corners, so the walls keep their thickness round
+// the bends.
+stops_l = Pod_length + 2 * (Stop_clearance + Stop_wall);
+stops_w = Pod_width + 2 * (Stop_clearance + Stop_wall);
+stops_r = corner_r + Stop_clearance + Stop_wall;
+bed_l = stops_l + 2 * bed_margin;
+bed_w = stops_w + 2 * bed_margin;
+bed_r = stops_r + bed_margin;
+pocket_l = Pod_length + 2 * Stop_clearance;
+pocket_w = Pod_width + 2 * Stop_clearance;
+pocket_r = corner_r + Stop_clearance;
+// The dogs sit in table holes whole pitches apart, symmetric about the pod's
+// centre: the front one, round-holed, at front left, and the slotted one at
+// back right. Each slot runs along the line through both dogs, which passes
+// through the pod's centre, so a knob is nearest the pod at its slot's inner
+// end.
+dog_dx = Pitches_x * Hole_pitch / 2;
+dog_dy = Pitches_y * Hole_pitch / 2;
+dogs = [[-dog_dx, -dog_dy], [dog_dx, dog_dy]];
+dog_spacing = norm([2 * dog_dx, 2 * dog_dy]);
+function dog_slot(i) = i == 1 ? Slot_length : 0;
+function slot_end(i, t) = dogs[i] + t * dog_slot(i) / 2 * dogs[i] / max(norm(dogs[i]), eps);
+pad_ends = [for (i = [0:1], t = [-1, 1]) slot_end(i, t)];
+plat_min = [min(-bed_l / 2, min([for (e = pad_ends) e[0]]) - pad_r), min(-bed_w / 2, min([for (e = pad_ends) e[1]]) - pad_r)];
+plat_max = [max(bed_l / 2, max([for (e = pad_ends) e[0]]) + pad_r), max(bed_w / 2, max([for (e = pad_ends) e[1]]) + pad_r)];
+// Plan distance from a point to a rounded rectangle centred on the origin,
+// negative inside it.
+function rounded_gap(p, l, w, r) = norm([max(abs(p[0]) - (l / 2 - r), 0), max(abs(p[1]) - (w / 2 - r), 0)]) - r;
+// Plan distance from a point to an axis-aligned box, zero inside it.
+function box_gap(p, x0, x1, y0, y1) = norm([max(x0 - p[0], 0, p[0] - x1), max(y0 - p[1], 0, p[1] - y1)]);
+// Closest a dog's knob comes to the stops, and to the fitting and its tube,
+// sampled along its slot.
+function knob_stop_gap(i) = min([for (t = [-1:0.5:1]) rounded_gap(slot_end(i, t), stops_l, stops_w, stops_r)]) - knob_r;
+function knob_fitting_gap(i) = min([for (t = [-1:0.5:1])
+    box_gap(slot_end(i, t), -hex_corner_r, hex_corner_r, Pod_width / 2, fitting_reach)]) - knob_r;
+platform_pod_z = Platform_thickness + cord_proud + 0.1;
+
+if (platform_view) {
+    assert(Pitches_x + Pitches_y >= 1, "The dogs need at least one hole pitch between them.");
+    assert(Stop_height >= cord_proud + 1,
+        str("The stops must stand at least 1 mm taller than the bottom cord stands proud, ", r2(cord_proud), " mm, to hold the pod before the vacuum pulls it down."));
+    assert(Pod_length / 2 - corner_r >= hex_corner_r + 1, "The back stops would touch the fitting. Make the pod longer, or the seal bend radius smaller.");
+    assert(knob_top + 1 <= Platform_thickness + Pod_thickness, "The dog knobs must sit below the pod's top face, so that work can overhang them.");
+    for (i = [0:1]) {
+        assert(knob_stop_gap(i) >= Knob_clearance,
+            str(i == 0 ? "The front" : "The back", " dog's knob would hit the stops or pod",
+                dog_slot(i) > 0 ? " at the inner end of its slot" : "", ". Increase the hole pitches between the dogs",
+                dog_slot(i) > 0 ? ", shorten the slot" : "", " or make the stops thinner."));
+        assert(knob_top + Knob_clearance <= platform_pod_z + port_z - hex_corner_r || knob_fitting_gap(i) >= Knob_clearance,
+            str(i == 0 ? "The front" : "The back", " dog's knob would hit the fitting. Change the hole pitches between the dogs."));
+    }
+}
+
 // Legend colours as 0-255 RGB. Repeated pieces get their own colour within
 // 3/255 of the legend colour, so the viewer can select each one.
 pod_rgb = [208, 106, 31];
@@ -232,6 +353,10 @@ cord_rgb = [71, 76, 85];
 fitting_rgb = [168, 134, 44];
 table_rgb = [201, 195, 182];
 work_rgb = [181, 136, 84];
+platform_rgb = [63, 143, 63];
+top_knob_rgb = [47, 109, 179];
+bottom_knob_rgb = [123, 82, 171];
+rod_rgb = [178, 68, 58];
 function shade(base, k) = base + [0, 0, k];
 function hex2(n) = str("0123456789abcdef"[floor(n / 16)], "0123456789abcdef"[n % 16]);
 function hex_color(c) = str("#", hex2(c[0]), hex2(c[1]), hex2(c[2]));
@@ -336,6 +461,55 @@ module pod() {
     }
 }
 
+// --- MFT platform ---
+
+// The bed, hulled to a pad round each dog's hole, so that each knob bears
+// fully anywhere along its slot.
+module platform_outline() {
+    hull() {
+        rounded_rect(bed_l, bed_w, bed_r);
+        for (e = pad_ends) translate(e) circle(r = pad_r);
+    }
+}
+
+// A quarter of a circle round each of the pod's corner centres, out to the
+// stops' outsides: the stops, before the pocket is cut from their insides.
+module stop_outlines() {
+    for (sx = [-1, 1], sy = [-1, 1]) translate([sx * (Pod_length / 2 - corner_r), sy * (Pod_width / 2 - corner_r)]) intersection() {
+        circle(r = stops_r);
+        translate([sx > 0 ? 0 : -stops_r - 1, sy > 0 ? 0 : -stops_r - 1]) square(stops_r + 1);
+    }
+}
+
+// The space for the pod inside the stops, with a chamfer round its top.
+module pocket() {
+    top = Platform_thickness + Stop_height;
+    translate([0, 0, Platform_thickness]) linear_extrude(height = Stop_height + 1) rounded_rect(pocket_l, pocket_w, pocket_r);
+    hull() {
+        translate([0, 0, top - stop_lead_in]) linear_extrude(height = eps) rounded_rect(pocket_l, pocket_w, pocket_r);
+        translate([0, 0, top]) linear_extrude(height = 1)
+            rounded_rect(pocket_l + 2 * stop_lead_in, pocket_w + 2 * stop_lead_in, pocket_r + stop_lead_in);
+    }
+}
+
+// One solid, cut down from the stops' height: the whole outline at full
+// height, less everything above the bed but the stops, less the pocket and
+// the dogs' holes. (Overlapping extrusions would leave internal faces in the
+// engine's display mesh.)
+module platform() {
+    big = 4 * max(abs(plat_min[0]), abs(plat_min[1]), plat_max[0], plat_max[1]);
+    difference() {
+        linear_extrude(height = Platform_thickness + Stop_height) platform_outline();
+        translate([0, 0, Platform_thickness]) linear_extrude(height = Stop_height + 1) difference() {
+            square(big, center = true);
+            stop_outlines();
+        }
+        pocket();
+        for (i = [0:1]) hull() for (t = [-1, 1])
+            translate(concat(slot_end(i, t), -eps)) cylinder(d = Rod_hole, h = Platform_thickness + 2 * eps);
+    }
+}
+
 // --- Reference parts ---
 
 // A foam cord swept round a groove's centre line, its centre at height z:
@@ -371,28 +545,52 @@ module fitting() {
     }
 }
 
-// A patch of table round the pod and its fitting, with the pod in the middle
-// of a square of holes on the table's grid.
-module table() {
-    span = max(Pod_length / 2, fitting_reach) + max(20, Hole_pitch / 4);
+// Flangeless top knob, standing on the pad.
+module top_knob() {
+    h = Knob_height;
+    difference() {
+        rotate_extrude() polygon([[knob_bore / 2, 0], [knob_r - 0.5, 0], [knob_r, 0.5],
+            [knob_r, h - 1], [knob_r - 1, h], [knob_bore / 2, h]]);
+        translate([0, 0, h - min(top_knob_nut_depth, h - 2)])
+            cylinder(r = knob_nut_flats / sqrt(3), h = top_knob_nut_depth + eps, $fn = 6);
+    }
+}
+
+// Bottom knob under the table, with its boss up in the hole.
+module bottom_knob() {
+    r = bottom_knob_d / 2;
+    z_ring = bottom_knob_h;
+    z_boss = z_ring + bottom_ring_h;
+    z_top = z_boss + bottom_boss_h;
+    difference() {
+        rotate_extrude() polygon([[knob_bore / 2, 0], [r - 0.5, 0], [r, 0.5], [r, z_ring - 0.5], [r - 0.5, z_ring],
+            [bottom_ring_d / 2, z_ring], [bottom_ring_d / 2, z_boss], [bottom_boss_d / 2, z_boss],
+            [bottom_boss_d / 2, z_top - 0.5], [bottom_boss_d / 2 - 0.5, z_top], [knob_bore / 2, z_top]]);
+        translate([0, 0, -eps]) cylinder(r = knob_nut_flats / sqrt(3), h = bottom_knob_nut_depth + eps, $fn = 6);
+    }
+}
+
+// A patch of table reaching past everything within reach of its middle, with
+// holes on the table's grid through (ox, oy).
+module table(ox, oy, reach) {
+    span = reach + max(20, Hole_pitch / 4);
     n = ceil(span / Hole_pitch) + 1;
     difference() {
         translate([-span, -span, -Table_thickness]) cube([2 * span, 2 * span, Table_thickness]);
-        for (i = [-n:n], j = [-n:n]) {
-            g = [(i + 0.5) * Hole_pitch, (j + 0.5) * Hole_pitch];
+        for (i = [-n - 1:n + 1], j = [-n - 1:n + 1]) {
+            g = [ox + i * Hole_pitch, oy + j * Hole_pitch];
             if (max(abs(g[0]), abs(g[1])) + Table_hole_diameter / 2 + 5 <= span)
                 translate([g[0], g[1], -Table_thickness - eps]) cylinder(d = Table_hole_diameter, h = Table_thickness + 2 * eps, $fn = 32);
         }
     }
 }
 
-// Before the vacuum pulls: the pod rests on its bottom cord, and the work on
-// the top one. Each cord sits a hair off its groove's floor, and the pod and
-// work a hair above the cords, so that their meshes don't touch.
-module assembly() {
-    pod_z = cord_proud + 0.1;
+// The pod with its cords and fitting, resting on its bottom cord, and the
+// work on its top one, the pod's bottom face at pod_z. Each cord sits a hair
+// off its groove's floor, and the pod and work a hair above the cords, so that
+// their meshes don't touch.
+module pod_and_work(pod_z) {
     work_z = pod_z + Pod_thickness + cord_proud + 0.1;
-    translate([0, 0, -explode]) paint(table_rgb) table();
     translate([0, 0, pod_z]) {
         paint(pod_rgb) pod();
         translate([0, 0, -0.5 * explode]) paint(shade(cord_rgb, 1)) cord(Groove_depth - Cord_diameter / 2 - 0.05);
@@ -400,6 +598,30 @@ module assembly() {
         translate([0, 0.8 * explode, 0]) paint(fitting_rgb) fitting();
     }
     translate([-Work_length / 2, -Work_width / 2, work_z + explode]) paint(work_rgb) cube([Work_length, Work_width, Work_thickness]);
+}
+
+// Before the vacuum pulls, on the table, in the middle of a square of holes.
+module assembly() {
+    translate([0, 0, -explode]) paint(table_rgb) table(Hole_pitch / 2, Hole_pitch / 2, max(Pod_length / 2, fitting_reach));
+    pod_and_work(cord_proud + 0.1);
+}
+
+// Before the vacuum pulls, on the platform, with the dogs clamping it to the
+// table: each rod runs from its bottom knob's nut to its top knob's.
+module platform_assembly() {
+    bottom_knob_z = -Table_thickness - bottom_knob_h - bottom_ring_h;
+    rod_bottom = bottom_knob_z + 1;
+    rod_top = knob_top - 1;
+    reach = max(Pod_length / 2, fitting_reach, -plat_min[0], -plat_min[1], plat_max[0], plat_max[1]);
+    translate([0, 0, -explode]) paint(table_rgb) table(dog_dx, dog_dy, reach);
+    paint(platform_rgb) platform();
+    translate([0, 0, 0.5 * explode]) pod_and_work(platform_pod_z);
+    for (i = [0:1]) {
+        p = dogs[i];
+        translate([p[0], p[1], Platform_thickness + 0.5 * explode]) paint(shade(top_knob_rgb, i)) top_knob();
+        translate([p[0], p[1], rod_bottom + 0.9 * explode]) paint(shade(rod_rgb, i)) cylinder(d = rod_d, h = rod_top - rod_bottom, $fn = 16);
+        translate([p[0], p[1], bottom_knob_z - 1.5 * explode]) paint(shade(bottom_knob_rgb, i)) bottom_knob();
+    }
 }
 
 echo(str("Pod: ", Pod_length, " x ", Pod_width, " x ", Pod_thickness,
@@ -428,10 +650,29 @@ echo(hex_corner_r <= hex_room
     ? "Fitting: its hex stays within the pod's thickness, so work can overhang the back too."
     : str("Fitting: its hex stands ", r1(hex_corner_r - hex_room), " mm beyond the ", port_z > Pod_thickness / 2 ? "top" : "bottom",
         " face, so keep work off the back."));
+if (platform_view) {
+    echo(str("MFT platform: ", r1(plat_max[0] - plat_min[0]), " x ", r1(plat_max[1] - plat_min[1]), " mm, a ", Platform_thickness,
+        " mm bed with ", Stop_height, " mm stops at its corners, ", Stop_clearance, " mm clear of the pod. Print it as modelled, underside down,",
+        " with no supports. The bottom seal pulls against the bed's top face, so print its top skin airtight, with several concentric top layers,",
+        " and coat it like the pod."));
+    echo(str("Dogs: ", Pitches_x, " pitch(es) along X and ", Pitches_y, " along Y, ", r1(dog_spacing), " mm apart",
+        Slot_length > 0 ? str("; the back dog's slot takes ", r1(dog_spacing - Slot_length / 2), " to ", r1(dog_spacing + Slot_length / 2), " mm") : "",
+        ". Each clamps ", Table_thickness + Platform_thickness, " mm (table + pad) between its knobs. The knobs come within ",
+        r1(min(knob_stop_gap(0), knob_stop_gap(1))), " mm of the stops."));
+    echo(str("Knob tops: ", knob_top, " mm above the table, ", Platform_thickness + Pod_thickness - knob_top,
+        " mm below the pod's top face once the vacuum pulls it down, so work can overhang them."));
+}
 echo("PIECES_V1", [
     [hex_color(shade(cord_rgb, 0)), "Top cord"],
-    [hex_color(shade(cord_rgb, 1)), "Bottom cord"]
+    [hex_color(shade(cord_rgb, 1)), "Bottom cord"],
+    for (i = [0:1]) each [
+        [hex_color(shade(top_knob_rgb, i)), str("Top knob ", i + 1)],
+        [hex_color(shade(bottom_knob_rgb, i)), str("Bottom knob ", i + 1)],
+        [hex_color(shade(rod_rgb, i)), str("M6 rod ", i + 1)]
+    ]
 ]);
 
 if (assembly) assembly();
+else if (on_platform) platform_assembly();
+else if (View == "platform") paint(platform_rgb) platform();
 else paint(pod_rgb) pod();
