@@ -2,10 +2,15 @@
 // A square, 3D-printed vacuum pod that holds itself down as well as the work,
 // so it needs no dogs or clamps: it works on any smooth, airtight surface.
 // Each face has a groove round its edge, holding a loop of round foam cord as
-// the seal, and just inside that a single channel, so that air can get out
-// from under the work all round. The rest of the face is flat, so
+// the seal, and a groove across its middle, so that the cord can go round the
+// whole face or, for smaller work, round just the back half and across the
+// middle. Just inside the grooves round each half is a channel, so that air
+// can get out from under the work all round, and a short link joins each
+// half's channel to the groove across the middle, so that with the cord round
+// the whole face, the front half pulls too. The rest of the face is flat, so
 // there's little to coat and the work is supported all over. A hole through
-// the pod, on the back of the channel, joins the two faces' channels, and a
+// the pod, on the back of the back half's channel, joins the two faces'
+// channels, and a
 // short duct runs to it from a 1/4" NPT fitting threaded into the back face: a
 // push-to-connect fitting, or a quick-connect insert so the pod unplugs from
 // its hose.
@@ -14,7 +19,9 @@
 // bottom seal pulls the pod down onto the surface and the top seal pulls the
 // work down onto the pod, both at once. Nothing grips until the work covers
 // the top seal, so place both before switching on. Switch off, or unplug the
-// fitting, to release them.
+// fitting, to release them. Each face can be set up either way: cut a long
+// loop of cord to go round the whole face, past the ends of the groove across
+// the middle, or a short one to go round the back half and across the middle.
 //
 // Each face holds in proportion to the area inside its seal, and only the
 // friction under the bottom face stops the pod sliding, so keep cuts light and
@@ -65,6 +72,8 @@
 View = "assembly"; // [assembly:Assembly with table and work, platform_assembly:Assembly on the MFT platform, pod:Pod (print this), platform:MFT platform (print this)]
 // Separation of the assembly's parts, in percent. Zero is assembled.
 Explode = 0; // [0:1:100]
+// Which way the top face's cord goes, in the assemblies: round the whole face, or round the back half and across the middle, for smaller work.
+Top_cord = "whole"; // [whole:Round the whole face, half:Round the back half]
 
 /* [Pod] */
 // Pod length, along X. 60 mm leaves room for the MFT platform's dog knobs in the holes either side. A 75 mm pod fits the platform with its dogs at diagonal corners of a square of holes instead, one pitch apart both ways.
@@ -85,6 +94,8 @@ Groove_depth = 3.5; // [1:0.1:15]
 Rim_width = 4; // [1.5:0.1:15]
 // Plan radius of the grooves' centre lines at the corners, where the cord bends. The pod's corners follow it.
 Seal_bend_radius = 10; // [3:0.5:40]
+// A groove across the middle of each face, along X, so that the cord can go round the whole face or round just the back half, the half with the hole, for smaller work. It bends into the side grooves at the seal bend radius.
+Cross_groove = true;
 
 /* [Channels] */
 // Channel width. The channel round each face, just inside its groove, is round-bottomed in the top face, half as deep as it's wide. In the bottom face its round sides meet in a point, so that it prints without support, about three-quarters as deep as it's wide.
@@ -215,20 +226,37 @@ seal_area = seal_l * seal_w - (4 - PI) * Seal_bend_radius * Seal_bend_radius;
 // the pod must be solid out to it.
 cord_outer_l = seal_l + Cord_diameter;
 cord_outer_w = seal_w + Cord_diameter;
-// Inside each groove.
+// With the cross groove, the seal round the back half: the same length, half
+// the width, centred half_y behind the middle.
+half_w = seal_w / 2;
+half_y = seal_w / 4;
+half_cord_length = 2 * (seal_l + half_w) - (8 - 2 * PI) * Seal_bend_radius;
+half_area = seal_l * half_w - (4 - PI) * Seal_bend_radius * Seal_bend_radius;
+half_outer_w = half_w + Cord_diameter;
+// Inside the grooves round the whole face, or with the cross groove, round
+// each half.
 inner_l = Pod_length - 2 * (Rim_width + Groove_width);
-inner_w = Pod_width - 2 * (Rim_width + Groove_width);
+inner_w = (Cross_groove ? half_w : seal_w) - Groove_width;
 inner_r = Seal_bend_radius - Groove_width / 2;
-// The centre line of the channel round the edge: a rounded rectangle
-// Channel_land plus half a channel inside the groove, with corners no tighter
-// than the channel's width, so that its sweep doesn't fold on itself.
+// The centre line of each channel: a rounded rectangle Channel_land plus half
+// a channel inside the grooves, with corners no tighter than the channel's
+// width, so that its sweep doesn't fold on itself. There's one round the
+// whole face, or with the cross groove, one round each half, centred ring_y
+// either side of the middle.
 ring_l = inner_l - 2 * (Channel_land + channel_r);
 ring_w = inner_w - 2 * (Channel_land + channel_r);
 ring_r = min(max(Channel_width, inner_r - Channel_land - channel_r), ring_l / 2, ring_w / 2);
-// The hole sits on the back of the channel, in line with the port. Its
+ring_y = Cross_groove ? half_y : 0;
+// Each half's link runs along the middle from its channel into the cross
+// groove, ending 0.3 mm past the groove's wall. It's set link_lift out of
+// the face, so that its floor stays a hair clear of the channel's.
+link_start = max(groove_r - 0.3, groove_r / 2);
+link_end = ring_y - ring_w / 2;
+link_lift = 0.1;
+// The hole sits on the back of the (back half's) channel, in line with the port. Its
 // countersink dishes it into the channel, stopping half the land short of the
 // groove, and no deeper than the top face's shallower channel.
-hole_y = ring_w / 2;
+hole_y = ring_y + ring_w / 2;
 sink_d = max(Hole_diameter, min(Hole_diameter + 2 * top_channel_depth * tan(sink_angle), Channel_width + Channel_land));
 sink_depth = (sink_d - Hole_diameter) / 2 / tan(sink_angle);
 
@@ -255,8 +283,11 @@ assert(Groove_width <= Cord_diameter, "The grooves must be no wider than the cor
 assert(Groove_depth >= Cord_diameter / 2, "The grooves must be at least half the cord's diameter deep to hold it.");
 assert(cord_proud >= 0.5, "The cord must stand at least 0.5 mm proud of each face to seal. Make the grooves shallower.");
 assert(Groove_width / 2 < Seal_bend_radius, "The grooves' inner edges need a corner radius: raise the seal bend radius above half the groove width.");
+assert(!Cross_groove || half_w >= 2 * Seal_bend_radius + 1,
+    "There's no room for the cross groove to bend into the side grooves. Make the pod wider or the seal bend radius smaller, or turn off the cross groove.");
 assert(min(ring_l, ring_w) >= 2 * Channel_width,
-    "There's no room for the channels inside the grooves. Make the pod bigger, or the rim, grooves, channels or land narrower.");
+    str("There's no room for the channels inside the grooves", Cross_groove ? " round each half" : "",
+        ". Make the pod bigger, or the rim, grooves, channels or land narrower", Cross_groove ? ", or turn off the cross groove." : "."));
 assert(port_z - npt_major / 2 - bottom_cut >= min_cover - eps,
     str("The pod is too thin for the port to run in between its two faces' grooves and channels. Make it at least ", r1(min_thickness),
         " mm thick, or the grooves shallower or the channels narrower."));
@@ -404,6 +435,20 @@ module loop_sweep(l, w, bend, reach) {
     }
 }
 
+// The cross groove, swept like loop_sweep: a straight length along X across
+// the middle of a loop l long, and a quarter turn of radius bend from it into
+// each side on both sides, which rounds the inside corners where the cord
+// turns. The straight length reaches 0.1 mm into the turns.
+module cross_sweep(l, bend, reach) {
+    sx = l / 2 - bend;
+    box = bend + reach + 1;
+    translate([-sx - 0.1, 0, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * sx + 0.2) children();
+    for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * bend, 0]) intersection() {
+        rotate_extrude() translate([bend, 0]) children();
+        translate([cx > 0 ? 0 : -box, cy > 0 ? -box : 0, -box]) cube([box, box, 2 * box]);
+    }
+}
+
 // A groove's or channel's cross-section, from just outside the face: straight
 // walls up to c, then round sides of radius r centred there, either meeting
 // in the point or rounding off in a half circle. The point's sides are
@@ -430,8 +475,17 @@ module section(r, c, pointed) {
 // The cutters for one face, with the face at z = 0 and the pod above it:
 // pointed for the bottom face, round-bottomed for the top.
 module face_cuts(pointed) {
-    loop_sweep(seal_l, seal_w, Seal_bend_radius, max(Groove_width, bottom_groove_depth)) section(groove_r, groove_centre, pointed);
-    loop_sweep(ring_l, ring_w, ring_r, max(Channel_width, bottom_channel_depth)) section(channel_r, channel_centre, pointed);
+    groove_reach = max(Groove_width, bottom_groove_depth);
+    channel_reach = max(Channel_width, bottom_channel_depth);
+    loop_sweep(seal_l, seal_w, Seal_bend_radius, groove_reach) section(groove_r, groove_centre, pointed);
+    if (Cross_groove) {
+        cross_sweep(seal_l, Seal_bend_radius, groove_reach) section(groove_r, groove_centre, pointed);
+        for (s = [-1, 1]) {
+            translate([0, s * ring_y, 0]) loop_sweep(ring_l, ring_w, ring_r, channel_reach) section(channel_r, channel_centre, pointed);
+            translate([0, s > 0 ? link_end : -link_start, -link_lift]) rotate([90, 0, 0])
+                linear_extrude(height = link_end - link_start) section(channel_r, channel_centre, pointed);
+        }
+    } else loop_sweep(ring_l, ring_w, ring_r, channel_reach) section(channel_r, channel_centre, pointed);
 }
 
 // A circle with a point on top, its sides tangent to the circle and sloping
@@ -525,16 +579,18 @@ module platform() {
 
 // --- Reference parts ---
 
-// A foam cord swept round a groove's centre line, its centre at height z:
+// A foam cord swept round a groove's centre line, its centre at height z,
+// round the whole face or round the back half:
 // straight lengths along each side and a quarter torus at each corner. The
 // straight lengths reach 0.1 mm into the corners, so they overlap rather than
 // meet face to face, which the engine meshes with non-manifold edges.
-module cord(z) {
+module cord(z, half = false) {
     r = Cord_diameter / 2;
+    w = half ? half_w : seal_w;
     sx = seal_l / 2 - Seal_bend_radius;
-    sy = seal_w / 2 - Seal_bend_radius;
-    translate([0, 0, z]) {
-        for (y = [-1, 1] * seal_w / 2) translate([-sx - 0.1, y, 0]) rotate([0, 90, 0]) cylinder(r = r, h = 2 * sx + 0.2, $fn = 24);
+    sy = w / 2 - Seal_bend_radius;
+    translate([0, half ? half_y : 0, z]) {
+        for (y = [-1, 1] * w / 2) translate([-sx - 0.1, y, 0]) rotate([0, 90, 0]) cylinder(r = r, h = 2 * sx + 0.2, $fn = 24);
         for (x = [-1, 1] * seal_l / 2) translate([x, -sy - 0.1, 0]) rotate([-90, 0, 0]) cylinder(r = r, h = 2 * sy + 0.2, $fn = 24);
         for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * sy, 0]) intersection() {
             rotate_extrude($fn = 48) translate([Seal_bend_radius, 0]) circle(r = r, $fn = 24);
@@ -607,7 +663,7 @@ module pod_and_work(pod_z) {
     translate([0, 0, pod_z]) {
         paint(pod_rgb) pod();
         translate([0, 0, -0.5 * explode]) paint(shade(cord_rgb, 1)) cord(Groove_depth - Cord_diameter / 2 - 0.05);
-        translate([0, 0, 0.5 * explode]) paint(shade(cord_rgb, 0)) cord(top_groove_floor + Cord_diameter / 2 + 0.05);
+        translate([0, 0, 0.5 * explode]) paint(shade(cord_rgb, 0)) cord(top_groove_floor + Cord_diameter / 2 + 0.05, Cross_groove && Top_cord == "half");
         translate([0, 0.8 * explode, 0]) paint(fitting_rgb) fitting();
     }
     translate([-Work_length / 2, -Work_width / 2, work_z + explode]) paint(work_rgb) cube([Work_length, Work_width, Work_thickness]);
@@ -642,20 +698,26 @@ echo(str("Pod: ", Pod_length, " x ", Pod_width, " x ", Pod_thickness,
     " a little hotter, slightly over-extruded, with cubic infill. Then seal every surface with two or three coats of polycrylic,",
     " inside the port, duct and hole too, blowing the hole and channels clear after each coat."));
 echo(str("Seals: cut two ", round(cord_length), " mm lengths of ", Cord_diameter,
-    " mm foam cord, one for each face, and join each one's ends with CA glue, cut at 45 degrees. Each stands ", r2(cord_proud), " mm proud in a ",
+    " mm foam cord, one for each face, and join each one's ends with CA glue, cut at 45 degrees",
+    Cross_groove ? str(". To seal round just the back half of a face, across its middle, cut a ", round(half_cord_length), " mm length instead") : "",
+    ". Each stands ", r2(cord_proud), " mm proud in a ",
     Groove_width, " mm wide groove with a half-round seat ", Groove_depth, " mm deep. In the bottom face, a point beyond the seat takes the groove to ",
     r2(bottom_groove_depth), " mm, so that it prints without support."));
 echo(str("Holding: each face pulls on ", r1(seal_area / 100), " cm2 inside its seal, ", round(seal_area / 100),
     " N for every 0.1 bar of vacuum. The work must cover the top seal, at least ", r1(cord_outer_l), " x ", r1(cord_outer_w),
-    " mm, and the surface under the bottom seal must be smooth and airtight."));
+    " mm, and the surface under the bottom seal must be smooth and airtight.",
+    Cross_groove ? str(" Round the back half, a face pulls on ", r1(half_area / 100), " cm2, ", round(half_area / 100),
+        " N for every 0.1 bar, and the work must cover at least ", r1(cord_outer_l), " x ", r1(half_outer_w), " mm, from ",
+        r1(Pod_width / 2 - seal_inset + Cord_diameter / 2), " mm behind the middle to ", r1(Cord_diameter / 2), " mm in front of it.") : ""));
 echo(seal_small > hole_gap
     ? str("On an MFT-style top: the bottom seal is wider than the ", hole_gap, " mm between rows of holes, so keep it on a solid part of the top.")
     : str("On an MFT-style top: the bottom seal's ", r1(seal_small), " mm fits in the ", hole_gap,
         " mm between two rows of holes, so the pod can sit anywhere along the gap between them",
         seal_big <= hole_gap ? ", either way round." : str(", with its ", cord_outer_l >= cord_outer_w ? "length" : "width", " along the rows.")));
-echo(str("Channel: ", Channel_width, " mm wide, round each face just inside its groove: ", r1(top_channel_depth), " mm deep and round-bottomed in the top face, and ",
+echo(str("Channel: ", Channel_width, " mm wide, round each face just inside its groove",
+    Cross_groove ? "s, one round each half, joined to the cross groove by a short link" : "", ": ", r1(top_channel_depth), " mm deep and round-bottomed in the top face, and ",
     r1(bottom_channel_depth), " mm deep in the bottom face, with a point so that it prints without support. A ",
-    Hole_diameter, " mm hole through the pod on the back of the channels joins them", sink_depth > 0 ? str(", countersunk ", r1(sink_d), " mm across at ", 2 * sink_angle, " degrees in each face") : "", "."));
+    Hole_diameter, " mm hole through the pod on the back of the ", Cross_groove ? "back half's " : "", "channels joins them", sink_depth > 0 ? str(", countersunk ", r1(sink_d), " mm across at ", 2 * sink_angle, " degrees in each face") : "", "."));
 echo(str("Port: ", Port_hole, " mm at the back face, tapering to ", r2(Port_hole - Port_depth * npt_taper), " mm, ", Port_depth,
     " mm deep and centred ", r1(port_z), " mm up, midway between the faces' grooves, for a 1/4\" NPT fitting to cut its own thread into, or a 1/4\" NPT tap. A ",
     Duct_diameter, " mm duct runs from it to the hole."));
