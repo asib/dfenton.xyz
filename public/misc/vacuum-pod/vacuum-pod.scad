@@ -444,15 +444,18 @@ module loop_sweep(l, w, bend, reach) {
 
 // The cross groove, swept like loop_sweep: a straight length along X across
 // the middle of a loop l long, and a quarter turn of radius bend from it into
-// each side on both sides, which rounds the inside corners where the cord
-// turns. The straight length reaches 0.1 mm into the turns.
+// each side toward the back, which rounds the inside corners where the back
+// half's cord turns. The straight length reaches 0.1 mm into the turns. There
+// are no turns toward the front, which no cord takes: with them, the plastic
+// left between the two turns and the side groove stood up from the groove's
+// floor as a loose point.
 module cross_sweep(l, bend, reach) {
     sx = l / 2 - bend;
     box = bend + reach + 1;
     translate([-sx - 0.1, 0, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * sx + 0.2) children();
-    for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * bend, 0]) intersection() {
+    for (cx = [-1, 1]) translate([cx * sx, bend, 0]) intersection() {
         rotate_extrude() translate([bend, 0]) children();
-        translate([cx > 0 ? 0 : -box, cy > 0 ? -box : 0, -box]) cube([box, box, 2 * box]);
+        translate([cx > 0 ? 0 : -box, -box, -box]) cube([box, box, 2 * box]);
     }
 }
 
