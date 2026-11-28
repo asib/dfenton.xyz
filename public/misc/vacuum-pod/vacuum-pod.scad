@@ -50,7 +50,8 @@
 // with no supports. The bottom face's grooves and channel have round sides
 // meeting in a point, and the duct is a teardrop, so they close over
 // a step at a time rather than as bridges. The top face's grooves and channel
-// are round-bottomed, as they print on the layers below them. Air leaks
+// print on the layers below them: its grooves are flat-bottomed, so that the
+// floor stays flat where they cross, and its channel is round-bottomed. Air leaks
 // through a print's walls and infill, so print it to be airtight: in PETG,
 // ASA or ABS, with
 // extra walls, more top and bottom layers in a concentric pattern, the nozzle a
@@ -89,7 +90,7 @@ Pod_thickness = 28; // [20:0.5:60]
 Cord_diameter = 6.35; // [2:0.05:15]
 // Groove width. A little under the cord's diameter, so the cord grips its walls.
 Groove_width = 6; // [2:0.05:15]
-// Groove depth. The cord stands proud of each face by its diameter less this, and compresses that much before the face lands. At least half the cord's diameter, to hold it. This is the depth of the cord's half-round seat. In the bottom face, which prints face down, a point beyond it, so that the groove prints without support, takes the groove about 1.4 mm deeper at its centre line.
+// Groove depth. The cord stands proud of each face by its diameter less this, and compresses that much before the face lands. At least half the cord's diameter, to hold it. In the top face the grooves are flat-bottomed at this depth, so that the floor stays flat where they cross. In the bottom face it's the depth of a half-round seat for the cord, and a point beyond it, so that the groove prints without support, takes the groove about 1.4 mm deeper at its centre line.
 Groove_depth = 3.5; // [1:0.1:15]
 // Material between each groove and the pod's outside.
 Rim_width = 4; // [1.5:0.1:15]
@@ -193,14 +194,17 @@ top_groove_floor = Pod_thickness - Groove_depth;
 // as the pod prints. Their round sides meet beyond their centre in a point
 // whose sides slope at roof_angle, cut off flat where it's point_tip wide:
 // each layer of the point steps in by less than the layer height, so they
-// close without a bridge. The top face's grooves and channel print on the layers below them,
-// so they're simply round-bottomed.
+// close without a bridge. The top face's grooves and channel print on the
+// layers below them, so they need no point. Its grooves are flat-bottomed, so
+// that where the cross groove meets the side grooves, the floor stays flat:
+// round floors crossing leave ridges and points of plastic standing up
+// between them. Its channel is simply round-bottomed.
 point_tip = 0.4;
 // The depth of such a point, with sides of radius r centred c into the pod.
 function point_depth(r, c) = c + r / cos(roof_angle) - point_tip / 2 * tan(roof_angle);
-// Each groove has straight walls from the face, then a half-round seat for
-// the cord at Groove_depth, its centre a hair inside the face, then, in the
-// bottom face, the point.
+// In the bottom face, each groove has straight walls from the face, then a
+// half-round seat for the cord at Groove_depth, its centre a hair inside the
+// face, then the point. In the top face, it's flat-bottomed at Groove_depth.
 groove_r = Groove_width / 2;
 groove_centre = max(Groove_depth - groove_r, 0.05);
 bottom_groove_depth = point_depth(groove_r, groove_centre);
@@ -274,7 +278,7 @@ fitting_reach = Pod_width / 2 + Fitting_projection + tube_stub;
 // bottom face's cuts and the top face's shallower ones, so that the fitting's
 // thread has as much plastic above it as below. The pod's least thickness
 // leaves min_cover on both sides.
-top_groove_depth = groove_centre + groove_r;
+top_groove_depth = Groove_depth;
 bottom_cut = max(bottom_groove_depth, bottom_channel_depth);
 top_cut = max(top_groove_depth, top_channel_depth);
 port_z = (bottom_cut + Pod_thickness - top_cut) / 2;
@@ -444,18 +448,17 @@ module loop_sweep(l, w, bend, reach) {
 
 // The cross groove, swept like loop_sweep: a straight length along X across
 // the middle of a loop l long, and a quarter turn of radius bend from it into
-// each side toward the back, which rounds the inside corners where the back
-// half's cord turns. The straight length reaches 0.1 mm into the turns. There
-// are no turns toward the front, which no cord takes: with them, the plastic
-// left between the two turns and the side groove stood up from the groove's
-// floor as a loose point.
+// each side, toward the back and toward the front, which rounds the inside
+// corners, as on a grid of pads such as a V-Clamp's. The back half's cord
+// turns round the back ones. The straight length reaches 0.1 mm into the
+// turns.
 module cross_sweep(l, bend, reach) {
     sx = l / 2 - bend;
     box = bend + reach + 1;
     translate([-sx - 0.1, 0, 0]) rotate([90, 0, 90]) linear_extrude(height = 2 * sx + 0.2) children();
-    for (cx = [-1, 1]) translate([cx * sx, bend, 0]) intersection() {
+    for (cx = [-1, 1], cy = [-1, 1]) translate([cx * sx, cy * bend, 0]) intersection() {
         rotate_extrude() translate([bend, 0]) children();
-        translate([cx > 0 ? 0 : -box, -box, -box]) cube([box, box, 2 * box]);
+        translate([cx > 0 ? 0 : -box, cy > 0 ? -box : 0, -box]) cube([box, box, 2 * box]);
     }
 }
 
@@ -483,20 +486,27 @@ module section(r, c, pointed) {
 }
 
 // The cutters for one face, with the face at z = 0 and the pod above it:
-// pointed for the bottom face, round-bottomed for the top, which may have the
-// cross groove.
+// pointed for the bottom face, and for the top face flat-bottomed grooves
+// and a round-bottomed channel, with the cross groove if cross is set.
 module face_cuts(pointed, cross = false) {
     groove_reach = max(Groove_width, bottom_groove_depth);
     channel_reach = max(Channel_width, bottom_channel_depth);
-    loop_sweep(seal_l, seal_w, Seal_bend_radius, groove_reach) section(groove_r, groove_centre, pointed);
+    loop_sweep(seal_l, seal_w, Seal_bend_radius, groove_reach) groove_section(pointed);
     if (cross) {
-        cross_sweep(seal_l, Seal_bend_radius, groove_reach) section(groove_r, groove_centre, pointed);
+        cross_sweep(seal_l, Seal_bend_radius, groove_reach) groove_section(pointed);
         for (s = [-1, 1]) {
             translate([0, s * half_y, 0]) loop_sweep(ring_l, half_ring_w, half_ring_r, channel_reach) section(channel_r, channel_centre, pointed);
             translate([0, s > 0 ? link_end : -link_start, -link_lift]) rotate([90, 0, 0])
                 linear_extrude(height = link_end - link_start) section(channel_r, channel_centre, pointed);
         }
     } else loop_sweep(ring_l, ring_w, ring_r, channel_reach) section(channel_r, channel_centre, pointed);
+}
+
+// A groove's cross-section: pointed for the bottom face, flat-bottomed for
+// the top.
+module groove_section(pointed) {
+    if (pointed) section(groove_r, groove_centre, true);
+    else translate([-groove_r, -0.05]) square([Groove_width, Groove_depth + 0.05]);
 }
 
 // A circle with a point on top, its sides tangent to the circle and sloping
@@ -712,7 +722,7 @@ echo(str("Seals: cut two ", round(cord_length), " mm lengths of ", Cord_diameter
     " mm foam cord, one for each face, and join each one's ends with CA glue, cut at 45 degrees",
     Cross_groove ? str(". To seal round just the back half of the top face, across its middle, cut a ", round(half_cord_length), " mm length instead") : "",
     ". Each stands ", r2(cord_proud), " mm proud in a ",
-    Groove_width, " mm wide groove with a half-round seat ", Groove_depth, " mm deep. In the bottom face, a point beyond the seat takes the groove to ",
+    Groove_width, " mm wide groove ", Groove_depth, " mm deep: flat-bottomed in the top face, and in the bottom face with a half-round seat, and a point beyond it that takes the groove to ",
     r2(bottom_groove_depth), " mm, so that it prints without support."));
 echo(str("Holding: each face pulls on ", r1(seal_area / 100), " cm2 inside its seal, ", round(seal_area / 100),
     " N for every 0.1 bar of vacuum. The work must cover the top seal, at least ", r1(cord_outer_l), " x ", r1(cord_outer_w),
